@@ -1,0 +1,41 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foreground-rgb: 0, 0, 0;
+  --background-start-rgb: 248, 250, 252;
+  --background-end-rgb: 255, 255, 255;
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: linear-gradient(
+      to bottom,
+      transparent,
+      rgb(var(--background-end-rgb))
+    )
+    rgb(var(--background-start-rgb));
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded;
+  }
+  
+  .card {
+    @apply bg-white shadow-lg rounded-lg p-6 mb-6;
+  }
+  
+  .card-title {
+    @apply text-xl font-semibold mb-4 text-gray-800;
+  }
+  
+  .sidebar-link {
+    @apply flex items-center p-2 text-gray-600 rounded-lg hover:bg-gray-100;
+  }
+  
+  .sidebar-link.active {
+    @apply bg-blue-50 text-blue-700;
+  }
+} 
