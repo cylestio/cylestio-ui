@@ -128,7 +128,16 @@ export async function getEventCountsByLevel(): Promise<EventLevel[]> {
 
 export async function getAlertsOverTime(days: number = 7): Promise<AlertCount[]> {
   try {
-    return alertsOverTimeStmt.all({}) as AlertCount[];
+    const stmt = db.prepare<EmptyObject, AlertCount>(`
+      SELECT 
+        date(timestamp) as date,
+        COUNT(*) as count
+      FROM alerts
+      WHERE timestamp > datetime("now", "-${days} days")
+      GROUP BY date
+      ORDER BY date DESC
+    `);
+    return stmt.all({}) as AlertCount[];
   } catch (error) {
     console.error('Error getting alerts over time:', error);
     return [];
