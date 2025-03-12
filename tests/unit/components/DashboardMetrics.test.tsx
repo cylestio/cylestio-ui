@@ -5,10 +5,10 @@ import DashboardMetrics, { MetricsData } from '../../../app/components/Dashboard
 
 describe('DashboardMetrics Component', () => {
   const mockMetricsData: MetricsData[] = [
-    { title: 'Total Agents', value: '47', change: 12, changeType: 'increase' },
-    { title: 'Active Sessions', value: '153', change: 8, changeType: 'increase' },
-    { title: 'Alerts', value: '3', change: 2, changeType: 'decrease' },
-    { title: 'Avg. Response Time', value: '245ms', change: 18, changeType: 'decrease' },
+    { title: 'Total Agents', value: '47', change: 12, changeType: 'increase' as const },
+    { title: 'Active Sessions', value: '153', change: 8, changeType: 'increase' as const },
+    { title: 'Alerts', value: '3', change: 2, changeType: 'decrease' as const },
+    { title: 'Avg. Response Time', value: '245ms', change: 18, changeType: 'decrease' as const },
   ]
 
   it('renders all metrics cards correctly', () => {
