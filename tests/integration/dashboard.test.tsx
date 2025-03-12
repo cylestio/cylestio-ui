@@ -20,12 +20,12 @@ describe('Dashboard Integration', () => {
     {
       id: 'agent-activity',
       title: 'Agent Activity (24h)',
-      type: 'line',
+      type: 'area',
       data: [
         { time: '00:00', value: 10 },
         { time: '12:00', value: 30 },
       ],
-      categories: ['time', 'value'],
+      categories: ['time', 'value']
     },
   ]
 
