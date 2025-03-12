@@ -12,8 +12,8 @@ jest.mock('next/navigation', () => ({
 
 describe('Dashboard Integration', () => {
   const mockMetricsData: MetricsData[] = [
-    { title: 'Total Agents', value: 47, change: 12, changeType: 'increase' },
-    { title: 'Active Sessions', value: 153, change: 8, changeType: 'increase' },
+    { title: 'Total Agents', value: '47', change: 12, changeType: 'increase' },
+    { title: 'Active Sessions', value: '153', change: 8, changeType: 'increase' },
   ]
 
   const mockChartsData: ChartData[] = [
