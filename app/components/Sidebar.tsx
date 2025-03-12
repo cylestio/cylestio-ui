@@ -20,9 +20,18 @@ const navigation = [
   { name: 'Settings', href: '/settings', icon: Cog6ToothIcon },
 ]
 
-export default function Sidebar() {
+// Define and export props interface
+export interface SidebarProps {
+  navigation?: typeof navigation;
+  title?: string;
+  className?: string;
+  logo?: React.ReactNode;
+}
+
+export default function Sidebar({ navigation: customNavigation, title = 'Cylestio Monitor', className = '' }: SidebarProps) {
   const pathname = usePathname()
   const [currentTime, setCurrentTime] = useState<string>('')
+  const navItems = customNavigation || navigation;
 
   useEffect(() => {
     // Update time only on client side
@@ -41,7 +50,7 @@ export default function Sidebar() {
   }, [])
 
   return (
-    <div className="flex flex-col w-64 bg-white border-r border-gray-200">
+    <div className={`flex flex-col w-64 bg-white border-r border-gray-200 ${className}`}>
       <div className="flex flex-col items-center justify-center h-24 border-b border-gray-200 p-4">
         <Image
           src="/images/cylestio_logo.png"
@@ -50,11 +59,11 @@ export default function Sidebar() {
           height={48}
           className="mb-2"
         />
-        <h1 className="text-lg font-semibold text-gray-800">Cylestio Monitor</h1>
+        <h1 className="text-lg font-semibold text-gray-800">{title}</h1>
       </div>
       <div className="flex flex-col flex-1 overflow-y-auto">
         <nav className="flex-1 px-2 py-4 space-y-1">
-          {navigation.map(item => {
+          {navItems.map(item => {
             const isActive = pathname === item.href
             return (
               <Link
