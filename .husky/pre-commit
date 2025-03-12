@@ -1,7 +1,4 @@
-#!/usr/bin/env sh
-. "$(dirname -- "$0")/_/husky.sh"
-
-# Run lint-staged
+#!/bin/sh
 npx lint-staged
 
 # Run type checking
