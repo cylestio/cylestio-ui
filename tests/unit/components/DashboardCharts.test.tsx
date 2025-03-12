@@ -1,22 +1,26 @@
 import { render, screen, act, waitFor } from '@testing-library/react'
 import '@testing-library/jest-dom'
-import DashboardCharts from '@/components/DashboardCharts'
+import DashboardCharts from '../../../app/components/DashboardCharts'
 import { ReactNode } from 'react'
 
 // Mock fetch globally
 global.fetch = jest.fn()
 
+// Define types for the mock data
+type ChartDataItem = {
+  minute?: string
+  calls?: number
+  name?: string
+  value?: number
+  date?: string
+  count?: number
+  [key: string]: string | number | undefined
+}
+
 interface TremorProps {
   children?: ReactNode
   className?: string
-  data?: Array<{
-    minute?: string
-    calls?: number
-    name?: string
-    value?: number
-    date?: string
-    count?: number
-  }>
+  data?: ChartDataItem[]
   valueFormatter?: (value: number) => string
 }
 
