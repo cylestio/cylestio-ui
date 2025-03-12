@@ -1,37 +1,42 @@
-'use client';
+'use client'
 
-import { useEffect, useState } from 'react';
-import { Card, Title, AreaChart, DonutChart, BarChart, Flex } from '@tremor/react';
+import { useEffect, useState } from 'react'
+import { Card, Title, AreaChart, DonutChart, BarChart, Flex } from '@tremor/react'
+
+// Define chart data item type
+export type ChartDataItem = {
+  [key: string]: string | number | Date | undefined
+}
 
 // Define chart data type
 export interface ChartData {
-  id: string;
-  title: string;
-  data: Array<Record<string, any>>;
-  categories?: string[];
-  colors?: string[];
-  type?: 'bar' | 'line' | 'area' | 'pie';
+  id: string
+  title: string
+  data: ChartDataItem[]
+  categories?: string[]
+  colors?: string[]
+  type?: 'bar' | 'line' | 'area' | 'pie'
 }
 
 // Define props interface
 export interface DashboardChartsProps {
-  data?: ChartData[];
-  isLoading?: boolean;
-  gridClassName?: string;
-  chartClassName?: string;
-  className?: string;
+  data?: ChartData[]
+  isLoading?: boolean
+  gridClassName?: string
+  chartClassName?: string
+  className?: string
 }
 
 // In a real implementation, this would fetch from the API
 async function fetchChartData() {
   try {
-    const response = await fetch('/api/charts');
+    const response = await fetch('/api/charts')
     if (!response.ok) {
-      throw new Error('Failed to fetch chart data');
+      throw new Error('Failed to fetch chart data')
     }
-    return await response.json();
+    return await response.json()
   } catch (error) {
-    console.error('Error fetching chart data:', error);
+    console.error('Error fetching chart data:', error)
     // Return fallback data for development
     return {
       callsPerMinute: [
@@ -66,44 +71,44 @@ async function fetchChartData() {
         { date: '2025-03-10', count: 5 },
         { date: '2025-03-11', count: 2 },
       ],
-    };
+    }
   }
 }
 
-export default function DashboardCharts({ 
-  data: externalData, 
+export default function DashboardCharts({
+  data: externalData,
   isLoading: externalLoading,
   gridClassName = '',
   chartClassName = '',
-  className = ''
+  className = '',
 }: DashboardChartsProps) {
   const [chartData, setChartData] = useState({
     callsPerMinute: [],
     alertDistribution: [],
-    alertsOverTime: []
-  });
-  const [loading, setLoading] = useState(true);
+    alertsOverTime: [],
+  })
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     // Only fetch from API if no data is provided as props
     if (externalData) {
-      setLoading(false);
-      return;
+      setLoading(false)
+      return
     }
 
     const getChartData = async () => {
-      setLoading(true);
-      const data = await fetchChartData();
-      setChartData(data);
-      setLoading(false);
-    };
+      setLoading(true)
+      const data = await fetchChartData()
+      setChartData(data)
+      setLoading(false)
+    }
 
-    getChartData();
-    
+    getChartData()
+
     // Set up polling every 60 seconds
-    const interval = setInterval(getChartData, 60000);
-    return () => clearInterval(interval);
-  }, [externalData]);
+    const interval = setInterval(getChartData, 60000)
+    return () => clearInterval(interval)
+  }, [externalData])
 
   // Custom colors for the charts
   const colors = {
@@ -111,20 +116,20 @@ export default function DashboardCharts({
     donut: {
       Info: 'emerald',
       Warning: 'amber',
-      Error: 'red'
+      Error: 'red',
     },
-    bar: ['amber']
-  };
+    bar: ['amber'],
+  }
 
   // Use external loading state if provided
-  const isLoading = externalLoading !== undefined ? externalLoading : loading;
+  const isLoading = externalLoading !== undefined ? externalLoading : loading
 
   // If external data provided, render custom charts
   if (externalData && !isLoading) {
     return (
       <div className={`space-y-6 ${className}`}>
         <Flex className={`gap-6 flex-wrap ${gridClassName}`}>
-          {externalData.map((chart) => (
+          {externalData.map(chart => (
             <Card key={chart.id} className={`flex-1 min-w-[300px] ${chartClassName}`}>
               <Title>{chart.title}</Title>
               {chart.type === 'bar' && (
@@ -163,15 +168,18 @@ export default function DashboardCharts({
           ))}
         </Flex>
       </div>
-    );
+    )
   }
 
   if (isLoading) {
     return (
-      <div className={`flex items-center justify-center h-96 ${className}`} data-testid="metric-skeleton">
+      <div
+        className={`flex items-center justify-center h-96 ${className}`}
+        data-testid="metric-skeleton"
+      >
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
       </div>
-    );
+    )
   }
 
   // Default view with API-fetched data
@@ -184,14 +192,14 @@ export default function DashboardCharts({
             className="h-72 mt-4"
             data={chartData.callsPerMinute}
             index="minute"
-            categories={["calls"]}
+            categories={['calls']}
             colors={colors.area}
             showLegend={false}
             showAnimation={true}
-            valueFormatter={(value) => `${value} calls`}
+            valueFormatter={value => `${value} calls`}
           />
         </Card>
-        
+
         <Card className={`flex-1 ${chartClassName}`}>
           <Title>Alert Distribution</Title>
           <DonutChart
@@ -201,24 +209,24 @@ export default function DashboardCharts({
             index="name"
             colors={Object.values(colors.donut)}
             showAnimation={true}
-            valueFormatter={(value) => `${value} events`}
+            valueFormatter={value => `${value} events`}
           />
         </Card>
       </Flex>
-      
+
       <Card className={chartClassName}>
         <Title>Alerts Over Time</Title>
         <BarChart
           className="h-72 mt-4"
           data={chartData.alertsOverTime}
           index="date"
-          categories={["count"]}
+          categories={['count']}
           colors={colors.bar}
           showLegend={false}
           showAnimation={true}
-          valueFormatter={(value) => `${value} alerts`}
+          valueFormatter={value => `${value} alerts`}
         />
       </Card>
     </div>
-  );
-} 
+  )
+}
