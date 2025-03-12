@@ -1,6 +1,6 @@
 'use client';
 
-import { Card, Title, BarChart, LineChart, DonutChart, Grid, Text } from '@tremor/react';
+import { Card, Title, BarChart, LineChart, DonutChart, Text } from '@tremor/react';
 import { useEffect, useState } from 'react';
 
 const performanceData = [
