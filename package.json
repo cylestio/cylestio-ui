@@ -1,6 +1,6 @@
 {
   "name": "@cylestio/ui-dashboard",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Enterprise-grade AI Agent Monitoring and Security Dashboard",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

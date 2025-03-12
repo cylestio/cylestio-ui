@@ -3,6 +3,25 @@
 import { useEffect, useState } from 'react';
 import { Card, Title, AreaChart, DonutChart, BarChart, Flex } from '@tremor/react';
 
+// Define chart data type
+export interface ChartData {
+  id: string;
+  title: string;
+  data: Array<Record<string, any>>;
+  categories?: string[];
+  colors?: string[];
+  type?: 'bar' | 'line' | 'area' | 'pie';
+}
+
+// Define props interface
+export interface DashboardChartsProps {
+  data?: ChartData[];
+  isLoading?: boolean;
+  gridClassName?: string;
+  chartClassName?: string;
+  className?: string;
+}
+
 // In a real implementation, this would fetch from the API
 async function fetchChartData() {
   try {
@@ -51,7 +70,13 @@ async function fetchChartData() {
   }
 }
 
-export default function DashboardCharts() {
+export default function DashboardCharts({ 
+  data: externalData, 
+  isLoading: externalLoading,
+  gridClassName = '',
+  chartClassName = '',
+  className = ''
+}: DashboardChartsProps) {
   const [chartData, setChartData] = useState({
     callsPerMinute: [],
     alertDistribution: [],
@@ -60,6 +85,12 @@ export default function DashboardCharts() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Only fetch from API if no data is provided as props
+    if (externalData) {
+      setLoading(false);
+      return;
+    }
+
     const getChartData = async () => {
       setLoading(true);
       const data = await fetchChartData();
@@ -72,7 +103,7 @@ export default function DashboardCharts() {
     // Set up polling every 60 seconds
     const interval = setInterval(getChartData, 60000);
     return () => clearInterval(interval);
-  }, []);
+  }, [externalData]);
 
   // Custom colors for the charts
   const colors = {
@@ -85,18 +116,69 @@ export default function DashboardCharts() {
     bar: ['amber']
   };
 
-  if (loading) {
+  // Use external loading state if provided
+  const isLoading = externalLoading !== undefined ? externalLoading : loading;
+
+  // If external data provided, render custom charts
+  if (externalData && !isLoading) {
     return (
-      <div className="flex items-center justify-center h-96">
+      <div className={`space-y-6 ${className}`}>
+        <Flex className={`gap-6 flex-wrap ${gridClassName}`}>
+          {externalData.map((chart) => (
+            <Card key={chart.id} className={`flex-1 min-w-[300px] ${chartClassName}`}>
+              <Title>{chart.title}</Title>
+              {chart.type === 'bar' && (
+                <BarChart
+                  className="h-72 mt-4"
+                  data={chart.data}
+                  index={chart.categories?.[0] || 'category'}
+                  categories={[chart.categories?.[1] || 'value']}
+                  colors={chart.colors || colors.bar}
+                  showLegend={false}
+                  showAnimation={true}
+                />
+              )}
+              {(chart.type === 'line' || chart.type === 'area') && (
+                <AreaChart
+                  className="h-72 mt-4"
+                  data={chart.data}
+                  index={chart.categories?.[0] || 'category'}
+                  categories={[chart.categories?.[1] || 'value']}
+                  colors={chart.colors || colors.area}
+                  showLegend={false}
+                  showAnimation={true}
+                />
+              )}
+              {chart.type === 'pie' && (
+                <DonutChart
+                  className="h-72 mt-4"
+                  data={chart.data}
+                  category={chart.categories?.[1] || 'value'}
+                  index={chart.categories?.[0] || 'name'}
+                  colors={chart.colors || Object.values(colors.donut)}
+                  showAnimation={true}
+                />
+              )}
+            </Card>
+          ))}
+        </Flex>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className={`flex items-center justify-center h-96 ${className}`} data-testid="metric-skeleton">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
       </div>
     );
   }
 
+  // Default view with API-fetched data
   return (
-    <div className="space-y-6">
-      <Flex className="gap-6">
-        <Card className="flex-1">
+    <div className={`space-y-6 ${className}`}>
+      <Flex className={`gap-6 ${gridClassName}`}>
+        <Card className={`flex-1 ${chartClassName}`}>
           <Title>Calls Per Minute</Title>
           <AreaChart
             className="h-72 mt-4"
@@ -110,7 +192,7 @@ export default function DashboardCharts() {
           />
         </Card>
         
-        <Card className="flex-1">
+        <Card className={`flex-1 ${chartClassName}`}>
           <Title>Alert Distribution</Title>
           <DonutChart
             className="h-72 mt-4"
@@ -124,7 +206,7 @@ export default function DashboardCharts() {
         </Card>
       </Flex>
       
-      <Card>
+      <Card className={chartClassName}>
         <Title>Alerts Over Time</Title>
         <BarChart
           className="h-72 mt-4"
