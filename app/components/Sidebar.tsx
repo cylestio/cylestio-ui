@@ -1,15 +1,15 @@
-'use client';
+'use client'
 
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { 
-  HomeIcon, 
-  ClockIcon, 
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
+import {
+  HomeIcon,
+  ClockIcon,
   ExclamationTriangleIcon,
   ChartBarIcon,
-  Cog6ToothIcon
-} from '@heroicons/react/24/outline';
-import { useEffect, useState } from 'react';
+  Cog6ToothIcon,
+} from '@heroicons/react/24/outline'
+import { useEffect, useState } from 'react'
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: HomeIcon },
@@ -17,27 +17,27 @@ const navigation = [
   { name: 'Alerts', href: '/alerts', icon: ExclamationTriangleIcon },
   { name: 'Analytics', href: '/analytics', icon: ChartBarIcon },
   { name: 'Settings', href: '/settings', icon: Cog6ToothIcon },
-];
+]
 
 export default function Sidebar() {
-  const pathname = usePathname();
-  const [currentTime, setCurrentTime] = useState<string>('');
+  const pathname = usePathname()
+  const [currentTime, setCurrentTime] = useState<string>('')
 
   useEffect(() => {
     // Update time only on client side
     const updateTime = () => {
-      const now = new Date();
-      setCurrentTime(now.toLocaleTimeString());
-    };
+      const now = new Date()
+      setCurrentTime(now.toLocaleTimeString())
+    }
 
     // Initial update
-    updateTime();
+    updateTime()
 
     // Update every second
-    const interval = setInterval(updateTime, 1000);
+    const interval = setInterval(updateTime, 1000)
 
-    return () => clearInterval(interval);
-  }, []);
+    return () => clearInterval(interval)
+  }, [])
 
   return (
     <div className="flex flex-col w-64 bg-white border-r border-gray-200">
@@ -46,18 +46,23 @@ export default function Sidebar() {
       </div>
       <div className="flex flex-col flex-1 overflow-y-auto">
         <nav className="flex-1 px-2 py-4 space-y-1">
-          {navigation.map((item) => {
-            const isActive = pathname === item.href;
+          {navigation.map(item => {
+            const isActive = pathname === item.href
             return (
               <Link
                 key={item.name}
                 href={item.href}
-                className={`sidebar-link ${isActive ? 'active' : ''}`}
+                data-testid={`nav-${item.name.toLowerCase()}`}
+                className={`flex items-center px-2 py-2 text-sm font-medium rounded-md ${
+                  isActive
+                    ? 'text-blue-700 bg-blue-50'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                }`}
               >
                 <item.icon className="w-5 h-5 mr-3" aria-hidden="true" />
                 {item.name}
               </Link>
-            );
+            )
           })}
         </nav>
       </div>
@@ -67,11 +72,9 @@ export default function Sidebar() {
           <span className="text-sm text-gray-600">Connected to DB</span>
         </div>
         {currentTime && (
-          <div className="mt-2 text-xs text-gray-500">
-            Last updated: {currentTime}
-          </div>
+          <div className="mt-2 text-xs text-gray-500">Last updated: {currentTime}</div>
         )}
       </div>
     </div>
-  );
-} 
+  )
+}
