@@ -16,8 +16,9 @@
     "test:e2e:ui": "playwright test --ui",
     "test:db": "node scripts/test-db-connection.js",
     "security:audit": "npm audit",
-    "security:check": "npm run security:audit && npm run security:deps",
+    "security:check": "npm run security:audit && npm run security:deps && npm run security:retire",
     "security:deps": "npx audit-ci --high",
+    "security:retire": "npx retire --severity high --path ./",
     "prepare": "husky install"
   },
   "repository": {
@@ -78,6 +79,7 @@
     "lint-staged": "^15.2.2",
     "postcss": "^8.4.33",
     "prettier": "^3.2.5",
+    "retire": "^4.3.3",
     "tailwindcss": "^3.4.1",
     "ts-jest": "^29.1.1",
     "typescript": "^5.3.3"
