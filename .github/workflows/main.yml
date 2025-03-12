@@ -41,12 +41,15 @@ jobs:
             --suppression ./.dependency-check-suppression.xml
             --failOnCVSS 7
             --enableRetired
+            --enableExperimental
+            --nvdApiKey ${{ secrets.NVD_API_KEY }}
       
       - name: Upload dependency check report
         uses: actions/upload-artifact@v4
         with:
           name: dependency-check-report
           path: reports
+        if: always()
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
@@ -168,7 +171,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment:
-      name: production
+      name: prod
       url: ${{ steps.deploy.outputs.url }}
     steps:
       - uses: actions/checkout@v4
