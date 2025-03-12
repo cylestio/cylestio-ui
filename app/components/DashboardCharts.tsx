@@ -15,7 +15,7 @@ export interface ChartData {
   data: ChartDataItem[]
   categories?: string[]
   colors?: string[]
-  type?: 'bar' | 'line' | 'area' | 'pie'
+  type?: 'bar' | 'line' | 'area' | 'pie' | string
 }
 
 // Define props interface

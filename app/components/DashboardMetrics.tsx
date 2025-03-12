@@ -14,7 +14,7 @@ export interface MetricsData {
   title: string;
   value: number | string;
   change?: number;
-  changeType?: 'increase' | 'decrease';
+  changeType?: 'increase' | 'decrease' | string;
   icon?: React.ReactNode;
 }
 

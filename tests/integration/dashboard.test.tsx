@@ -11,12 +11,13 @@ jest.mock('next/navigation', () => ({
 }))
 
 describe('Dashboard Integration', () => {
-  const mockMetricsData: MetricsData[] = [
+  // Explicitly cast the entire arrays to the expected types
+  const mockMetricsData = [
     { title: 'Total Agents', value: '47', change: 12, changeType: 'increase' as const },
     { title: 'Active Sessions', value: '153', change: 8, changeType: 'increase' as const },
-  ]
+  ] as MetricsData[];
 
-  const mockChartsData: ChartData[] = [
+  const mockChartsData = [
     {
       id: 'agent-activity',
       title: 'Agent Activity (24h)',
@@ -27,7 +28,7 @@ describe('Dashboard Integration', () => {
       ],
       categories: ['time', 'value']
     },
-  ]
+  ] as ChartData[];
 
   it('renders a complete dashboard with sidebar and metrics', () => {
     // Create a container dashboard layout with actual components
