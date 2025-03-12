@@ -201,7 +201,9 @@ jobs:
           path: .
       
       - name: Install production dependencies
-        run: npm ci --production
+        run: |
+          git config --global core.hooksPath /dev/null
+          HUSKY=0 npm ci --production --ignore-scripts
         
       - name: Deploy
         id: deploy
