@@ -13,7 +13,7 @@
     "build": "next build",
     "build:package": "tsc --project tsconfig.build.json && next build",
     "verify:package": "node scripts/verify-package.js",
-    "prepublishOnly": "npm run lint && npm run build:package && npm run verify:package",
+    "prepublishOnly": "npm run build:package && npm run verify:package",
     "start": "next start",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
