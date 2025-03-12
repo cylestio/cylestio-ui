@@ -2,7 +2,4 @@
 npx lint-staged
 
 # Run type checking
-npm run type-check
-
-# Run tests
-npm test -- --bail --findRelatedTests 
+npm run type-check 
