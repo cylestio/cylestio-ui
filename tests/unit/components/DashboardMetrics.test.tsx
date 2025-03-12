@@ -4,12 +4,12 @@ import '@testing-library/jest-dom'
 import DashboardMetrics, { MetricsData } from '../../../app/components/DashboardMetrics'
 
 describe('DashboardMetrics Component', () => {
-  const mockMetricsData: MetricsData[] = [
+  const mockMetricsData = [
     { title: 'Total Agents', value: '47', change: 12, changeType: 'increase' as const },
     { title: 'Active Sessions', value: '153', change: 8, changeType: 'increase' as const },
     { title: 'Alerts', value: '3', change: 2, changeType: 'decrease' as const },
     { title: 'Avg. Response Time', value: '245ms', change: 18, changeType: 'decrease' as const },
-  ]
+  ] as MetricsData[];
 
   it('renders all metrics cards correctly', () => {
     render(<DashboardMetrics data={mockMetricsData} />)
