@@ -3,32 +3,21 @@ import path from 'path'
 import fs from 'fs'
 
 // Define types for our database results
-interface RequestCount {
-  count: number
+export interface Agent {
+  id: number
+  name: string
+  status: string
+  last_active: string
+  type: string
 }
 
-interface ResponseTime {
-  avg: number
-}
-
-interface SecurityCounts {
-  blocked: number
-  suspicious: number
-}
-
-interface EventCount {
-  minute: string
-  count: number
-}
-
-interface EventLevel {
+export interface Event {
+  id: number
+  timestamp: string
+  event_type: string
   level: string
-  count: number
-}
-
-interface AlertCount {
-  date: string
-  count: number
+  message: string
+  agent_id: number
 }
 
 // Type for empty parameters
@@ -36,11 +25,8 @@ type EmptyObject = Record<string, never>
 
 // Initialize database connection
 let db: Database.Database
-let totalRequestsStmt: Database.Statement<EmptyObject, RequestCount>
-let avgResponseTimeStmt: Database.Statement<EmptyObject, ResponseTime>
-let securityCountsStmt: Database.Statement<EmptyObject, SecurityCounts>
-let eventsPerMinuteStmt: Database.Statement<EmptyObject, EventCount>
-let eventCountsByLevelStmt: Database.Statement<EmptyObject, EventLevel>
+let getAgentsStmt: Database.Statement<EmptyObject, Agent>
+let getEventsStmt: Database.Statement<EmptyObject, Event>
 
 try {
   const dbPath = path.join(process.cwd(), '..', 'cylestio.db')
@@ -50,37 +36,13 @@ try {
     db = new Database(dbPath, { readonly: true })
 
     // Prepare statements for better performance
-    totalRequestsStmt = db.prepare<EmptyObject, RequestCount>(
-      'SELECT COUNT(*) as count FROM requests'
+    getAgentsStmt = db.prepare<EmptyObject, Agent>(
+      'SELECT id, name, status, last_active, type FROM agents ORDER BY last_active DESC LIMIT 100'
     )
-    avgResponseTimeStmt = db.prepare<EmptyObject, ResponseTime>(
-      'SELECT AVG(response_time) as avg FROM requests WHERE timestamp > datetime("now", "-1 hour")'
+    
+    getEventsStmt = db.prepare<EmptyObject, Event>(
+      'SELECT id, timestamp, event_type, level, message, agent_id FROM events ORDER BY timestamp DESC LIMIT 100'
     )
-    securityCountsStmt = db.prepare<EmptyObject, SecurityCounts>(`
-      SELECT 
-        SUM(CASE WHEN status = 'blocked' THEN 1 ELSE 0 END) as blocked,
-        SUM(CASE WHEN status = 'suspicious' THEN 1 ELSE 0 END) as suspicious
-      FROM requests 
-      WHERE timestamp > datetime("now", "-24 hours")
-    `)
-    eventsPerMinuteStmt = db.prepare<EmptyObject, EventCount>(`
-      SELECT 
-        strftime('%H:%M', timestamp) as minute,
-        COUNT(*) as count
-      FROM requests
-      WHERE timestamp > datetime("now", "-15 minutes")
-      GROUP BY minute
-      ORDER BY minute DESC
-      LIMIT 15
-    `)
-    eventCountsByLevelStmt = db.prepare<EmptyObject, EventLevel>(`
-      SELECT 
-        level,
-        COUNT(*) as count
-      FROM events
-      WHERE timestamp > datetime("now", "-24 hours")
-      GROUP BY level
-    `)
 
     // Clean up database connection when the process exits
     process.on('exit', () => {
@@ -93,125 +55,46 @@ try {
   console.error('Error initializing database:', error)
 }
 
-export async function getTotalRequestCount(): Promise<number> {
+export async function getAgents(): Promise<Agent[]> {
   try {
-    if (!db || !totalRequestsStmt) return 1254 // Mock data
-
-    const result = totalRequestsStmt.get({})
-    return result?.count || 0
-  } catch (error) {
-    console.error('Error getting total request count:', error)
-    return 1254 // Mock data
-  }
-}
-
-export async function getAverageLlmResponseTime(): Promise<number> {
-  try {
-    if (!db || !avgResponseTimeStmt) return 320 // Mock data
-
-    const result = avgResponseTimeStmt.get({})
-    return Math.round(result?.avg || 0)
-  } catch (error) {
-    console.error('Error getting average response time:', error)
-    return 320 // Mock data
-  }
-}
-
-export async function getBlockedAndSuspiciousRequestCounts(): Promise<SecurityCounts> {
-  try {
-    if (!db || !securityCountsStmt) {
-      return { blocked: 12, suspicious: 48 } // Mock data
-    }
-
-    const result = securityCountsStmt.get({})
-    return {
-      blocked: result?.blocked || 0,
-      suspicious: result?.suspicious || 0,
-    }
-  } catch (error) {
-    console.error('Error getting security counts:', error)
-    return { blocked: 12, suspicious: 48 } // Mock data
-  }
-}
-
-export async function getEventsPerMinute(): Promise<EventCount[]> {
-  try {
-    if (!db || !eventsPerMinuteStmt) {
-      // Return mock data
-      return Array.from({ length: 15 }, (_, i) => ({
-        minute: `12:${String(i).padStart(2, '0')}`,
-        count: 40 + Math.floor(Math.random() * 30),
-      }))
-    }
-
-    return eventsPerMinuteStmt.all({}) as EventCount[]
-  } catch (error) {
-    console.error('Error getting events per minute:', error)
-    // Return mock data
-    return Array.from({ length: 15 }, (_, i) => ({
-      minute: `12:${String(i).padStart(2, '0')}`,
-      count: 40 + Math.floor(Math.random() * 30),
-    }))
-  }
-}
-
-export async function getEventCountsByLevel(): Promise<EventLevel[]> {
-  try {
-    if (!db || !eventCountsByLevelStmt) {
-      // Return mock data
+    if (!db || !getAgentsStmt) {
+      // Return mock data if database is not available
       return [
-        { level: 'info', count: 456 },
-        { level: 'warning', count: 48 },
-        { level: 'error', count: 12 },
+        { id: 1, name: 'Agent 1', status: 'active', last_active: new Date().toISOString(), type: 'assistant' },
+        { id: 2, name: 'Agent 2', status: 'inactive', last_active: new Date().toISOString(), type: 'retrieval' },
+        { id: 3, name: 'Agent 3', status: 'active', last_active: new Date().toISOString(), type: 'classifier' }
       ]
     }
 
-    return eventCountsByLevelStmt.all({}) as EventLevel[]
+    return getAgentsStmt.all({}) as Agent[]
   } catch (error) {
-    console.error('Error getting event counts by level:', error)
-    // Return mock data
+    console.error('Error getting agents:', error)
     return [
-      { level: 'info', count: 456 },
-      { level: 'warning', count: 48 },
-      { level: 'error', count: 12 },
+      { id: 1, name: 'Agent 1', status: 'active', last_active: new Date().toISOString(), type: 'assistant' },
+      { id: 2, name: 'Agent 2', status: 'inactive', last_active: new Date().toISOString(), type: 'retrieval' },
+      { id: 3, name: 'Agent 3', status: 'active', last_active: new Date().toISOString(), type: 'classifier' }
     ]
   }
 }
 
-export async function getAlertsOverTime(days: number = 7): Promise<AlertCount[]> {
+export async function getEvents(): Promise<Event[]> {
   try {
-    if (!db) {
-      // Return mock data
-      return Array.from({ length: 7 }, (_, i) => {
-        const date = new Date()
-        date.setDate(date.getDate() - i)
-        return {
-          date: date.toISOString().split('T')[0],
-          count: 2 + Math.floor(Math.random() * 8),
-        }
-      })
+    if (!db || !getEventsStmt) {
+      // Return mock data if database is not available
+      return [
+        { id: 1, timestamp: new Date().toISOString(), event_type: 'request', level: 'info', message: 'Request processed successfully', agent_id: 1 },
+        { id: 2, timestamp: new Date().toISOString(), event_type: 'response', level: 'warning', message: 'Slow response detected', agent_id: 2 },
+        { id: 3, timestamp: new Date().toISOString(), event_type: 'error', level: 'error', message: 'Failed to connect to external API', agent_id: 1 }
+      ]
     }
 
-    const query = `
-      SELECT 
-        date(timestamp) as date,
-        COUNT(*) as count
-      FROM alerts
-      WHERE timestamp > datetime("now", "-${days} days")
-      GROUP BY date(timestamp)
-      ORDER BY date(timestamp)
-    `
-    return db.prepare<EmptyObject, AlertCount>(query).all({}) as AlertCount[]
+    return getEventsStmt.all({}) as Event[]
   } catch (error) {
-    console.error('Error getting alerts over time:', error)
-    // Return mock data
-    return Array.from({ length: 7 }, (_, i) => {
-      const date = new Date()
-      date.setDate(date.getDate() - i)
-      return {
-        date: date.toISOString().split('T')[0],
-        count: 2 + Math.floor(Math.random() * 8),
-      }
-    })
+    console.error('Error getting events:', error)
+    return [
+      { id: 1, timestamp: new Date().toISOString(), event_type: 'request', level: 'info', message: 'Request processed successfully', agent_id: 1 },
+      { id: 2, timestamp: new Date().toISOString(), event_type: 'response', level: 'warning', message: 'Slow response detected', agent_id: 2 },
+      { id: 3, timestamp: new Date().toISOString(), event_type: 'error', level: 'error', message: 'Failed to connect to external API', agent_id: 1 }
+    ]
   }
 }

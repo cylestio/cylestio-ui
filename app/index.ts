@@ -1,21 +1,15 @@
-// Components
-export { default as Sidebar } from './components/Sidebar';
-export { default as DashboardCharts } from './components/DashboardCharts';
-export { default as DashboardMetrics } from './components/DashboardMetrics';
-export { default as LoadingSpinner } from './components/LoadingSpinner';
+// Main components
+export { default as AgentTable } from './components/AgentTable';
+export { default as EventTable } from './components/EventTable';
 
-// Layouts
+// Layout component
 export { default as RootLayout } from './layout';
 
-// Pages
+// Page component
 export { default as HomePage } from './page';
-export { default as AlertsPage } from './alerts/page';
-export { default as EventsPage } from './events/page';
-export { default as AnalyticsPage } from './analytics/page';
-export { default as SettingsPage } from './settings/page';
 
-// Utils and Hooks
-// Add any utility functions or custom hooks from lib directory here
+// Database types
+export type { Agent, Event } from './lib/db';
 
 /**
  * @cylestio/ui-dashboard

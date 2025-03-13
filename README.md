@@ -1,12 +1,9 @@
 # @cylestio/ui-dashboard
 
-[![CI/CD](https://github.com/cylestio/cylestio-ui/actions/workflows/main.yml/badge.svg)](https://github.com/cylestio/cylestio-ui/actions)
 [![npm version](https://badge.fury.io/js/%40cylestio%2Fui-dashboard.svg)](https://www.npmjs.com/package/@cylestio/ui-dashboard)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Enterprise-grade dashboard components for monitoring AI agent activities and security metrics, designed to integrate with [Cylestio Monitor](https://github.com/cylestio/cylestio-monitor).
-
-![Dashboard Preview](public/images/dashboard-preview.png)
+Minimal dashboard for monitoring AI agent activities and events.
 
 ## Installation
 
@@ -17,90 +14,60 @@ npm install @cylestio/ui-dashboard
 ## Quick Start
 
 ```jsx
-import { Sidebar, DashboardMetrics, DashboardCharts } from '@cylestio/ui-dashboard'
+import { AgentTable, EventTable } from '@cylestio/ui-dashboard';
 
 function Dashboard() {
   return (
-    <div className="flex h-screen">
-      <Sidebar />
-      <main className="flex-1 p-6">
-        <DashboardMetrics data={yourMetricsData} />
-        <DashboardCharts data={yourChartsData} />
-      </main>
+    <div className="p-6 max-w-7xl mx-auto">
+      <h1 className="text-2xl font-bold mb-6">Agent Monitoring</h1>
+      <AgentTable />
+      <EventTable />
     </div>
-  )
+  );
 }
 ```
 
-## Key Features
+## Features
 
-- 📊 **Pre-built Components**: Ready-to-use UI components for AI agent monitoring
-- 🔄 **Cylestio Integration**: Seamless integration with [Cylestio Monitor](https://github.com/cylestio/cylestio-monitor)
-- 🎨 **Customizable**: Fully customizable with Tailwind CSS
-- 📱 **Responsive**: Mobile-friendly UI that works on all devices
-- 🔒 **Secure**: Enterprise-grade security built-in
-- 🌗 **Dark Mode**: Support for light and dark themes
+- **Agent Monitoring**: View all registered AI agents and their status
+- **Event Logging**: Track events and activities from your AI agents
+- **Simplified Design**: Clean, minimal interface focused on essential information
+- **SQLite Integration**: Connect to a local SQLite database for data storage
 
-## Documentation
+## Database Schema
 
-For complete documentation, visit:
+The dashboard expects a SQLite database with the following tables:
 
-- [Installation Guide](docs/installation.md)
-- [API Reference](docs/api-reference.md)
-- [Customization Guide](docs/customization.md)
+### Agents Table
+```sql
+CREATE TABLE agents (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  status TEXT NOT NULL,
+  last_active TEXT NOT NULL,
+  type TEXT NOT NULL
+);
+```
 
-## Integration with Cylestio Monitor
-
-```jsx
-import { useEffect, useState } from 'react'
-import { CylestioMonitor } from '@cylestio/monitor'
-import { DashboardMetrics, DashboardCharts } from '@cylestio/ui-dashboard'
-
-function MonitoringDashboard() {
-  const [data, setData] = useState(null)
-
-  useEffect(() => {
-    const monitor = new CylestioMonitor({
-      apiKey: process.env.NEXT_PUBLIC_CYLESTIO_API_KEY,
-    })
-
-    const fetchData = async () => {
-      const result = await monitor.getAgentMetrics()
-      setData(result)
-    }
-
-    fetchData()
-    const interval = setInterval(fetchData, 60000)
-    return () => clearInterval(interval)
-  }, [])
-
-  if (!data) return <div>Loading...</div>
-
-  return (
-    <div className="p-4">
-      <DashboardMetrics data={data.metrics} />
-      <DashboardCharts data={data.charts} />
-    </div>
-  )
-}
+### Events Table
+```sql
+CREATE TABLE events (
+  id INTEGER PRIMARY KEY,
+  timestamp TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  level TEXT NOT NULL,
+  message TEXT NOT NULL,
+  agent_id INTEGER,
+  FOREIGN KEY (agent_id) REFERENCES agents(id)
+);
 ```
 
 ## Requirements
 
 - React 17+
-- Next.js 13+ (with App Router)
+- Next.js 13+
 - Node.js 16+
-
-## Contributing
-
-Contributions are welcome! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
 
 ## License
 
 [MIT](LICENSE) © Cylestio
-
-## Testing Status
-
-> **Note:** Tests are temporarily disabled during the UI revamp period.
->
-> The testing infrastructure has been simplified to ensure smooth deployment to npm while the UI undergoes significant changes. Tests will be re-introduced after the UI revamp is complete.
