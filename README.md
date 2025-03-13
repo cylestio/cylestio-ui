@@ -17,7 +17,7 @@ npm install @cylestio/ui-dashboard
 ## Quick Start
 
 ```jsx
-import { Sidebar, DashboardMetrics, DashboardCharts } from '@cylestio/ui-dashboard';
+import { Sidebar, DashboardMetrics, DashboardCharts } from '@cylestio/ui-dashboard'
 
 function Dashboard() {
   return (
@@ -28,7 +28,7 @@ function Dashboard() {
         <DashboardCharts data={yourChartsData} />
       </main>
     </div>
-  );
+  )
 }
 ```
 
@@ -52,36 +52,36 @@ For complete documentation, visit:
 ## Integration with Cylestio Monitor
 
 ```jsx
-import { useEffect, useState } from 'react';
-import { CylestioMonitor } from '@cylestio/monitor';
-import { DashboardMetrics, DashboardCharts } from '@cylestio/ui-dashboard';
+import { useEffect, useState } from 'react'
+import { CylestioMonitor } from '@cylestio/monitor'
+import { DashboardMetrics, DashboardCharts } from '@cylestio/ui-dashboard'
 
 function MonitoringDashboard() {
-  const [data, setData] = useState(null);
-  
+  const [data, setData] = useState(null)
+
   useEffect(() => {
     const monitor = new CylestioMonitor({
-      apiKey: process.env.NEXT_PUBLIC_CYLESTIO_API_KEY
-    });
-    
+      apiKey: process.env.NEXT_PUBLIC_CYLESTIO_API_KEY,
+    })
+
     const fetchData = async () => {
-      const result = await monitor.getAgentMetrics();
-      setData(result);
-    };
-    
-    fetchData();
-    const interval = setInterval(fetchData, 60000);
-    return () => clearInterval(interval);
-  }, []);
-  
-  if (!data) return <div>Loading...</div>;
-  
+      const result = await monitor.getAgentMetrics()
+      setData(result)
+    }
+
+    fetchData()
+    const interval = setInterval(fetchData, 60000)
+    return () => clearInterval(interval)
+  }, [])
+
+  if (!data) return <div>Loading...</div>
+
   return (
     <div className="p-4">
       <DashboardMetrics data={data.metrics} />
       <DashboardCharts data={data.charts} />
     </div>
-  );
+  )
 }
 ```
 
@@ -98,3 +98,9 @@ Contributions are welcome! Please see our [Contributing Guide](CONTRIBUTING.md) 
 ## License
 
 [MIT](LICENSE) © Cylestio
+
+## Testing Status
+
+> **Note:** Tests are temporarily disabled during the UI revamp period.
+>
+> The testing infrastructure has been simplified to ensure smooth deployment to npm while the UI undergoes significant changes. Tests will be re-introduced after the UI revamp is complete.
