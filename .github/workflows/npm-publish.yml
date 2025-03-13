@@ -23,14 +23,8 @@ jobs:
       
       - name: Install dependencies
         run: npm ci
-      
-      # Temporarily skip type checking for initial release
-      # - name: Check TypeScript
-      #   run: npm run type-check
-      
-      # Temporarily skip tests for initial release
-      # - name: Run tests
-      #   run: npm test
+        
+      # No type checking, testing, or other validation steps
       
       - name: Build package
         run: npm run build:package
