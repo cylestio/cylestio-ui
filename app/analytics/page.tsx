@@ -1,7 +1,8 @@
 'use client';
 
-import { Card, Title, BarChart, LineChart, DonutChart, Text } from '@tremor/react';
+import { Card, Title, BarChart, LineChart, Text } from '@tremor/react';
 import { useEffect, useState } from 'react';
+import { SimpleDonutChart } from '../components/SimpleDonutChart';
 
 const performanceData = [
   {
@@ -93,11 +94,12 @@ export default function Analytics() {
 
       <Card>
         <Title>Request Distribution</Title>
-        <DonutChart
+        <SimpleDonutChart
           className="mt-6"
-          data={requestDistribution}
-          category="value"
-          index="name"
+          data={requestDistribution.map(item => ({
+            name: item.name,
+            count: item.value
+          }))}
           valueFormatter={(value) => `${value}%`}
           colors={["emerald", "blue", "amber", "gray"]}
         />

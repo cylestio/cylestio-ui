@@ -32,9 +32,17 @@ import {
   ChatBubbleLeftRightIcon,
   ExclamationTriangleIcon,
   BoltIcon,
-  CpuChipIcon
+  CpuChipIcon,
+  ShieldExclamationIcon,
+  CheckCircleIcon,
+  XCircleIcon,
+  ChevronRightIcon,
+  Cog6ToothIcon,
+  CircleStackIcon,
+  CommandLineIcon
 } from '@heroicons/react/24/outline';
 import Link from 'next/link';
+import { SimpleDonutChart } from './SimpleDonutChart';
 
 type AgentDetailProps = {
   agentId: string;
@@ -325,11 +333,9 @@ export function AgentDetail({ agentId }: AgentDetailProps) {
             <Grid numItemsMd={2} className="gap-6 mt-6">
               <Card>
                 <Title>Event Type Distribution</Title>
-                <DonutChart
+                <SimpleDonutChart
                   className="mt-6"
-                  data={eventTypeDistribution}
-                  category="count"
-                  index="type"
+                  data={eventTypeDistribution.map(item => ({ name: item.type, count: item.count }))}
                   valueFormatter={(value) => `${value.toLocaleString()} events`}
                   colors={["blue", "cyan", "indigo", "violet", "fuchsia", "pink", "rose"]}
                 />
