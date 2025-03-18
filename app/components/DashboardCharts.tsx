@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Card, Title, AreaChart, DonutChart, BarChart, Flex } from '@tremor/react'
+import { SimpleDonutChart } from './SimpleDonutChart'
 
 // Define chart data item type
 export type ChartDataItem = {
@@ -155,13 +156,14 @@ export default function DashboardCharts({
                 />
               )}
               {chart.type === 'pie' && (
-                <DonutChart
+                <SimpleDonutChart
                   className="h-72 mt-4"
-                  data={chart.data}
-                  category={chart.categories?.[1] || 'value'}
-                  index={chart.categories?.[0] || 'name'}
+                  data={chart.data.map((item: any) => ({
+                    name: String(item[chart.categories?.[0] || 'name']),
+                    count: Number(item[chart.categories?.[1] || 'value'])
+                  }))}
                   colors={chart.colors || Object.values(colors.donut)}
-                  showAnimation={true}
+                  valueFormatter={(value) => `${value}`}
                 />
               )}
             </Card>
@@ -202,13 +204,13 @@ export default function DashboardCharts({
 
         <Card className={`flex-1 ${chartClassName}`}>
           <Title>Alert Distribution</Title>
-          <DonutChart
+          <SimpleDonutChart
             className="h-72 mt-4"
-            data={chartData.alertDistribution}
-            category="value"
-            index="name"
+            data={chartData.alertDistribution.map(item => ({
+              name: String(item.name || ''),
+              count: Number(item.value || 0)
+            }))}
             colors={Object.values(colors.donut)}
-            showAnimation={true}
             valueFormatter={value => `${value} events`}
           />
         </Card>

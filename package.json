@@ -23,6 +23,7 @@
     "test:e2e": "echo \"E2E tests temporarily disabled\" && exit 0",
     "test:e2e:ui": "echo \"E2E tests temporarily disabled\" && exit 0",
     "test:db": "echo \"Database tests temporarily disabled\" && exit 0",
+    "test:db:connection": "node scripts/test-db-connection.js",
     "test:package": "echo \"Package tests temporarily disabled\" && exit 0",
     "security:audit": "npm audit",
     "security:check": "npm audit --audit-level=high || true",
