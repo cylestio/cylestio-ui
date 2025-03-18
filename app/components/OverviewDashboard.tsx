@@ -1,61 +1,76 @@
-'use client';
+'use client'
 
-import { useState, useEffect } from 'react';
-import { Card, Grid, Metric, Text, Title, AreaChart, DonutChart, Flex, Badge, TabGroup, TabList, Tab, TabPanels, TabPanel } from '@tremor/react';
-import { 
-  BoltIcon, 
-  ClockIcon, 
-  ShieldExclamationIcon, 
+import { useState, useEffect } from 'react'
+import {
+  Card,
+  Grid,
+  Metric,
+  Text,
+  Title,
+  AreaChart,
+  Flex,
+  Badge,
+  TabGroup,
+  TabList,
+  Tab,
+  TabPanels,
+  TabPanel,
+} from '@tremor/react'
+import {
+  BoltIcon,
+  ClockIcon,
+  ShieldExclamationIcon,
   ExclamationTriangleIcon,
   CpuChipIcon,
   ChatBubbleLeftRightIcon,
   ArrowPathIcon,
   ArrowTrendingUpIcon,
-  ChevronRightIcon
-} from '@heroicons/react/24/outline';
-import { ConnectionStatus } from './ConnectionStatus';
-import Link from 'next/link';
+  ChevronRightIcon,
+} from '@heroicons/react/24/outline'
+import { ConnectionStatus } from './ConnectionStatus'
+import { SimpleDonutChart } from './SimpleDonutChart'
+import Link from 'next/link'
 
 // Define types
 type MetricsData = {
-  totalAgents: number;
-  activeAgents: number;
-  totalEvents: number;
-  recentEvents: number;
-  securityAlerts: number;
-  criticalAlerts: number;
-  avgResponseTime: number;
-  successRate: number;
+  totalAgents: number
+  activeAgents: number
+  totalEvents: number
+  recentEvents: number
+  securityAlerts: number
+  criticalAlerts: number
+  avgResponseTime: number
+  successRate: number
 }
 
 type AgentData = {
-  id: number;
-  name: string;
-  status: 'active' | 'inactive' | 'error';
-  type: string;
-  last_active: string;
-  event_count: number;
+  id: number
+  name: string
+  status: 'active' | 'inactive' | 'error'
+  type: string
+  last_active: string
+  event_count: number
 }
 
 type EventData = {
-  id: number;
-  timestamp: string;
-  type: string;
-  agent_id: number;
-  agent_name: string;
-  description: string;
-  status: string;
+  id: number
+  timestamp: string
+  type: string
+  agent_id: number
+  agent_name: string
+  description: string
+  status: string
 }
 
 type AlertData = {
-  id: number;
-  timestamp: string;
-  severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
-  type: string;
-  description: string;
-  agent_id: number;
-  agent_name: string;
-  action_taken: string;
+  id: number
+  timestamp: string
+  severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
+  type: string
+  description: string
+  agent_id: number
+  agent_name: string
+  action_taken: string
 }
 
 export default function OverviewDashboard() {
@@ -69,158 +84,210 @@ export default function OverviewDashboard() {
     criticalAlerts: 0,
     avgResponseTime: 0,
     successRate: 98.5,
-  });
-  
-  const [agents, setAgents] = useState<AgentData[]>([]);
-  const [events, setEvents] = useState<EventData[]>([]);
-  const [alerts, setAlerts] = useState<AlertData[]>([]);
-  const [eventsByHour, setEventsByHour] = useState<{hour: string, count: number}[]>([]);
-  const [alertsByType, setAlertsByType] = useState<{type: string, count: number}[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  })
+
+  const [agents, setAgents] = useState<AgentData[]>([])
+  const [events, setEvents] = useState<EventData[]>([])
+  const [alerts, setAlerts] = useState<AlertData[]>([])
+  const [eventsByHour, setEventsByHour] = useState<{ hour: string; count: number }[]>([])
+  const [alertsByType, setAlertsByType] = useState<{ type: string; count: number }[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   // Function to fetch all data
   const fetchAllData = async (isInitialLoad = false) => {
     // Only show loading state on initial load, not during refreshes
     if (isInitialLoad) {
-      setLoading(true);
+      setLoading(true)
     }
-    setError(null);
-    
+    setError(null)
+
     try {
       // Fetch agents
-      const agentsResponse = await fetch('/api/agents');
-      if (!agentsResponse.ok) throw new Error('Failed to fetch agents');
-      const agentsData = await agentsResponse.json();
-      
+      const agentsResponse = await fetch('/api/agents')
+      if (!agentsResponse.ok) throw new Error('Failed to fetch agents')
+      const agentsData = await agentsResponse.json()
+
       // Fetch events
-      const eventsResponse = await fetch('/api/events');
-      if (!eventsResponse.ok) throw new Error('Failed to fetch events');
-      const eventsData = await eventsResponse.json();
-      
+      const eventsResponse = await fetch('/api/events')
+      if (!eventsResponse.ok) throw new Error('Failed to fetch events')
+      const eventsData = await eventsResponse.json()
+
       // Fetch alerts
-      const alertsResponse = await fetch('/api/alerts');
-      if (!alertsResponse.ok) throw new Error('Failed to fetch alerts');
-      const alertsData = await alertsResponse.json();
-      
+      const alertsResponse = await fetch('/api/alerts')
+      if (!alertsResponse.ok) throw new Error('Failed to fetch alerts')
+      const alertsData = await alertsResponse.json()
+
       // Fetch metrics
-      const metricsResponse = await fetch('/api/metrics');
-      if (!metricsResponse.ok) throw new Error('Failed to fetch metrics');
-      const metricsData = await metricsResponse.json();
-      
+      const metricsResponse = await fetch('/api/metrics')
+      if (!metricsResponse.ok) throw new Error('Failed to fetch metrics')
+      const metricsData = await metricsResponse.json()
+
       // Fetch events by hour
-      const hourlyResponse = await fetch('/api/events/hourly');
-      if (!hourlyResponse.ok) throw new Error('Failed to fetch hourly events');
-      const hourlyData = await hourlyResponse.json();
-      
+      const hourlyResponse = await fetch('/api/events/hourly')
+      if (!hourlyResponse.ok) throw new Error('Failed to fetch hourly events')
+      const hourlyData = await hourlyResponse.json()
+
       // Fetch alerts by type
-      const typesResponse = await fetch('/api/alerts/types');
-      if (!typesResponse.ok) throw new Error('Failed to fetch alert types');
-      const typesData = await typesResponse.json();
-      
+      const typesResponse = await fetch('/api/alerts/types')
+      if (!typesResponse.ok) throw new Error('Failed to fetch alert types')
+      const typesData = await typesResponse.json()
+
       // Update state only after all requests complete to minimize renders
-      setAgents(agentsData || []);
-      setEvents(eventsData.events || []);
-      setAlerts(alertsData.alerts || []);
-      setEventsByHour(hourlyData || []);
-      setAlertsByType(typesData || []);
-      
+      setAgents(agentsData || [])
+      setEvents(eventsData.events || [])
+      setAlerts(alertsData.alerts || [])
+      setEventsByHour(hourlyData || [])
+      setAlertsByType(typesData || [])
+
       // Update metrics
       setMetrics({
         totalAgents: agentsData.length,
-        activeAgents: agentsData.filter((a: AgentData) => (a.status || '').toLowerCase().includes('active')).length,
+        activeAgents: agentsData.filter((a: AgentData) =>
+          (a.status || '').toLowerCase().includes('active')
+        ).length,
         totalEvents: eventsData.total || 0,
         recentEvents: Math.min(100, eventsData.events?.length || 0),
         securityAlerts: alertsData.total || 0,
         criticalAlerts: alertsData.critical || 0,
         avgResponseTime: metricsData.avgResponseTime || 0,
-        successRate: metricsData.successRate || 98.5
-      });
-      
+        successRate: metricsData.successRate || 98.5,
+      })
+
       if (isInitialLoad) {
-        setLoading(false);
+        setLoading(false)
       }
     } catch (err) {
-      console.error('Error fetching data:', err);
-      setError('Failed to fetch data. Please try again later.');
-      setLoading(false);
-      
+      console.error('Error fetching data:', err)
+      setError('Failed to fetch data. Please try again later.')
+      setLoading(false)
+
       // Use mock data as fallback
-      initializeMockData();
+      initializeMockData()
     }
-  };
-  
+  }
+
   // Initial data load
   useEffect(() => {
-    fetchAllData(true);
+    fetchAllData(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  
+  }, [])
+
   // Mock data initialization (as fallback)
   const initializeMockData = () => {
     // Mock agents
     const mockAgents: AgentData[] = [
-      { id: 1, name: 'Customer Service Bot', status: 'active', type: 'chat', last_active: new Date().toISOString(), event_count: 2435 },
-      { id: 2, name: 'Data Analyzer', status: 'active', type: 'analysis', last_active: new Date().toISOString(), event_count: 1526 },
-      { id: 3, name: 'Security Monitor', status: 'active', type: 'security', last_active: new Date().toISOString(), event_count: 892 },
-      { id: 4, name: 'Legacy Integration', status: 'inactive', type: 'integration', last_active: new Date(Date.now() - 86400000).toISOString(), event_count: 421 },
-      { id: 5, name: 'Inventory Assistant', status: 'error', type: 'assistant', last_active: new Date(Date.now() - 3600000).toISOString(), event_count: 198 }
-    ];
-    
+      {
+        id: 1,
+        name: 'Customer Service Bot',
+        status: 'active',
+        type: 'chat',
+        last_active: new Date().toISOString(),
+        event_count: 2435,
+      },
+      {
+        id: 2,
+        name: 'Data Analyzer',
+        status: 'active',
+        type: 'analysis',
+        last_active: new Date().toISOString(),
+        event_count: 1526,
+      },
+      {
+        id: 3,
+        name: 'Security Monitor',
+        status: 'active',
+        type: 'security',
+        last_active: new Date().toISOString(),
+        event_count: 892,
+      },
+      {
+        id: 4,
+        name: 'Legacy Integration',
+        status: 'inactive',
+        type: 'integration',
+        last_active: new Date(Date.now() - 86400000).toISOString(),
+        event_count: 421,
+      },
+      {
+        id: 5,
+        name: 'Inventory Assistant',
+        status: 'error',
+        type: 'assistant',
+        last_active: new Date(Date.now() - 3600000).toISOString(),
+        event_count: 198,
+      },
+    ]
+
     // Mock events
-    const eventTypes = ['query', 'response', 'tool_call', 'llm_call', 'action', 'error'];
-    const mockEvents: EventData[] = Array(20).fill(null).map((_, i) => {
-      const agentIndex = Math.floor(Math.random() * mockAgents.length);
-      return {
-        id: i + 1,
-        timestamp: new Date(Date.now() - i * 300000).toISOString(),
-        type: eventTypes[Math.floor(Math.random() * eventTypes.length)],
-        agent_id: mockAgents[agentIndex].id,
-        agent_name: mockAgents[agentIndex].name,
-        description: `Event ${i+1} description`,
-        status: Math.random() > 0.2 ? 'success' : (Math.random() > 0.5 ? 'warning' : 'error')
-      };
-    });
-    
+    const eventTypes = ['query', 'response', 'tool_call', 'llm_call', 'action', 'error']
+    const mockEvents: EventData[] = Array(20)
+      .fill(null)
+      .map((_, i) => {
+        const agentIndex = Math.floor(Math.random() * mockAgents.length)
+        return {
+          id: i + 1,
+          timestamp: new Date(Date.now() - i * 300000).toISOString(),
+          type: eventTypes[Math.floor(Math.random() * eventTypes.length)],
+          agent_id: mockAgents[agentIndex].id,
+          agent_name: mockAgents[agentIndex].name,
+          description: `Event ${i + 1} description`,
+          status: Math.random() > 0.2 ? 'success' : Math.random() > 0.5 ? 'warning' : 'error',
+        }
+      })
+
     // Mock alerts
-    const alertTypes = ['prompt_injection', 'sensitive_data_leak', 'unusual_behavior', 'rate_limit', 'authorization_bypass'];
-    const severityLevels: ('LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL')[] = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
-    const mockAlerts: AlertData[] = Array(10).fill(null).map((_, i) => {
-      const agentIndex = Math.floor(Math.random() * mockAgents.length);
-      const severity = severityLevels[Math.floor(Math.random() * severityLevels.length)];
-      return {
-        id: i + 1,
-        timestamp: new Date(Date.now() - i * 600000).toISOString(),
-        severity,
-        type: alertTypes[Math.floor(Math.random() * alertTypes.length)],
-        description: `Alert ${i+1} description`,
-        agent_id: mockAgents[agentIndex].id,
-        agent_name: mockAgents[agentIndex].name,
-        action_taken: severity === 'CRITICAL' || severity === 'HIGH' ? 'blocked' : 'logged'
-      };
-    });
-    
+    const alertTypes = [
+      'prompt_injection',
+      'sensitive_data_leak',
+      'unusual_behavior',
+      'rate_limit',
+      'authorization_bypass',
+    ]
+    const severityLevels: ('LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL')[] = [
+      'LOW',
+      'MEDIUM',
+      'HIGH',
+      'CRITICAL',
+    ]
+    const mockAlerts: AlertData[] = Array(10)
+      .fill(null)
+      .map((_, i) => {
+        const agentIndex = Math.floor(Math.random() * mockAgents.length)
+        const severity = severityLevels[Math.floor(Math.random() * severityLevels.length)]
+        return {
+          id: i + 1,
+          timestamp: new Date(Date.now() - i * 600000).toISOString(),
+          severity,
+          type: alertTypes[Math.floor(Math.random() * alertTypes.length)],
+          description: `Alert ${i + 1} description`,
+          agent_id: mockAgents[agentIndex].id,
+          agent_name: mockAgents[agentIndex].name,
+          action_taken: severity === 'CRITICAL' || severity === 'HIGH' ? 'blocked' : 'logged',
+        }
+      })
+
     // Mock hourly data
-    const mockHourlyData = [];
+    const mockHourlyData = []
     for (let i = 0; i < 24; i++) {
-      const hour = `${i < 10 ? '0' + i : i}:00`;
-      const count = Math.floor(Math.random() * 10);
-      mockHourlyData.push({ hour, count });
+      const hour = `${i < 10 ? '0' + i : i}:00`
+      const count = Math.floor(Math.random() * 10)
+      mockHourlyData.push({ hour, count })
     }
-    
+
     // Mock alert types
     const mockAlertTypes = alertTypes.map(type => ({
       type,
-      count: Math.floor(Math.random() * 20)
-    }));
-    
+      count: Math.floor(Math.random() * 20),
+    }))
+
     // Initialize state with mock values
-    setAgents(mockAgents);
-    setEvents(mockEvents);
-    setAlerts(mockAlerts);
-    setEventsByHour(mockHourlyData);
-    setAlertsByType(mockAlertTypes);
-    
+    setAgents(mockAgents)
+    setEvents(mockEvents)
+    setAlerts(mockAlerts)
+    setEventsByHour(mockHourlyData)
+    setAlertsByType(mockAlertTypes)
+
     setMetrics({
       totalAgents: mockAgents.length,
       activeAgents: mockAgents.filter(a => a.status === 'active').length,
@@ -229,73 +296,89 @@ export default function OverviewDashboard() {
       securityAlerts: 48,
       criticalAlerts: mockAlerts.filter(a => a.severity === 'CRITICAL').length,
       avgResponseTime: 245,
-      successRate: 98.5
-    });
-  };
+      successRate: 98.5,
+    })
+  }
 
   // Status badge component
   const StatusBadge = ({ status }: { status: string }) => {
-    let color;
-    
+    let color
+
     // Normalize status to lowercase for more reliable matching
-    const normalizedStatus = (status || '').toLowerCase();
-    
-    if (normalizedStatus.includes('active') || normalizedStatus === 'running' || normalizedStatus === 'online') {
-      color = 'green';
-    } else if (normalizedStatus.includes('inactive') || normalizedStatus === 'offline' || normalizedStatus === 'stopped') {
-      color = 'gray';
+    const normalizedStatus = (status || '').toLowerCase()
+
+    if (
+      normalizedStatus.includes('active') ||
+      normalizedStatus === 'running' ||
+      normalizedStatus === 'online'
+    ) {
+      color = 'green'
+    } else if (
+      normalizedStatus.includes('inactive') ||
+      normalizedStatus === 'offline' ||
+      normalizedStatus === 'stopped'
+    ) {
+      color = 'gray'
     } else if (normalizedStatus.includes('error') || normalizedStatus === 'failed') {
-      color = 'red';
+      color = 'red'
     } else if (normalizedStatus.includes('warning')) {
-      color = 'yellow';
+      color = 'yellow'
     } else if (normalizedStatus.includes('success')) {
-      color = 'green';
+      color = 'green'
     } else {
-      color = 'blue';
+      color = 'blue'
     }
-    
-    return <Badge color={color} size="xs">{status || 'unknown'}</Badge>;
-  };
-  
+
+    return (
+      <Badge color={color} size="xs">
+        {status || 'unknown'}
+      </Badge>
+    )
+  }
+
   // Alert severity badge component
   const SeverityBadge = ({ severity }: { severity: string }) => {
-    let color;
-    
+    let color
+
     switch (severity) {
       case 'CRITICAL':
-        color = 'red';
-        break;
+        color = 'red'
+        break
       case 'HIGH':
-        color = 'orange';
-        break;
+        color = 'orange'
+        break
       case 'MEDIUM':
-        color = 'yellow';
-        break;
+        color = 'yellow'
+        break
       case 'LOW':
-        color = 'green';
-        break;
+        color = 'green'
+        break
       default:
-        color = 'blue';
+        color = 'blue'
     }
-    
-    return <Badge color={color} size="xs">{severity}</Badge>;
-  };
+
+    return (
+      <Badge color={color} size="xs">
+        {severity}
+      </Badge>
+    )
+  }
 
   // Helper function to format dates safely
   const formatDate = (dateString: string | null) => {
-    if (!dateString) return 'N/A';
-    
+    if (!dateString) return 'N/A'
+
     try {
-      const date = new Date(dateString);
+      const date = new Date(dateString)
       // Check if date is valid
       if (isNaN(date.getTime())) {
-        return 'Invalid Date';
+        return 'Invalid Date'
       }
-      return date.toLocaleString();
+      return date.toLocaleString()
     } catch (error) {
-      return 'Invalid Date';
+      return 'Invalid Date'
     }
-  };
+  }
 
   // Loading state
   if (loading) {
@@ -303,9 +386,9 @@ export default function OverviewDashboard() {
       <div className="flex items-center justify-center h-96">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
       </div>
-    );
+    )
   }
-  
+
   // Error state
   if (error) {
     return (
@@ -313,14 +396,14 @@ export default function OverviewDashboard() {
         <ExclamationTriangleIcon className="h-16 w-16 text-amber-500 mb-4" />
         <h3 className="text-xl font-semibold text-gray-800 mb-2">Error Loading Dashboard</h3>
         <p className="text-gray-600 mb-4">{error}</p>
-        <button 
+        <button
           onClick={() => fetchAllData(true)}
           className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center"
         >
           <ArrowPathIcon className="h-4 w-4 mr-2" /> Retry
         </button>
       </div>
-    );
+    )
   }
 
   return (
@@ -333,7 +416,7 @@ export default function OverviewDashboard() {
         </div>
         <ConnectionStatus />
       </div>
-      
+
       {/* Key Metrics */}
       <Grid numItemsMd={2} numItemsLg={4} className="gap-6 mt-6">
         <Card decoration="top" decorationColor="blue">
@@ -349,7 +432,7 @@ export default function OverviewDashboard() {
             </div>
           </Flex>
         </Card>
-        
+
         <Card decoration="top" decorationColor="teal">
           <Flex justifyContent="start" className="space-x-4">
             <BoltIcon className="h-8 w-8 text-teal-500" />
@@ -363,7 +446,7 @@ export default function OverviewDashboard() {
             </div>
           </Flex>
         </Card>
-        
+
         <Card decoration="top" decorationColor="amber">
           <Flex justifyContent="start" className="space-x-4">
             <ExclamationTriangleIcon className="h-8 w-8 text-amber-500" />
@@ -377,7 +460,7 @@ export default function OverviewDashboard() {
             </div>
           </Flex>
         </Card>
-        
+
         <Card decoration="top" decorationColor="indigo">
           <Flex justifyContent="start" className="space-x-4">
             <ClockIcon className="h-8 w-8 text-indigo-500" />
@@ -391,7 +474,7 @@ export default function OverviewDashboard() {
           </Flex>
         </Card>
       </Grid>
-      
+
       {/* Main Dashboard View with Tabs */}
       <div className="mt-6">
         <TabGroup>
@@ -400,7 +483,7 @@ export default function OverviewDashboard() {
             <Tab icon={ChatBubbleLeftRightIcon}>Recent Events</Tab>
             <Tab icon={ShieldExclamationIcon}>Security Alerts</Tab>
           </TabList>
-          
+
           <TabPanels>
             {/* Agents Panel */}
             <TabPanel>
@@ -408,11 +491,14 @@ export default function OverviewDashboard() {
                 <Card>
                   <div className="flex justify-between items-center mb-4">
                     <Title>Agent Status</Title>
-                    <Link href="/agents" className="text-blue-500 text-sm flex items-center hover:underline">
+                    <Link
+                      href="/agents"
+                      className="text-blue-500 text-sm flex items-center hover:underline"
+                    >
                       View All <ArrowPathIcon className="h-4 w-4 ml-1" />
                     </Link>
                   </div>
-                  
+
                   <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                       <thead>
@@ -421,14 +507,19 @@ export default function OverviewDashboard() {
                           <th className="py-3 px-2 text-sm font-medium text-gray-500">Type</th>
                           <th className="py-3 px-2 text-sm font-medium text-gray-500">Status</th>
                           <th className="py-3 px-2 text-sm font-medium text-gray-500">Events</th>
-                          <th className="py-3 px-2 text-sm font-medium text-gray-500">Last Active</th>
+                          <th className="py-3 px-2 text-sm font-medium text-gray-500">
+                            Last Active
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
-                        {agents.map((agent) => (
+                        {agents.map(agent => (
                           <tr key={agent.id} className="cursor-pointer hover:bg-gray-50">
                             <td className="py-3 px-2">
-                              <Link href={`/agents/${agent.id}`} className="text-blue-600 hover:text-blue-800">
+                              <Link
+                                href={`/agents/${agent.id}`}
+                                className="text-blue-600 hover:text-blue-800"
+                              >
                                 {agent.name}
                               </Link>
                             </td>
@@ -446,25 +537,28 @@ export default function OverviewDashboard() {
                     </table>
                   </div>
                   <div className="mt-2 text-right">
-                    <Link href="/agents" className="text-blue-600 hover:text-blue-800 text-sm flex items-center justify-end">
+                    <Link
+                      href="/agents"
+                      className="text-blue-600 hover:text-blue-800 text-sm flex items-center justify-end"
+                    >
                       View all agents
                       <ChevronRightIcon className="h-4 w-4 ml-1" />
                     </Link>
                   </div>
                 </Card>
-                
+
                 <Card>
                   <div className="mb-4">
                     <Title>Events by Hour</Title>
                     <Text className="text-gray-500">Last 24 hours activity</Text>
                   </div>
-                  
+
                   <AreaChart
                     className="h-72 mt-4"
                     data={eventsByHour}
                     index="hour"
-                    categories={["count"]}
-                    colors={["blue"]}
+                    categories={['count']}
+                    colors={['blue']}
                     valueFormatter={(value: number) => `${value} events`}
                     showLegend={false}
                     showAnimation={true}
@@ -472,18 +566,21 @@ export default function OverviewDashboard() {
                 </Card>
               </Grid>
             </TabPanel>
-            
+
             {/* Events Panel */}
             <TabPanel>
               <Grid numItemsMd={1} numItemsLg={1} className="gap-6">
                 <Card>
                   <div className="flex justify-between items-center mb-4">
                     <Title>Recent Events</Title>
-                    <Link href="/events" className="text-blue-500 text-sm flex items-center hover:underline">
+                    <Link
+                      href="/events"
+                      className="text-blue-500 text-sm flex items-center hover:underline"
+                    >
                       View All <ArrowPathIcon className="h-4 w-4 ml-1" />
                     </Link>
                   </div>
-                  
+
                   <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                       <thead>
@@ -491,7 +588,9 @@ export default function OverviewDashboard() {
                           <th className="py-3 px-2 text-sm font-medium text-gray-500">Time</th>
                           <th className="py-3 px-2 text-sm font-medium text-gray-500">Agent</th>
                           <th className="py-3 px-2 text-sm font-medium text-gray-500">Type</th>
-                          <th className="py-3 px-2 text-sm font-medium text-gray-500">Description</th>
+                          <th className="py-3 px-2 text-sm font-medium text-gray-500">
+                            Description
+                          </th>
                           <th className="py-3 px-2 text-sm font-medium text-gray-500">Status</th>
                         </tr>
                       </thead>
@@ -517,18 +616,21 @@ export default function OverviewDashboard() {
                 </Card>
               </Grid>
             </TabPanel>
-            
+
             {/* Security Alerts Panel */}
             <TabPanel>
               <Grid numItemsMd={1} numItemsLg={2} className="gap-6">
                 <Card>
                   <div className="flex justify-between items-center mb-4">
                     <Title>Security Alerts</Title>
-                    <Link href="/alerts" className="text-blue-500 text-sm flex items-center hover:underline">
+                    <Link
+                      href="/alerts"
+                      className="text-blue-500 text-sm flex items-center hover:underline"
+                    >
                       View All <ArrowPathIcon className="h-4 w-4 ml-1" />
                     </Link>
                   </div>
-                  
+
                   <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                       <thead>
@@ -566,29 +668,32 @@ export default function OverviewDashboard() {
                     </table>
                   </div>
                 </Card>
-                
+
                 <Card>
                   <div className="mb-4">
                     <Title>Alert Distribution</Title>
                     <Text className="text-gray-500">By alert type</Text>
                   </div>
-                  
-                  <DonutChart
-                    className="h-72 mt-4"
-                    data={alertsByType}
-                    category="count"
-                    index="type"
-                    colors={["blue", "amber", "red", "green", "indigo"]}
-                    valueFormatter={(value: number) => `${value} alerts`}
-                    showAnimation={true}
-                  />
+
+                  {Array.isArray(alertsByType) ? (
+                    <SimpleDonutChart
+                      className="h-72 mt-4"
+                      data={alertsByType.map(item => ({ name: item.type, count: item.count }))}
+                      colors={['blue', 'amber', 'red', 'green', 'indigo']}
+                      valueFormatter={(value: number) => `${value} alerts`}
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center h-72">
+                      <Text>No alert data available</Text>
+                    </div>
+                  )}
                 </Card>
               </Grid>
             </TabPanel>
           </TabPanels>
         </TabGroup>
       </div>
-      
+
       {/* Navigation Cards to Other Sections */}
       <Grid numItemsMd={2} numItemsLg={3} className="gap-6 mt-6">
         <Card className="hover:shadow-md transition-shadow">
@@ -604,7 +709,7 @@ export default function OverviewDashboard() {
             </div>
           </Link>
         </Card>
-        
+
         <Card className="hover:shadow-md transition-shadow">
           <Link href="/events" className="block p-4">
             <div className="flex items-center space-x-4">
@@ -618,7 +723,7 @@ export default function OverviewDashboard() {
             </div>
           </Link>
         </Card>
-        
+
         <Card className="hover:shadow-md transition-shadow">
           <Link href="/alerts" className="block p-4">
             <div className="flex items-center space-x-4">
@@ -634,5 +739,5 @@ export default function OverviewDashboard() {
         </Card>
       </Grid>
     </div>
-  );
-} 
+  )
+}
