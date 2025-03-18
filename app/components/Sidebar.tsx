@@ -9,11 +9,13 @@ import {
   ExclamationTriangleIcon,
   ChartBarIcon,
   Cog6ToothIcon,
+  UserGroupIcon,
 } from '@heroicons/react/24/outline'
 import { useEffect, useState } from 'react'
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: HomeIcon },
+  { name: 'Agents', href: '/agents', icon: UserGroupIcon },
   { name: 'Events', href: '/events', icon: ClockIcon },
   { name: 'Alerts', href: '/alerts', icon: ExclamationTriangleIcon },
   { name: 'Analytics', href: '/analytics', icon: ChartBarIcon },

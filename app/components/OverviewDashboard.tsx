@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card, Grid, Metric, Text, Title, BarChart, AreaChart, DonutChart, Flex, Badge, TabGroup, TabList, Tab, TabPanels, TabPanel } from '@tremor/react';
+import { Card, Grid, Metric, Text, Title, AreaChart, DonutChart, Flex, Badge, TabGroup, TabList, Tab, TabPanels, TabPanel } from '@tremor/react';
 import { 
   BoltIcon, 
   ClockIcon, 
@@ -9,9 +9,9 @@ import {
   ExclamationTriangleIcon,
   CpuChipIcon,
   ChatBubbleLeftRightIcon,
-  LinkIcon,
   ArrowPathIcon,
-  ArrowTrendingUpIcon
+  ArrowTrendingUpIcon,
+  ChevronRightIcon
 } from '@heroicons/react/24/outline';
 import { ConnectionStatus } from './ConnectionStatus';
 import Link from 'next/link';
@@ -150,17 +150,10 @@ export default function OverviewDashboard() {
     }
   };
   
-  // Real-time updates
+  // Initial data load
   useEffect(() => {
-    // Initial data fetch - show loading state
     fetchAllData(true);
-    
-    // Set up polling for real-time updates - don't show loading state
-    const interval = setInterval(() => {
-      fetchAllData(false);
-    }, 10000); // Poll every 10 seconds
-    
-    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   
   // Mock data initialization (as fallback)
@@ -432,10 +425,12 @@ export default function OverviewDashboard() {
                         </tr>
                       </thead>
                       <tbody>
-                        {agents.map(agent => (
-                          <tr key={agent.id} className="border-b border-gray-100 hover:bg-gray-50">
+                        {agents.map((agent) => (
+                          <tr key={agent.id} className="cursor-pointer hover:bg-gray-50">
                             <td className="py-3 px-2">
-                              <div className="font-medium text-gray-900">{agent.name}</div>
+                              <Link href={`/agents/${agent.id}`} className="text-blue-600 hover:text-blue-800">
+                                {agent.name}
+                              </Link>
                             </td>
                             <td className="py-3 px-2 text-gray-500">{agent.type}</td>
                             <td className="py-3 px-2">
@@ -449,6 +444,12 @@ export default function OverviewDashboard() {
                         ))}
                       </tbody>
                     </table>
+                  </div>
+                  <div className="mt-2 text-right">
+                    <Link href="/agents" className="text-blue-600 hover:text-blue-800 text-sm flex items-center justify-end">
+                      View all agents
+                      <ChevronRightIcon className="h-4 w-4 ml-1" />
+                    </Link>
                   </div>
                 </Card>
                 

@@ -10,24 +10,46 @@ export async function GET() {
     let agents = [];
     
     try {
-      // Try to query the database
-      const dbAgents = dbUtils.queryMany(`
-        SELECT * FROM agents
-        ORDER BY id DESC
-      `);
+      // Check table structure first
+      const tableInfo = dbUtils.queryMany(`PRAGMA table_info(agents)`);
       
-      // Process and transform the agent data to ensure all fields exist
-      agents = dbAgents.map(agent => {
-        // Ensure agent has all the properties we need
-        return {
-          id: agent.id,
-          name: agent.name || 'Unnamed Agent',
-          status: agent.status || 'inactive',
-          type: agent.type || agent.category || '-',
-          last_active: agent.last_active || agent.created_at || null,
-          event_count: agent.event_count || 0
-        };
-      });
+      // If agents table exists
+      if (tableInfo.length > 0) {
+        const columnNames = tableInfo.map(col => col.name);
+        
+        // Build a dynamic query based on existing columns
+        let query = 'SELECT id';
+        
+        // Add columns that exist in the schema
+        if (columnNames.includes('name')) query += ', name';
+        if (columnNames.includes('agent_id')) query += ', agent_id';
+        if (columnNames.includes('status')) query += ', status';
+        if (columnNames.includes('type')) query += ', type';
+        if (columnNames.includes('category')) query += ', category';
+        if (columnNames.includes('last_active')) query += ', last_active';
+        if (columnNames.includes('created_at')) query += ', created_at';
+        if (columnNames.includes('event_count')) query += ', event_count';
+        
+        query += ' FROM agents ORDER BY id DESC';
+        
+        // Try to query the database with columns that exist
+        const dbAgents = dbUtils.queryMany(query);
+        
+        // Process and transform the agent data to ensure all fields exist
+        agents = dbAgents.map(agent => {
+          // Ensure agent has all the properties we need
+          return {
+            id: agent.id,
+            name: agent.name || 'Unnamed Agent',
+            status: agent.status || 'inactive',
+            type: agent.type || agent.category || '-',
+            last_active: agent.last_active || agent.created_at || null,
+            event_count: agent.event_count || 0
+          };
+        });
+      } else {
+        throw new Error('Agents table does not exist');
+      }
     } catch (dbError) {
       console.error('Database query failed, using fallback data:', dbError);
       // Provide fallback data for MVP
