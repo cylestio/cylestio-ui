@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { DbConnection } from '../../../../src/lib/db/connection';
 import { DbUtils } from '../../../../src/lib/db/utils';
+import { config } from '../../../lib/config';
 
 export async function GET() {
   try {
@@ -8,7 +9,7 @@ export async function GET() {
     const dbUtils = new DbUtils(dbConnection);
     
     let typeData = [];
-    let useFallbackData = false;
+    let error = null;
     
     try {
       // Check if the security_alerts table exists first
@@ -18,61 +19,77 @@ export async function GET() {
       `);
       
       if (!tableCheck) {
-        // Use fallback data without logging error
-        useFallbackData = true;
-      } else {
-        // Check if type column exists
-        const columnsCheck = dbUtils.queryMany(`
-          PRAGMA table_info(security_alerts)
-        `);
-        
-        const hasTypeColumn = columnsCheck.some((col: any) => col.name === 'type');
-        
-        if (!hasTypeColumn) {
-          // Use fallback data without logging error
-          useFallbackData = true;
-        } else {
-          // Try to query the database
-          typeData = dbUtils.queryMany(`
-            SELECT 
-              type,
-              COUNT(*) as count
-            FROM security_alerts
-            GROUP BY type
-            ORDER BY count DESC
-          `);
-          
-          // If we got no data, use fallback data
-          if (typeData.length === 0) {
-            useFallbackData = true;
-          }
-        }
+        throw new Error('Security alerts table does not exist in the database');
       }
+      
+      // Check if alert_type column exists
+      const columnsCheck = dbUtils.queryMany(`
+        PRAGMA table_info(security_alerts)
+      `);
+      
+      const hasAlertTypeColumn = columnsCheck.some((col: any) => col.name === 'alert_type');
+      
+      if (!hasAlertTypeColumn) {
+        throw new Error('Security alerts table is missing required alert_type column');
+      }
+      
+      // Try to query the database
+      typeData = dbUtils.queryMany(`
+        SELECT 
+          alert_type as type,
+          COUNT(*) as count
+        FROM security_alerts
+        GROUP BY alert_type
+        ORDER BY count DESC
+      `);
+      
+      // If we got no data
+      if (typeData.length === 0) {
+        error = 'No security alerts found in the database';
+      }
+      
     } catch (dbError) {
-      console.warn('Using fallback data for alert types:', dbError.message);
-      useFallbackData = true;
+      console.error('Database error while fetching alert types:', dbError);
+      
+      // Only use mock data if explicitly configured to do so
+      if (config.useMockData) {
+        console.log('Using mock data as fallback due to configuration setting');
+        // Use alert types matching the database schema enum values
+        const alertTypes = [
+          'PROMPT_INJECTION',
+          'SENSITIVE_DATA_LEAK',
+          'UNUSUAL_BEHAVIOR',
+          'RATE_LIMIT_EXCEEDED',
+          'AUTHORIZATION_BYPASS',
+          'JAILBREAK_ATTEMPT',
+          'PII_EXPOSURE',
+          'SECURITY_ALERT'
+        ];
+        
+        typeData = alertTypes.map(type => ({
+          type,
+          count: Math.floor(Math.random() * 20) + 1
+        }));
+      } else {
+        // Otherwise, return an error
+        return NextResponse.json({ 
+          error: `Database error: ${dbError.message}`,
+          types: [] 
+        }, { status: 500 });
+      }
     }
     
-    // Generate fallback data if needed
-    if (useFallbackData) {
-      const alertTypes = ['prompt_injection', 'sensitive_data_leak', 'unusual_behavior', 'rate_limit', 'authorization_bypass'];
-      typeData = alertTypes.map(type => ({
-        type,
-        count: Math.floor(Math.random() * 20) + 1
-      }));
-    }
-    
-    return NextResponse.json(typeData);
+    return NextResponse.json({
+      types: typeData,
+      error
+    });
   } catch (error) {
     console.error('Error fetching alert types:', error);
     
-    // Return fallback data in case of error
-    const alertTypes = ['prompt_injection', 'sensitive_data_leak', 'unusual_behavior', 'rate_limit', 'authorization_bypass'];
-    const fallbackData = alertTypes.map(type => ({
-      type,
-      count: Math.floor(Math.random() * 20) + 1
-    }));
-    
-    return NextResponse.json(fallbackData);
+    // Return error instead of fallback data
+    return NextResponse.json({ 
+      error: `Failed to fetch alert types: ${error.message}`,
+      types: [] 
+    }, { status: 500 });
   }
 } 
