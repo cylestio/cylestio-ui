@@ -1,6 +1,5 @@
 import { Suspense } from 'react';
-import DashboardMetrics from './components/DashboardMetrics';
-import DashboardCharts from './components/DashboardCharts';
+import OverviewDashboard from './components/OverviewDashboard';
 import LoadingSpinner from './components/LoadingSpinner';
 
 export default function Home() {
@@ -14,11 +13,7 @@ export default function Home() {
       </div>
       
       <Suspense fallback={<LoadingSpinner />}>
-        <DashboardMetrics />
-      </Suspense>
-      
-      <Suspense fallback={<LoadingSpinner />}>
-        <DashboardCharts />
+        <OverviewDashboard />
       </Suspense>
     </div>
   );

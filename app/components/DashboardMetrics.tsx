@@ -8,6 +8,9 @@ import {
   ShieldExclamationIcon,
   BoltIcon
 } from '@heroicons/react/24/outline';
+import { useDataUpdates } from '../lib/hooks/useDataUpdates';
+import { DataUpdateType } from '../../src/lib/db/data-update-service';
+import { ConnectionStatus } from './ConnectionStatus';
 
 // Define metric data type
 export interface MetricsData {
@@ -59,7 +62,63 @@ export default function DashboardMetrics({
     suspiciousRequests: 0
   });
   const [loading, setLoading] = useState(true);
-  const [lastUpdated, setLastUpdated] = useState<string>('');
+
+  // Subscribe to real-time updates
+  const { lastUpdate, isConnected } = useDataUpdates({
+    updateTypes: [
+      DataUpdateType.EVENTS,
+      DataUpdateType.SECURITY_ALERTS,
+      DataUpdateType.PERFORMANCE_METRICS
+    ],
+    onUpdate: (update) => {
+      // Handle different update types
+      if (update.type === DataUpdateType.EVENTS || update.type === DataUpdateType.ALL) {
+        // Update total requests count if new events arrived
+        if (update.data && Array.isArray(update.data) && update.data.length > 0) {
+          setMetrics(prev => ({
+            ...prev,
+            totalRequests: prev.totalRequests + update.data.length
+          }));
+        }
+      }
+
+      if (update.type === DataUpdateType.SECURITY_ALERTS || update.type === DataUpdateType.ALL) {
+        // Update security metrics if new alerts arrived
+        if (update.data && Array.isArray(update.data) && update.data.length > 0) {
+          const blockedCount = update.data.filter(alert => alert.action_taken === 'blocked').length;
+          const suspiciousCount = update.data.filter(alert => 
+            alert.action_taken !== 'blocked' && alert.severity !== 'LOW'
+          ).length;
+          
+          setMetrics(prev => ({
+            ...prev,
+            blockedRequests: prev.blockedRequests + blockedCount,
+            suspiciousRequests: prev.suspiciousRequests + suspiciousCount
+          }));
+        }
+      }
+
+      if (update.type === DataUpdateType.PERFORMANCE_METRICS || update.type === DataUpdateType.ALL) {
+        // Update performance metrics
+        if (update.data && Array.isArray(update.data) && update.data.length > 0) {
+          const responseTimeMetrics = update.data.filter(
+            metric => metric.metric_type === 'response_time'
+          );
+          
+          if (responseTimeMetrics.length > 0) {
+            const avgTime = responseTimeMetrics.reduce(
+              (sum, metric) => sum + metric.value, 0
+            ) / responseTimeMetrics.length;
+            
+            setMetrics(prev => ({
+              ...prev,
+              avgResponseTime: Math.round(avgTime)
+            }));
+          }
+        }
+      }
+    }
+  });
 
   useEffect(() => {
     // Only fetch from API if no data is provided as props
@@ -72,15 +131,10 @@ export default function DashboardMetrics({
       setLoading(true);
       const data = await fetchMetrics();
       setMetrics(data);
-      setLastUpdated(new Date().toLocaleTimeString());
       setLoading(false);
     };
 
     getMetrics();
-    
-    // Set up polling every 30 seconds
-    const interval = setInterval(getMetrics, 30000);
-    return () => clearInterval(interval);
   }, [data]);
 
   // Use external loading state if provided
@@ -147,11 +201,7 @@ export default function DashboardMetrics({
     <div className={`space-y-6 ${className}`}>
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-gray-800">Dashboard</h1>
-        {lastUpdated && (
-          <div className="text-sm text-gray-500">
-            Last updated: {lastUpdated}
-          </div>
-        )}
+        <ConnectionStatus />
       </div>
 
       <Grid numItemsMd={2} numItemsLg={4} className="gap-6">
