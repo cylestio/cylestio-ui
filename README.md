@@ -33,12 +33,35 @@ cd cylestio-ui
 npm install
 ```
 
-3. Set up environment variables
+3. Set up environment files
+
+The application requires environment files for configuration. We provide sample files that you'll need to copy:
+
 ```bash
-cp .env.example .env.local
+# For standard development (connecting to a real API)
+cp .env.example .env.development
 ```
 
-4. Start the development server with mock API (recommended for most development)
+```bash
+# For mock API development (recommended for most users)
+cp .env.example .env.mock
+```
+
+Then edit the appropriate file with your settings. The most important settings to review are:
+
+**For `.env.development`:**
+- `API_BASE_URL` - URL of your API server
+- `API_TIMEOUT` - Timeout for API requests in milliseconds
+- `AUTH_SECRET` - Secret for authentication (change in production!)
+
+**For `.env.mock`:**
+- `NEXT_PUBLIC_USE_MOCK_API` - Set to `true` to use the mock API
+- `MOCK_API_PORT` - Port for the mock API server
+- `NEXT_PUBLIC_MOCK_API_URL` - URL for the mock API server
+
+4. Start the development server
+
+For mock mode (recommended for most development):
 ```bash
 npm run dev:mock
 ```
@@ -79,9 +102,6 @@ cylestio-ui/
 │   │   └── api/          # API client
 │   └── pages/            # Pages and routes
 ├── public/               # Static assets
-├── scripts/              # Helper scripts
-│   ├── mock-api-server.js   # Mock API server for development
-│   └── restart.sh           # Utility to restart the development environment
 └── tests/                # Test files
 ```
 

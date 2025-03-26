@@ -36,10 +36,16 @@ yarn-error.log*
 
 # local env files
 .env*.local
+.env.development
+.env.mock
 .env.development.local
 .env.test.local
 .env.production.local
 .env.local
+
+# scripts - consider removing or documenting
+/scripts/*
+!/scripts/README.md
 
 # secrets and keys
 *.key
@@ -51,7 +57,7 @@ yarn-error.log*
 log/
 logs/
 
-# temp files
+# temp files and directories
 *.tmp
 *.bak
 *~
@@ -59,6 +65,16 @@ logs/
 .cache/
 temp/
 tmp/
+temp_migration/
+db_references/
+
+# Build info
+tsconfig.tsbuildinfo
+*.tsbuildinfo
+
+# CI/CD and code analysis
+.dependency-check-suppression.xml
+sonar-project.properties
 
 # OS generated files
 .DS_Store
