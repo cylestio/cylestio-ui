@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import Sidebar from '../../../app/components/Sidebar';
-import { HomeIcon, ChartBarIcon } from '@heroicons/react/24/outline';
+import { FaHome, FaChartBar } from 'react-icons/fa';
 
 // Mock the next/navigation hooks
 jest.mock('next/navigation', () => ({
@@ -32,8 +32,8 @@ describe('Sidebar Component', () => {
 
   it('renders custom navigation items', () => {
     const customNavigation: SidebarProps['navigation'] = [
-      { name: 'Home', href: '/', icon: HomeIcon },
-      { name: 'Custom', href: '/custom', icon: ChartBarIcon },
+      { name: 'Home', href: '/', icon: FaHome },
+      { name: 'Custom', href: '/custom', icon: FaChartBar },
     ];
 
     render(<Sidebar navigation={customNavigation} />);

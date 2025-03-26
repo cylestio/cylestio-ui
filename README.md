@@ -1,106 +1,119 @@
-# @cylestio/ui-dashboard
+# Cylestio UI Dashboard
 
-[![CI/CD](https://github.com/cylestio/cylestio-ui/actions/workflows/main.yml/badge.svg)](https://github.com/cylestio/cylestio-ui/actions)
-[![npm version](https://badge.fury.io/js/%40cylestio%2Fui-dashboard.svg)](https://www.npmjs.com/package/@cylestio/ui-dashboard)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+A modern, responsive monitoring dashboard for AI agents. Built with Next.js and Tremor.
 
-Enterprise-grade dashboard components for monitoring AI agent activities and security metrics, designed to integrate with [Cylestio Monitor](https://github.com/cylestio/cylestio-monitor).
+![Cylestio Dashboard Screenshot](public/screenshots/dashboard.png)
 
-![Dashboard Preview](public/images/dashboard-preview.png)
+## Features
 
-## Installation
+- 📊 **Real-time monitoring** of AI agents, events, and security alerts
+- 🔍 **Detailed analytics** for performance and usage metrics
+- 🚨 **Security alerting** for potential issues with AI agents
+- 📱 **Responsive design** that works across devices
+- 🌓 **Dark mode support** for reduced eye strain
+- 🔌 **Mock API** for development without a backend
 
+## Getting Started
+
+### Prerequisites
+
+- Node.js 18.x or higher
+- npm or yarn
+
+### Installation
+
+1. Clone the repository
 ```bash
-npm install @cylestio/ui-dashboard
+git clone https://github.com/cylestio/cylestio-ui.git
+cd cylestio-ui
 ```
 
-## Quick Start
-
-```jsx
-import { Sidebar, DashboardMetrics, DashboardCharts } from '@cylestio/ui-dashboard'
-
-function Dashboard() {
-  return (
-    <div className="flex h-screen">
-      <Sidebar />
-      <main className="flex-1 p-6">
-        <DashboardMetrics data={yourMetricsData} />
-        <DashboardCharts data={yourChartsData} />
-      </main>
-    </div>
-  )
-}
+2. Install dependencies
+```bash
+npm install
 ```
 
-## Key Features
-
-- 📊 **Pre-built Components**: Ready-to-use UI components for AI agent monitoring
-- 🔄 **Cylestio Integration**: Seamless integration with [Cylestio Monitor](https://github.com/cylestio/cylestio-monitor)
-- 🎨 **Customizable**: Fully customizable with Tailwind CSS
-- 📱 **Responsive**: Mobile-friendly UI that works on all devices
-- 🔒 **Secure**: Enterprise-grade security built-in
-- 🌗 **Dark Mode**: Support for light and dark themes
-
-## Documentation
-
-For complete documentation, visit:
-
-- [Installation Guide](docs/installation.md)
-- [API Reference](docs/api-reference.md)
-- [Customization Guide](docs/customization.md)
-
-## Integration with Cylestio Monitor
-
-```jsx
-import { useEffect, useState } from 'react'
-import { CylestioMonitor } from '@cylestio/monitor'
-import { DashboardMetrics, DashboardCharts } from '@cylestio/ui-dashboard'
-
-function MonitoringDashboard() {
-  const [data, setData] = useState(null)
-
-  useEffect(() => {
-    const monitor = new CylestioMonitor({
-      apiKey: process.env.NEXT_PUBLIC_CYLESTIO_API_KEY,
-    })
-
-    const fetchData = async () => {
-      const result = await monitor.getAgentMetrics()
-      setData(result)
-    }
-
-    fetchData()
-    const interval = setInterval(fetchData, 60000)
-    return () => clearInterval(interval)
-  }, [])
-
-  if (!data) return <div>Loading...</div>
-
-  return (
-    <div className="p-4">
-      <DashboardMetrics data={data.metrics} />
-      <DashboardCharts data={data.charts} />
-    </div>
-  )
-}
+3. Set up environment variables
+```bash
+cp .env.example .env.local
 ```
 
-## Requirements
+4. Start the development server with mock API (recommended for most development)
+```bash
+npm run dev:mock
+```
 
-- React 17+
-- Next.js 13+ (with App Router)
-- Node.js 16+
+This will start both the Next.js application and a mock API server that provides sample data.
+
+### Development Modes
+
+The application can run in several modes:
+
+- **Mock Mode**: Uses a mock API server for development without a real backend
+  ```bash
+  npm run dev:mock
+  ```
+
+- **Standard Mode**: Connects to a real API server (requires backend setup)
+  ```bash
+  npm run dev
+  ```
+
+- **Production Mode**: Optimized build for production deployment
+  ```bash
+  npm run build
+  npm start
+  ```
+
+## Project Structure
+
+```
+cylestio-ui/
+├── app/                  # Next.js application
+│   ├── api/              # API routes
+│   ├── components/       # React components
+│   │   ├── charts/       # Data visualization components
+│   │   └── ui/           # UI elements
+│   ├── hooks/            # React hooks
+│   ├── lib/              # Utilities and helpers
+│   │   └── api/          # API client
+│   └── pages/            # Pages and routes
+├── public/               # Static assets
+├── scripts/              # Helper scripts
+│   ├── mock-api-server.js   # Mock API server for development
+│   └── restart.sh           # Utility to restart the development environment
+└── tests/                # Test files
+```
+
+## API Integration
+
+The dashboard can connect to any API that follows the Cylestio Monitor API specification. For development, a mock API server is included that simulates the real API.
+
+### Mock API
+
+The mock API server runs on port 8080 by default and provides simulated data for:
+
+- Agents
+- Events
+- Alerts
+- Metrics
 
 ## Contributing
 
-Contributions are welcome! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ## License
 
-[MIT](LICENSE) © Cylestio
+This project is licensed under the MIT License - see the LICENSE file for details.
 
-## Testing Status
+## Acknowledgments
 
-> **Note:** Tests are temporarily disabled during the UI revamp period.
->
-> The testing infrastructure has been simplified to ensure smooth deployment to npm while the UI undergoes significant changes. Tests will be re-introduced after the UI revamp is complete.
+- Built with [Next.js](https://nextjs.org/)
+- UI components from [Tremor](https://www.tremor.so/)
+- Icons from [Lucide](https://lucide.dev/) and [React Icons](https://react-icons.github.io/react-icons/)

@@ -29,38 +29,45 @@ import {
   TabPanels,
 } from '@tremor/react';
 import { 
-  MagnifyingGlassIcon, 
-  ArrowPathIcon,
-  ChevronDownIcon,
-  ChevronUpIcon,
-  AdjustmentsHorizontalIcon,
-  InformationCircleIcon
-} from '@heroicons/react/24/outline';
+  FaSearch, 
+  FaSync, 
+  FaChevronRight, 
+  FaChevronLeft, 
+  FaCalendar,
+  FaFilter, 
+  FaExclamationTriangle,
+  FaInfoCircle
+} from 'react-icons/fa';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { CodeBlock } from '../components/CodeBlock';
+import apiClient, { EnhancedApiError, createEnhancedApiError } from '@/lib/api/client';
+import { useApiRequest } from '@/hooks/useApiRequest';
+import { EventsService } from '@/lib/api/services';
+import { ErrorDisplay } from '@/components/ui/error-display';
 
 // Define types
-type EventData = {
-  id: number;
+interface EventData {
+  id: number | string;
+  event_id?: string;
   timestamp: string;
-  type: string;
-  agent_id?: number;
+  event_type: string;
+  status?: string;
+  agent_id?: string | number;
   agent_name?: string;
-  session_id?: number;
-  conversation_id?: number;
-  status: string;
+  session_id?: string | number;
+  conversation_id?: string | number;
   duration?: number;
-  details?: string;
-  data?: any;
-};
+  content?: string;
+  metadata?: Record<string, any>;
+}
 
 export function EventsDashboard() {
   const router = useRouter();
   const [events, setEvents] = useState<EventData[]>([]);
   const [filteredEvents, setFilteredEvents] = useState<EventData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<EnhancedApiError | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
@@ -77,63 +84,72 @@ export function EventsDashboard() {
   const [eventTypes, setEventTypes] = useState<string[]>([]);
   const [isDetailView, setIsDetailView] = useState(false);
 
-  // Function to fetch events
+  // Modified fetchEvents to use API client with retry logic
   const fetchEvents = useCallback(async () => {
     try {
-      // Build URL with query parameters
-      const url = new URL('/api/events', window.location.origin);
+      setLoading(true);
+      setError(null);
       
-      // Add pagination
-      url.searchParams.append('page', pagination.currentPage.toString());
-      url.searchParams.append('pageSize', pagination.pageSize.toString());
+      // Build query parameters
+      const params: any = {
+        page: pagination.currentPage,
+        page_size: pagination.pageSize,
+      };
       
       // Add filters if any
-      if (searchQuery) url.searchParams.append('search', searchQuery);
-      if (statusFilter !== 'all') url.searchParams.append('status', statusFilter);
-      if (typeFilter !== 'all') url.searchParams.append('type', typeFilter);
-      if (agentFilter !== 'all') url.searchParams.append('agentId', agentFilter);
+      if (searchQuery) params.search = searchQuery;
+      if (statusFilter !== 'all') params.status = statusFilter;
+      if (typeFilter !== 'all') params.event_type = typeFilter;
+      if (agentFilter !== 'all') params.agent_id = agentFilter;
       
       // Add date range if set
       if (dateFilter.from) {
-        const fromDate = dateFilter.from.toISOString();
-        url.searchParams.append('from', fromDate);
+        params.start_time = dateFilter.from.toISOString();
       }
       if (dateFilter.to) {
-        const toDate = dateFilter.to.toISOString();
-        url.searchParams.append('to', toDate);
+        params.end_time = dateFilter.to.toISOString();
       }
       
       // Add sorting
-      url.searchParams.append('sort', sortField);
-      url.searchParams.append('order', sortDirection);
+      params.sort_by = sortField;
+      params.sort_order = sortDirection;
 
-      const response = await fetch(url.toString());
-      if (!response.ok) throw new Error('Failed to fetch events');
+      // Use API client directly with correct path
+      const response = await apiClient.get('/events/', { params });
+      const data = response.data;
       
-      const data = await response.json();
-      setEvents(data.events);
-      setFilteredEvents(data.events);
-      
-      // Update pagination based on API response
-      setPagination({
-        currentPage: data.pagination?.currentPage || 1,
-        totalPages: data.pagination?.totalPages || 1,
-        pageSize: data.pagination?.pageSize || 25
-      });
-      
-      // Extract event types for filtering
-      if (data.events && data.events.length > 0) {
-        const types = Array.from(new Set(data.events.map((event: EventData) => 
-          typeof event.type === 'string' ? event.type : String(event.type)
-        ).filter(Boolean)));
-        setEventTypes(types as string[]);
+      if (data && data.items) {
+        setEvents(data.items);
+        setFilteredEvents(data.items);
+        
+        // Update pagination based on API response
+        setPagination({
+          currentPage: data.page || 1,
+          totalPages: Math.ceil(data.total / data.page_size) || 1,
+          pageSize: data.page_size || 25
+        });
+        
+        // Extract event types for filtering
+        if (data.items && data.items.length > 0) {
+          const types = Array.from(new Set(data.items.map((event: EventData) => 
+            event.event_type || 'unknown'
+          )));
+          setEventTypes(types as string[]);
+        }
+      } else {
+        // Handle empty response
+        setEvents([]);
+        setFilteredEvents([]);
       }
       
       setLastUpdated(new Date());
-      setError(null);
     } catch (err) {
       console.error('Error fetching events:', err);
-      setError('Failed to load events. Please try again later.');
+      
+      // Enhanced error handling
+      setError(err instanceof Error ? createEnhancedApiError(err) : createEnhancedApiError('Failed to load events data. Please try again.'));
+      setEvents([]);
+      setFilteredEvents([]);
     } finally {
       setLoading(false);
     }
@@ -149,19 +165,21 @@ export function EventsDashboard() {
     sortDirection
   ]);
 
-  // Function to fetch agents for filtering
+  // Replace the fetchAgents function with this improved version
   const fetchAgents = useCallback(async () => {
     try {
-      const response = await fetch('/api/agents');
-      if (!response.ok) throw new Error('Failed to fetch agents');
+      const response = await apiClient.get('/agents/');
+      const data = response.data;
       
-      const data = await response.json();
-      setAgents(data.map((agent: any) => ({ 
-        id: agent.id, 
-        name: agent.name || `Agent #${agent.id}` 
-      })));
+      if (data && data.items) {
+        setAgents(data.items.map((agent: any) => ({ 
+          id: agent.id || agent.agent_id, 
+          name: agent.name || `Agent #${agent.id || agent.agent_id}` 
+        })));
+      }
     } catch (err) {
       console.error('Error fetching agents:', err);
+      // We don't set a global error for agents since it's not critical
     }
   }, []);
 
@@ -284,7 +302,7 @@ export function EventsDashboard() {
           <Button 
             variant="light" 
             onClick={handleBackFromDetail}
-            icon={ArrowPathIcon}
+            icon={FaSync}
             iconPosition="left"
           >
             Back to Events List
@@ -308,7 +326,7 @@ export function EventsDashboard() {
                 </div>
                 <div>
                   <Text className="font-semibold">Type</Text>
-                  <Text>{getEventTypeName(selectedEvent.type)}</Text>
+                  <Text>{getEventTypeName(selectedEvent.event_type)}</Text>
                 </div>
                 <div>
                   <Text className="font-semibold">Status</Text>
@@ -349,10 +367,10 @@ export function EventsDashboard() {
                     <Text>{selectedEvent.conversation_id}</Text>
                   </div>
                 )}
-                {selectedEvent.details && (
+                {selectedEvent.content && (
                   <div>
                     <Text className="font-semibold">Details</Text>
-                    <Text>{selectedEvent.details}</Text>
+                    <Text>{selectedEvent.content}</Text>
                   </div>
                 )}
               </div>
@@ -360,42 +378,42 @@ export function EventsDashboard() {
           </Grid>
         </Card>
 
-        {selectedEvent.data && (
+        {selectedEvent.metadata && (
           <Card>
             <TabGroup>
               <TabList>
                 <Tab>Raw Data</Tab>
-                {selectedEvent.type.toLowerCase().includes('llm') && <Tab>LLM Content</Tab>}
-                {selectedEvent.type.toLowerCase().includes('tool') && <Tab>Tool Data</Tab>}
+                {selectedEvent.event_type.toLowerCase().includes('llm') && <Tab>LLM Content</Tab>}
+                {selectedEvent.event_type.toLowerCase().includes('tool') && <Tab>Tool Data</Tab>}
               </TabList>
               <TabPanels>
                 <TabPanel>
                   <div className="mt-4">
-                    <JsonViewer data={selectedEvent.data} />
+                    <JsonViewer data={selectedEvent.metadata} />
                   </div>
                 </TabPanel>
-                {selectedEvent.type.toLowerCase().includes('llm') && (
+                {selectedEvent.event_type.toLowerCase().includes('llm') && (
                   <TabPanel>
                     <div className="mt-4 bg-gray-50 p-4 rounded-md">
                       <Text className="whitespace-pre-wrap">
-                        {selectedEvent.data?.content || selectedEvent.data?.message || 'No content available'}
+                        {selectedEvent.metadata?.content || selectedEvent.metadata?.message || 'No content available'}
                       </Text>
                     </div>
                   </TabPanel>
                 )}
-                {selectedEvent.type.toLowerCase().includes('tool') && (
+                {selectedEvent.event_type.toLowerCase().includes('tool') && (
                   <TabPanel>
                     <div className="mt-4">
                       <Text className="font-semibold">Tool Name</Text>
-                      <Text>{selectedEvent.data?.tool_name || 'Unknown'}</Text>
+                      <Text>{selectedEvent.metadata?.tool_name || 'Unknown'}</Text>
                       <div className="mt-4">
                         <Text className="font-semibold">Tool Input</Text>
-                        <JsonViewer data={selectedEvent.data?.input || {}} />
+                        <JsonViewer data={selectedEvent.metadata?.input || {}} />
                       </div>
-                      {selectedEvent.type.toLowerCase() === 'tool_response' && (
+                      {selectedEvent.event_type.toLowerCase() === 'tool_response' && (
                         <div className="mt-4">
                           <Text className="font-semibold">Tool Output</Text>
-                          <JsonViewer data={selectedEvent.data?.output || {}} />
+                          <JsonViewer data={selectedEvent.metadata?.output || {}} />
                         </div>
                       )}
                     </div>
@@ -427,7 +445,7 @@ export function EventsDashboard() {
             <SelectItem value="60000">1 minute</SelectItem>
           </Select>
           <Button
-            icon={ArrowPathIcon}
+            icon={FaSync}
             variant="light"
             loading={loading}
             onClick={() => fetchEvents()}
@@ -471,7 +489,7 @@ export function EventsDashboard() {
       <Card>
         <Flex justifyContent="between" className="mb-4">
           <TextInput
-            icon={MagnifyingGlassIcon}
+            icon={FaSearch}
             placeholder="Search events..."
             className="max-w-md"
             value={searchQuery}
@@ -479,7 +497,7 @@ export function EventsDashboard() {
           />
           <Button
             onClick={() => setShowFilters(!showFilters)}
-            icon={AdjustmentsHorizontalIcon}
+            icon={FaFilter}
             variant="light"
           >
             {showFilters ? "Hide Filters" : "Show Filters"}
@@ -549,11 +567,19 @@ export function EventsDashboard() {
           </div>
         )}
 
-        {error ? (
-          <div className="text-center py-10">
-            <Text color="red">{error}</Text>
+        {error && (
+          <div className="mb-4">
+            <ErrorDisplay
+              error={error}
+              title="Failed to load events"
+              onRetry={fetchEvents}
+              onClear={() => setError(null)}
+              withDetails={true}
+            />
           </div>
-        ) : loading ? (
+        )}
+
+        {loading ? (
           <div className="text-center py-10">
             <Text>Loading events...</Text>
           </div>
@@ -573,7 +599,7 @@ export function EventsDashboard() {
                     <Flex alignItems="center" justifyContent="between">
                       ID
                       {sortField === 'id' && (
-                        sortDirection === 'asc' ? <ChevronUpIcon className="h-4 w-4" /> : <ChevronDownIcon className="h-4 w-4" />
+                        sortDirection === 'asc' ? <FaChevronRight className="h-4 w-4" /> : <FaChevronLeft className="h-4 w-4" />
                       )}
                     </Flex>
                   </TableHeaderCell>
@@ -584,7 +610,7 @@ export function EventsDashboard() {
                     <Flex alignItems="center" justifyContent="between">
                       Timestamp
                       {sortField === 'timestamp' && (
-                        sortDirection === 'asc' ? <ChevronUpIcon className="h-4 w-4" /> : <ChevronDownIcon className="h-4 w-4" />
+                        sortDirection === 'asc' ? <FaChevronRight className="h-4 w-4" /> : <FaChevronLeft className="h-4 w-4" />
                       )}
                     </Flex>
                   </TableHeaderCell>
@@ -603,7 +629,7 @@ export function EventsDashboard() {
                   >
                     <TableCell>{event.id}</TableCell>
                     <TableCell>{formatTimestamp(event.timestamp)}</TableCell>
-                    <TableCell>{getEventTypeName(event.type)}</TableCell>
+                    <TableCell>{getEventTypeName(event.event_type)}</TableCell>
                     <TableCell>
                       <StatusBadge status={event.status} />
                     </TableCell>
@@ -618,7 +644,7 @@ export function EventsDashboard() {
                         '-'
                       )}
                     </TableCell>
-                    <TableCell className="truncate max-w-xs">{event.details || '-'}</TableCell>
+                    <TableCell className="truncate max-w-xs">{event.content || '-'}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

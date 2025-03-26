@@ -1,81 +1,113 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { DbConnection } from '../../../src/lib/db/connection';
-import { DbUtils } from '../../../src/lib/db/utils';
+import axios from 'axios';
+
+// API server URL
+const API_SERVER_URL = 'http://localhost:8000/api/v1';
 
 export async function GET(request: NextRequest) {
   try {
-    const searchParams = request.nextUrl.searchParams;
-    const eventId = searchParams.get('id');
-    
-    console.log(`Running event test with ID: ${eventId}`);
-    
-    const dbConnection = DbConnection.getInstance();
-    const dbUtils = new DbUtils(dbConnection);
-    
-    // First check what tables exist
-    const tables = dbUtils.queryMany(`
-      SELECT name FROM sqlite_master WHERE type='table'
-    `);
-    
-    console.log("Available tables:", tables.map((t: any) => t.name));
-    
-    // If events table exists, check its schema
-    const eventsTable = tables.find((t: any) => t.name === 'events');
-    let eventsColumns: any[] = [];
-    
-    if (eventsTable) {
-      eventsColumns = dbUtils.queryMany(`
-        PRAGMA table_info(events)
-      `);
-      console.log("Events table columns:", eventsColumns.map((c: any) => c.name));
-    }
-    
-    // If security_alerts table exists, check its schema
-    const alertsTable = tables.find((t: any) => t.name === 'security_alerts');
-    let alertsColumns: any[] = [];
-    let relatedEvents: any[] = [];
-    
-    if (alertsTable) {
-      alertsColumns = dbUtils.queryMany(`
-        PRAGMA table_info(security_alerts)
-      `);
-      console.log("Security alerts table columns:", alertsColumns.map((c: any) => c.name));
-      
-      // Get some sample events that are associated with security alerts
-      relatedEvents = dbUtils.queryMany(`
-        SELECT event_id FROM security_alerts LIMIT 5
-      `);
-      
-      console.log("Sample security alert event IDs:", relatedEvents.map((r: any) => r.event_id));
-      
-      // If a specific event ID was provided, look it up
-      if (eventId && eventsTable) {
-        const event = dbUtils.queryOne(`
-          SELECT * FROM events WHERE id = ?
-        `, [eventId]);
-        
-        return NextResponse.json({
-          tables: tables.map((t: any) => t.name),
-          eventsColumns: eventsColumns.map((c: any) => c.name),
-          alertsColumns: alertsColumns.map((c: any) => c.name),
-          testEvent: event,
-          relatedEvents: relatedEvents.map((r: any) => r.event_id)
-        });
-      }
-    }
+    // Extract query parameters
+    const { searchParams } = new URL(request.url);
+    const agentId = searchParams.get('agent_id');
+    const page = parseInt(searchParams.get('page') || '1');
+    const pageSize = parseInt(searchParams.get('page_size') || '10');
+
+    // Build query parameters for the API
+    const queryParams = new URLSearchParams();
+    if (agentId) queryParams.append('agent_id', agentId);
+    queryParams.append('page', page.toString());
+    queryParams.append('page_size', pageSize.toString());
+
+    // Fetch test events from API
+    const response = await axios.get(
+      `${API_SERVER_URL}/eventtest?${queryParams.toString()}`
+    );
+
+    return NextResponse.json(response.data);
+  } catch (error) {
+    console.error('Error fetching test events:', error);
+
+    // Return fallback data
+    const fallbackEvents = generateFallbackEvents(10);
     
     return NextResponse.json({
-      tables: tables.map((t: any) => t.name),
-      eventsColumns: eventsColumns.map((c: any) => c.name),
-      alertsColumns: alertsColumns.map((c: any) => c.name),
-      relatedEvents: relatedEvents.map((r: any) => r.event_id)
+      items: fallbackEvents,
+      total: fallbackEvents.length,
+      page: 1,
+      page_size: fallbackEvents.length
     });
+  }
+}
+
+// Helper function to generate fallback events
+function generateFallbackEvents(count: number) {
+  const events = [];
+  const eventTypes = [
+    'llm_request',
+    'llm_response',
+    'user_message',
+    'agent_message',
+    'tool_call'
+  ];
+  
+  for (let i = 0; i < count; i++) {
+    const timestamp = new Date(Date.now() - i * 3600000).toISOString();
+    const eventType = eventTypes[Math.floor(Math.random() * eventTypes.length)];
     
-  } catch (error) {
-    console.error('Error in event test endpoint:', error);
-    return NextResponse.json(
-      { error: `Test failed: ${error.message}` },
-      { status: 500 }
-    );
+    events.push({
+      id: i + 1,
+      event_id: `evt_${i + 1}`,
+      agent_id: `agent_${Math.floor(Math.random() * 5) + 1}`,
+      session_id: `session_${Math.floor(Math.random() * 10) + 1}`,
+      conversation_id: `conv_${Math.floor(Math.random() * 20) + 1}`,
+      timestamp,
+      event_type: eventType,
+      event_data: generateEventData(eventType)
+    });
+  }
+  
+  return events;
+}
+
+// Helper function to generate event data
+function generateEventData(eventType: string): any {
+  switch (eventType) {
+    case 'llm_request':
+      return {
+        model: 'gpt-4',
+        prompt: 'What are the potential risks of large language models?',
+        temperature: 0.7,
+        max_tokens: 1000
+      };
+    case 'llm_response':
+      return {
+        model: 'gpt-4',
+        response: 'Large language models present several potential risks including bias amplification, misinformation generation, privacy concerns, and security vulnerabilities.',
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 25,
+          total_tokens: 35
+        }
+      };
+    case 'user_message':
+      return {
+        message: 'Can you explain the risks of using LLMs?'
+      };
+    case 'agent_message':
+      return {
+        message: "I'd be happy to explain the potential risks associated with large language models."
+      };
+    case 'tool_call':
+      return {
+        tool_name: 'web_search',
+        parameters: {
+          query: 'large language model risks'
+        },
+        result: 'Search results about LLM risks and mitigation strategies'
+      };
+    default:
+      return {
+        data: 'Generic event data'
+      };
   }
 } 

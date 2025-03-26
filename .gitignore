@@ -5,24 +5,28 @@
 
 # testing
 /coverage
-/e2e-results
-/test-results
-/playwright-report
-/playwright/.cache/
+/test-results/
+/playwright-report/
+/.swc/
+.nyc_output
 
 # next.js
 /.next/
 /out/
-/.swc/
+/build
+.next/
+next-env.d.ts
 
 # production
 /build
-/dist
 
 # misc
 .DS_Store
 *.pem
-Thumbs.db
+.idea/
+.vscode/
+*.sublime-workspace
+.vercel
 
 # debug
 npm-debug.log*
@@ -31,53 +35,45 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # local env files
-.env
 .env*.local
 .env.development.local
 .env.test.local
 .env.production.local
+.env.local
 
-# vercel
-.vercel
+# secrets and keys
+*.key
+*.pem
+*.crt
 
-# typescript
-*.tsbuildinfo
-next-env.d.ts
+# logs
+*.log
+log/
+logs/
 
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
+# temp files
+*.tmp
+*.bak
+*~
+.temp/
+.cache/
+temp/
+tmp/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
 
 # SQLite database files
 *.db
 *.db-journal
 
-# Logs
-logs
-*.log
-
 # Security and sensitive files
 .env.production
 .npmrc
 .yarnrc
-*.key
-*.pem
-*.cert
-*.crt
-
-# Test coverage
-.nyc_output/
-coverage/
-
-# Cache
-.cache/
-.npm/
-.eslintcache
-
-# Temporary files
-*.tmp
-*.temp
-.DS_Store
-Thumbs.db

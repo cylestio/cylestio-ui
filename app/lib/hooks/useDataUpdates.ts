@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { DataUpdateService, DataUpdateType, DataUpdate } from '../../../src/lib/db/data-update-service';
+import { DataUpdateType, DataUpdate } from '../types';
 
 /**
  * Options for the useDataUpdates hook
@@ -67,81 +67,29 @@ export function useDataUpdates(options: UseDataUpdatesOptions = {}): UseDataUpda
     onUpdate
   } = options;
   
-  const [dataUpdateService, setDataUpdateService] = useState<DataUpdateService | null>(null);
   const [lastUpdate, setLastUpdate] = useState<DataUpdate | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   
-  // Initialize the data update service
+  // Mock implementation - in a real app, this would connect to a real-time API
   useEffect(() => {
-    // Import is done dynamically to avoid SSR issues
-    if (typeof window !== 'undefined') {
-      const service = DataUpdateService.getInstance({
-        pollingInterval,
-        autoStart
-      });
-      
-      setDataUpdateService(service);
-      setIsConnected(service.isConnected());
-      
-      return () => {
-        service.stopPolling();
-      };
-    }
+    if (!autoStart) return;
     
-    return undefined;
-  }, [pollingInterval, autoStart]);
+    const interval = setInterval(() => {
+      setIsConnected(true);
+    }, pollingInterval || 5000);
+    
+    return () => clearInterval(interval);
+  }, [autoStart, pollingInterval]);
   
-  // Subscribe to update events
-  useEffect(() => {
-    if (!dataUpdateService) return undefined;
-    
-    // Create update handler
-    const handleUpdate = (update: DataUpdate) => {
-      setLastUpdate(update);
-      if (onUpdate) {
-        onUpdate(update);
-      }
-    };
-    
-    // Add connection status listener
-    const handleConnection = ({ status }: { status: string }) => {
-      setIsConnected(status === 'connected');
-    };
-    
-    // Subscribe to update events
-    updateTypes.forEach(type => {
-      dataUpdateService.on(type, handleUpdate);
-    });
-    
-    // Subscribe to connection events
-    dataUpdateService.on('connection', handleConnection);
-    
-    // Unsubscribe on cleanup
-    return () => {
-      updateTypes.forEach(type => {
-        dataUpdateService.off(type, handleUpdate);
-      });
-      dataUpdateService.off('connection', handleConnection);
-    };
-  }, [dataUpdateService, updateTypes, onUpdate]);
-  
-  // Toggle connection
+  // Toggle connection - mock implementation
   const toggleConnection = useCallback(() => {
-    if (!dataUpdateService) return;
-    
-    if (dataUpdateService.isConnected()) {
-      dataUpdateService.stopPolling();
-    } else {
-      dataUpdateService.startPolling();
-    }
-  }, [dataUpdateService]);
+    setIsConnected(prev => !prev);
+  }, []);
   
-  // Set polling interval
-  const setPollingInterval = useCallback((interval: number) => {
-    if (!dataUpdateService) return;
-    
-    dataUpdateService.setPollingInterval(interval);
-  }, [dataUpdateService]);
+  // Set polling interval - mock implementation
+  const setPollingInterval = useCallback(() => {
+    // This would normally change the polling interval
+  }, []);
   
   return {
     lastUpdate,

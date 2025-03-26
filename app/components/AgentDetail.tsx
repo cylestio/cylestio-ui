@@ -26,38 +26,32 @@ import {
   Button,
 } from '@tremor/react';
 import { 
-  ArrowPathIcon, 
-  ArrowLeftIcon, 
-  ClockIcon,
-  ChatBubbleLeftRightIcon,
-  ExclamationTriangleIcon,
-  BoltIcon,
-  CpuChipIcon,
-  ShieldExclamationIcon,
-  CheckCircleIcon,
-  XCircleIcon,
-  ChevronRightIcon,
-  Cog6ToothIcon,
-  CircleStackIcon,
-  CommandLineIcon
-} from '@heroicons/react/24/outline';
+  FaChevronLeft, 
+  FaServer, 
+  FaInfoCircle, 
+  FaClock, 
+  FaExclamationTriangle,
+  FaSync,
+  FaPlay,
+  FaStop,
+  FaTrash,
+  FaEdit,
+  FaCheckCircle,
+  FaTimesCircle,
+  FaChevronRight
+} from 'react-icons/fa';
 import Link from 'next/link';
 import { SimpleDonutChart } from './SimpleDonutChart';
+import { StableChartContainer } from './StableChartContainer';
+import { useApiRequest } from '@/hooks/useApiRequest';
+import { AgentService } from '@/lib/api/services';
+import { Agent } from '@/types/api';
+import { EnhancedApiError } from '@/lib/api/client';
+import { LoadingState } from '@/components/ui/loading-state';
+import { ErrorDisplay } from '@/components/ui/error-display';
 
 type AgentDetailProps = {
   agentId: string;
-};
-
-type AgentData = {
-  id: number;
-  name: string;
-  status: 'active' | 'inactive' | 'error';
-  type: string;
-  last_active: string;
-  created_at?: string;
-  description?: string;
-  version?: string;
-  config?: Record<string, unknown>;
 };
 
 type AgentMetrics = {
@@ -90,64 +84,52 @@ type EventTypeDistribution = {
 };
 
 export function AgentDetail({ agentId }: AgentDetailProps) {
-  const [agent, setAgent] = useState<AgentData | null>(null);
-  const [metrics, setMetrics] = useState<AgentMetrics | null>(null);
   const [recentEvents, setRecentEvents] = useState<EventData[]>([]);
   const [responseTimeData, setResponseTimeData] = useState<ChartDataPoint[]>([]);
   const [eventTypeDistribution, setEventTypeDistribution] = useState<EventTypeDistribution[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [refreshInterval] = useState<number>(30000); // 30 seconds by default
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-  const fetchAgentDetails = async () => {
-    try {
-      setError(null);
-      const response = await fetch(`/api/agents/${agentId}`);
-      
-      if (!response.ok) {
-        if (response.status === 404) {
-          throw new Error('Agent not found');
-        }
-        throw new Error('Failed to fetch agent details');
-      }
-      
-      const data = await response.json();
-      
-      setAgent(data.agent);
-      setMetrics(data.metrics);
-      setRecentEvents(data.recentEvents);
-      setResponseTimeData(data.responseTimeData);
-      setEventTypeDistribution(data.eventTypeDistribution);
-      setLastUpdated(new Date());
-    } catch (err) {
-      console.error('Error fetching agent details:', err);
-      setError(`${err instanceof Error ? err.message : 'Failed to load agent details'}`);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Fetch agent data
+  const { 
+    data: agent, 
+    loading: agentLoading, 
+    error: agentError, 
+    execute: fetchAgent 
+  } = useApiRequest(() => AgentService.getById(agentId), { immediate: true });
 
-  // Initial data fetch
-  useEffect(() => {
-    fetchAgentDetails();
-  }, [agentId, fetchAgentDetails]);
+  // Fetch agent metrics
+  const { 
+    data: metrics, 
+    loading: metricsLoading, 
+    error: metricsError, 
+    execute: fetchMetrics 
+  } = useApiRequest(() => AgentService.getMetrics(agentId), { immediate: true });
 
   // Set up polling for real-time updates
   useEffect(() => {
     if (refreshInterval === 0) return; // No refresh
 
     const intervalId = setInterval(() => {
-      fetchAgentDetails();
+      fetchAgent();
+      fetchMetrics();
+      setLastUpdated(new Date());
     }, refreshInterval);
 
     return () => clearInterval(intervalId);
-  }, [refreshInterval, agentId, fetchAgentDetails]);
+  }, [refreshInterval, fetchAgent, fetchMetrics]);
+
+  // Handle manual refresh
+  const handleRefresh = () => {
+    fetchAgent();
+    fetchMetrics();
+    setLastUpdated(new Date());
+  };
 
   // Format the timestamp
-  const formatTimestamp = (timestamp: string) => {
+  const formatTimestamp = (timestamp: string | Date) => {
     try {
-      const date = new Date(timestamp);
+      const date = timestamp instanceof Date ? timestamp : new Date(timestamp);
       return date.toLocaleString();
     } catch (e) {
       return 'Invalid date';
@@ -155,17 +137,10 @@ export function AgentDetail({ agentId }: AgentDetailProps) {
   };
 
   // Status badge component
-  const StatusBadge = ({ status }: { status: string }) => {
-    switch (status) {
-      case 'active':
-        return <Badge color="green">Active</Badge>;
-      case 'inactive':
-        return <Badge color="gray">Inactive</Badge>;
-      case 'error':
-        return <Badge color="red">Error</Badge>;
-      default:
-        return <Badge color="gray">{status}</Badge>;
-    }
+  const StatusBadge = ({ active }: { active: boolean }) => {
+    return active ? 
+      <Badge color="green">Active</Badge> : 
+      <Badge color="gray">Inactive</Badge>;
   };
 
   // Get a friendly name for event types
@@ -185,13 +160,14 @@ export function AgentDetail({ agentId }: AgentDetailProps) {
     return eventTypes[type.toLowerCase()] || type;
   };
 
-  if (loading) {
+  const loading = agentLoading || metricsLoading;
+  const error = agentError || metricsError;
+
+  if (loading && !agent) {
     return (
       <div className="p-6">
-        <Card className="h-96 flex items-center justify-center">
-          <div className="text-center">
-            <Text>Loading agent details...</Text>
-          </div>
+        <Card className="h-96">
+          <LoadingState message="Loading agent details..." />
         </Card>
       </div>
     );
@@ -201,11 +177,13 @@ export function AgentDetail({ agentId }: AgentDetailProps) {
     return (
       <div className="p-6">
         <Card className="h-96 flex flex-col items-center justify-center">
-          <div className="text-center mb-4">
-            <Text color="red">{error}</Text>
-          </div>
+          <ErrorDisplay 
+            error={error as EnhancedApiError} 
+            onRetry={handleRefresh}
+            className="mb-4"
+          />
           <Link href="/agents">
-            <Button icon={ArrowLeftIcon}>Back to Agents</Button>
+            <Button icon={FaChevronLeft}>Back to Agents</Button>
           </Link>
         </Card>
       </div>
@@ -220,7 +198,7 @@ export function AgentDetail({ agentId }: AgentDetailProps) {
             <Text>Agent not found</Text>
           </div>
           <Link href="/agents">
-            <Button icon={ArrowLeftIcon}>Back to Agents</Button>
+            <Button icon={FaChevronLeft}>Back to Agents</Button>
           </Link>
         </Card>
       </div>
@@ -232,19 +210,19 @@ export function AgentDetail({ agentId }: AgentDetailProps) {
       <Flex justifyContent="between" alignItems="center" className="mb-6">
         <Flex alignItems="center" className="gap-2">
           <Link href="/agents">
-            <Button variant="light" icon={ArrowLeftIcon}>
+            <Button variant="light" icon={FaChevronLeft}>
               Back
             </Button>
           </Link>
-          <Title>Agent #{agent.id}: {agent.name}</Title>
-          <Badge color="blue" size="lg">ID: {agent.id}</Badge>
+          <Title>Agent: {agent.name}</Title>
+          <Badge color="blue" size="lg">ID: {agent.agent_id}</Badge>
         </Flex>
         <Flex justifyContent="end" className="space-x-4">
           <Button
-            icon={ArrowPathIcon}
+            icon={FaSync}
             variant="light"
             loading={loading}
-            onClick={() => fetchAgentDetails()}
+            onClick={handleRefresh}
           >
             Refresh
           </Button>
@@ -258,243 +236,238 @@ export function AgentDetail({ agentId }: AgentDetailProps) {
       )}
 
       <Card className="mb-6">
-        <Flex>
-          <div className="space-y-1">
-            <Text>Agent ID</Text>
-            <Metric>#{agent.id}</Metric>
-          </div>
-          <div className="space-y-1">
-            <Text>Agent Name</Text>
-            <Flex alignItems="center" className="gap-3">
-              <Metric>{agent.name}</Metric>
-              <StatusBadge status={agent.status} />
+        <Grid numItemsMd={3} className="gap-6">
+          <div>
+            <Flex>
+              <Text>Status</Text>
+              <StatusBadge active={agent.active} />
             </Flex>
           </div>
-          <div className="space-y-1">
-            <Text>Type</Text>
-            <Metric>{agent.type}</Metric>
+          <div>
+            <Flex>
+              <Text>Version</Text>
+              <Text>{agent.version}</Text>
+            </Flex>
           </div>
-          <div className="space-y-1">
-            <Text>Last Active</Text>
-            <Metric>{formatTimestamp(agent.last_active)}</Metric>
+          <div>
+            <Flex>
+              <Text>Last Active</Text>
+              <Text>{formatTimestamp(agent.last_active)}</Text>
+            </Flex>
           </div>
-          {agent.created_at && (
-            <div className="space-y-1">
+          <div>
+            <Flex>
               <Text>Created</Text>
-              <Metric>{formatTimestamp(agent.created_at)}</Metric>
-            </div>
-          )}
-        </Flex>
-        
-        {agent.description && (
-          <Text className="mt-4">{agent.description}</Text>
-        )}
+              <Text>{formatTimestamp(agent.creation_time)}</Text>
+            </Flex>
+          </div>
+          <div className="col-span-2">
+            <Text>Description</Text>
+            <Text>{agent.description}</Text>
+          </div>
+        </Grid>
       </Card>
 
-      <Grid numItemsMd={3} className="gap-6 mb-6">
-        <Card>
-          <div className="h-28">
-            <Flex justifyContent="start" className="space-x-1">
-              <Text>Sessions</Text>
-              <ChatBubbleLeftRightIcon className="h-5 w-5 text-gray-500" />
+      {metrics && (
+        <Grid numItemsMd={3} className="gap-6 mb-6">
+          <Card>
+            <Flex className="h-16 items-center gap-2">
+              <FaInfoCircle className="h-8 w-8 text-blue-500" />
+              <div>
+                <Text>Conversations</Text>
+                <Metric>{metrics.total_conversations.toLocaleString()}</Metric>
+              </div>
             </Flex>
-            <Metric>{metrics?.total_sessions || 0}</Metric>
-          </div>
-        </Card>
-        <Card>
-          <div className="h-28">
-            <Flex justifyContent="start" className="space-x-1">
-              <Text>Conversations</Text>
-              <ChatBubbleLeftRightIcon className="h-5 w-5 text-gray-500" />
+          </Card>
+          <Card>
+            <Flex className="h-16 items-center gap-2">
+              <FaClock className="h-8 w-8 text-blue-500" />
+              <div>
+                <Text>Sessions</Text>
+                <Metric>{metrics.total_sessions.toLocaleString()}</Metric>
+              </div>
             </Flex>
-            <Metric>{metrics?.total_conversations || 0}</Metric>
-          </div>
-        </Card>
-        <Card>
-          <div className="h-28">
-            <Flex justifyContent="start" className="space-x-1">
-              <Text>Events</Text>
-              <ClockIcon className="h-5 w-5 text-gray-500" />
+          </Card>
+          <Card>
+            <Flex className="h-16 items-center gap-2">
+              <FaServer className="h-8 w-8 text-blue-500" />
+              <div>
+                <Text>Total Events</Text>
+                <Metric>{metrics.total_events.toLocaleString()}</Metric>
+              </div>
             </Flex>
-            <Metric>{metrics?.total_events || 0}</Metric>
-          </div>
-        </Card>
-      </Grid>
+          </Card>
+          <Card>
+            <Flex className="h-16 items-center gap-2">
+              <FaServer className="h-8 w-8 text-blue-500" />
+              <div>
+                <Text>LLM Calls</Text>
+                <Metric>{metrics.llm_calls.toLocaleString()}</Metric>
+              </div>
+            </Flex>
+          </Card>
+          <Card>
+            <Flex className="h-16 items-center gap-2">
+              <FaServer className="h-8 w-8 text-blue-500" />
+              <div>
+                <Text>Tool Calls</Text>
+                <Metric>{metrics.tool_calls.toLocaleString()}</Metric>
+              </div>
+            </Flex>
+          </Card>
+          <Card>
+            <Flex className="h-16 items-center gap-2">
+              <FaInfoCircle className="h-8 w-8 text-blue-500" />
+              <div>
+                <Text>Security Alerts</Text>
+                <Metric>{metrics.security_alerts.toLocaleString()}</Metric>
+              </div>
+            </Flex>
+          </Card>
+        </Grid>
+      )}
 
       <TabGroup className="mt-6">
         <TabList>
-          <Tab>Overview</Tab>
-          <Tab>Recent Events</Tab>
-          <Tab>Performance</Tab>
+          <Tab>Activity</Tab>
+          <Tab>Response Times</Tab>
+          <Tab>Event Types</Tab>
           <Tab>Configuration</Tab>
+          <Tab>Raw Data</Tab>
         </TabList>
         <TabPanels>
+          {/* Activity Tab */}
           <TabPanel>
-            <Grid numItemsMd={2} className="gap-6 mt-6">
-              <Card>
-                <Title>Event Type Distribution</Title>
-                <SimpleDonutChart
-                  className="mt-6"
-                  data={eventTypeDistribution.map(item => ({ name: item.type, count: item.count }))}
-                  valueFormatter={(value) => `${value.toLocaleString()} events`}
-                  colors={["blue", "cyan", "indigo", "violet", "fuchsia", "pink", "rose"]}
-                />
-              </Card>
-              <Card>
-                <Title>API Call Distribution</Title>
-                <Grid numItemsMd={2} className="gap-4 mt-4">
-                  <Card decoration="top" decorationColor="blue">
-                    <Flex justifyContent="start" className="space-x-1">
-                      <Text>LLM Calls</Text>
-                      <BoltIcon className="h-5 w-5 text-blue-500" />
-                    </Flex>
-                    <Metric className="mt-2">{metrics?.llm_calls || 0}</Metric>
-                  </Card>
-                  <Card decoration="top" decorationColor="indigo">
-                    <Flex justifyContent="start" className="space-x-1">
-                      <Text>Tool Calls</Text>
-                      <CpuChipIcon className="h-5 w-5 text-indigo-500" />
-                    </Flex>
-                    <Metric className="mt-2">{metrics?.tool_calls || 0}</Metric>
-                  </Card>
-                </Grid>
-                <Card className="mt-4" decoration="top" decorationColor="red">
-                  <Flex justifyContent="start" className="space-x-1">
-                    <Text>Security Alerts</Text>
-                    <ExclamationTriangleIcon className="h-5 w-5 text-red-500" />
-                  </Flex>
-                  <Metric className="mt-2">{metrics?.security_alerts || 0}</Metric>
-                </Card>
-              </Card>
-            </Grid>
-          </TabPanel>
-          
-          <TabPanel>
-            <Card className="mt-6">
+            <Card>
               <Title>Recent Events</Title>
               {recentEvents.length === 0 ? (
-                <Text className="mt-4">No events found for this agent.</Text>
+                <Text>No recent events</Text>
               ) : (
-                <Table className="mt-4">
+                <Table>
                   <TableHead>
                     <TableRow>
-                      <TableHeaderCell>ID</TableHeaderCell>
-                      <TableHeaderCell>Timestamp</TableHeaderCell>
+                      <TableHeaderCell>Time</TableHeaderCell>
                       <TableHeaderCell>Type</TableHeaderCell>
                       <TableHeaderCell>Session</TableHeaderCell>
-                      <TableHeaderCell>Conversation</TableHeaderCell>
                       <TableHeaderCell>Status</TableHeaderCell>
+                      <TableHeaderCell>Actions</TableHeaderCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {recentEvents.map((event) => (
                       <TableRow key={event.id}>
-                        <TableCell>{event.id}</TableCell>
                         <TableCell>{formatTimestamp(event.timestamp)}</TableCell>
                         <TableCell>{getEventTypeName(event.event_type)}</TableCell>
+                        <TableCell>{event.session_id ? `#${event.session_id}` : '-'}</TableCell>
                         <TableCell>
-                          {event.session_id ? (
-                            <Link 
-                              href={`/events/sessions/${event.session_id}`}
-                              className="text-blue-500 hover:text-blue-700"
-                            >
-                              {event.session_id}
-                            </Link>
+                          {event.status === 'success' ? (
+                            <FaCheckCircle className="h-5 w-5 text-green-500" />
+                          ) : event.status === 'error' ? (
+                            <FaTimesCircle className="h-5 w-5 text-red-500" />
                           ) : (
-                            '-'
+                            <Badge>{event.status || 'N/A'}</Badge>
                           )}
                         </TableCell>
                         <TableCell>
-                          {event.conversation_id ? (
-                            <Link 
-                              href={`/events/conversations/${event.conversation_id}`}
-                              className="text-blue-500 hover:text-blue-700"
-                            >
-                              {event.conversation_id}
-                            </Link>
-                          ) : (
-                            '-'
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {event.status ? (
-                            <Badge 
-                              color={event.status === 'success' ? 'green' : 
-                                event.status === 'error' ? 'red' : 'gray'}
-                            >
-                              {event.status}
-                            </Badge>
-                          ) : (
-                            '-'
-                          )}
+                          <Button
+                            size="xs"
+                            variant="light"
+                            icon={FaChevronRight}
+                            onClick={() => {
+                              // View event details
+                            }}
+                          >
+                            Details
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
               )}
-              <div className="mt-4 text-right">
-                <Link href={`/events?agentId=${agent.id}`} className="text-blue-500 hover:text-blue-700">
-                  View all events
-                </Link>
-              </div>
             </Card>
           </TabPanel>
-          
+
+          {/* Response Time Tab */}
           <TabPanel>
-            <Grid numItemsMd={1} className="gap-6 mt-6">
-              <Card>
-                <Title>Response Time (Last 24 Hours)</Title>
-                {responseTimeData.length === 0 ? (
-                  <Text className="mt-4">No response time data available.</Text>
-                ) : (
-                  <AreaChart
-                    className="mt-4 h-80"
-                    data={responseTimeData}
-                    index="hour"
-                    categories={["avg_response_time"]}
-                    colors={["blue"]}
-                    valueFormatter={(value) => `${value.toFixed(0)}ms`}
-                    showLegend={false}
-                    curveType="natural"
+            <Card>
+              <Title>Response Time Trend</Title>
+              <StableChartContainer className="h-72 mt-4">
+                <AreaChart
+                  data={responseTimeData}
+                  index="date"
+                  categories={["avgResponseTime"]}
+                  colors={["blue"]}
+                  valueFormatter={(value) => `${value.toFixed(0)}ms`}
+                />
+              </StableChartContainer>
+            </Card>
+          </TabPanel>
+
+          {/* Event Types Tab */}
+          <TabPanel>
+            <Card>
+              <Title>Event Type Distribution</Title>
+              <Grid numItemsMd={2} className="mt-4 gap-6">
+                <StableChartContainer className="h-72">
+                  <SimpleDonutChart
+                    data={eventTypeDistribution.map(item => ({
+                      name: item.type,
+                      count: item.count
+                    }))}
+                    valueFormatter={(value) => `${value} events`}
                   />
-                )}
-              </Card>
-              <Card className="mt-6">
-                <Title>Event Type Distribution</Title>
-                {eventTypeDistribution.length === 0 ? (
-                  <Text className="mt-4">No event distribution data available.</Text>
-                ) : (
+                </StableChartContainer>
+                <StableChartContainer className="h-72">
                   <BarChart
-                    className="mt-4 h-80"
                     data={eventTypeDistribution}
                     index="type"
                     categories={["count"]}
-                    colors={["indigo"]}
+                    colors={["blue"]}
                     valueFormatter={(value) => `${value} events`}
-                    showLegend={false}
                   />
-                )}
-              </Card>
-            </Grid>
-          </TabPanel>
-          
-          <TabPanel>
-            <Card className="mt-6">
-              <Title>Agent Configuration</Title>
-              {agent.config ? (
-                <pre className="mt-4 bg-gray-50 p-4 rounded overflow-auto">
-                  {JSON.stringify(agent.config, null, 2)}
-                </pre>
-              ) : (
-                <Text className="mt-4">No configuration data available.</Text>
-              )}
+                </StableChartContainer>
+              </Grid>
             </Card>
-            <Card className="mt-6">
-              <Title>Version Information</Title>
-              <Text className="mt-2">
-                Version: {agent.version || 'Unknown'}
-              </Text>
+          </TabPanel>
+
+          {/* Configuration Tab */}
+          <TabPanel>
+            <Card>
+              <Flex alignItems="center" className="gap-2 mb-4">
+                <FaEdit className="h-5 w-5 text-gray-500" />
+                <Title>Agent Configuration</Title>
+              </Flex>
+              <div className="p-4 rounded-md bg-gray-50 mt-2 font-mono text-sm text-gray-800 whitespace-pre overflow-auto max-h-96">
+                <code>
+                  {JSON.stringify(
+                    {
+                      id: agent.agent_id,
+                      name: agent.name,
+                      description: agent.description,
+                      version: agent.version,
+                      active: agent.active
+                    },
+                    null,
+                    2
+                  )}
+                </code>
+              </div>
+            </Card>
+          </TabPanel>
+
+          {/* Raw Data Tab */}
+          <TabPanel>
+            <Card>
+              <Flex alignItems="center" className="gap-2 mb-4">
+                <FaServer className="h-5 w-5 text-gray-500" />
+                <Title>Raw Agent Data</Title>
+              </Flex>
+              <div className="p-4 rounded-md bg-gray-50 mt-2 font-mono text-sm text-gray-800 whitespace-pre overflow-auto max-h-96">
+                <code>
+                  {JSON.stringify(agent, null, 2)}
+                </code>
+              </div>
             </Card>
           </TabPanel>
         </TabPanels>

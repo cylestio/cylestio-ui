@@ -9,10 +9,10 @@ type CodeBlockProps = {
 
 export function CodeBlock({ code, language = 'javascript' }: CodeBlockProps) {
   return (
-    <pre className="bg-gray-100 p-4 rounded-md overflow-auto text-sm">
+    <div className="bg-gray-100 p-4 rounded-md overflow-auto text-sm">
       <code className={`language-${language}`}>
         {code}
       </code>
-    </pre>
+    </div>
   );
 } 

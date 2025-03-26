@@ -1,34 +1,64 @@
 import { NextResponse } from 'next/server';
-import { 
-  getEventsPerMinute, 
-  getEventCountsByLevel, 
-  getAlertsOverTime 
-} from '../../lib/db';
+
+// Interface for event count by minute
+interface EventCount {
+  minute: string;
+  count: number;
+}
+
+// Interface for event level distribution
+interface EventLevel {
+  name: string;
+  value: number;
+}
+
+// Interface for alert counts by date
+interface AlertCount {
+  date: string;
+  count: number;
+}
+
+// Mock data generator functions
+function generateEventsPerMinute(): EventCount[] {
+  // Return mock data for the last 15 minutes
+  return Array.from({ length: 15 }, (_, i) => ({
+    minute: `12:${String(i).padStart(2, '0')}`,
+    count: 40 + Math.floor(Math.random() * 30),
+  }));
+}
+
+function generateEventCountsByLevel(): EventLevel[] {
+  // Return mock data
+  return [
+    { name: 'Info', value: 456 },
+    { name: 'Warning', value: 48 },
+    { name: 'Error', value: 12 },
+  ];
+}
+
+function generateAlertsOverTime(days: number = 7): AlertCount[] {
+  // Return mock data for the last 7 days
+  return Array.from({ length: days }, (_, i) => {
+    const date = new Date();
+    date.setDate(date.getDate() - i);
+    return {
+      date: date.toISOString().split('T')[0],
+      count: 2 + Math.floor(Math.random() * 8),
+    };
+  }).reverse(); // Reverse to get chronological order
+}
 
 export async function GET() {
   try {
-    // Fetch data from the database
-    const [callsPerMinuteData, alertDistributionData, alertsOverTimeData] = await Promise.all([
-      getEventsPerMinute(),
-      getEventCountsByLevel(),
-      getAlertsOverTime(7) // Last 7 days
-    ]);
-
-    // Transform the data for the charts
-    const callsPerMinute = callsPerMinuteData.map(item => ({
-      minute: item.minute.split(' ')[1], // Extract just the time part
+    // Generate mock data
+    const callsPerMinute = generateEventsPerMinute().map(item => ({
+      minute: item.minute,
       calls: item.count
     }));
 
-    const alertDistribution = alertDistributionData.map(item => ({
-      name: item.level.charAt(0).toUpperCase() + item.level.slice(1), // Capitalize first letter
-      value: item.count
-    }));
+    const alertDistribution = generateEventCountsByLevel();
 
-    const alertsOverTime = alertsOverTimeData.map(item => ({
-      date: item.date,
-      count: item.count
-    }));
+    const alertsOverTime = generateAlertsOverTime(7);
 
     // Return the chart data
     return NextResponse.json({
@@ -37,9 +67,9 @@ export async function GET() {
       alertsOverTime
     });
   } catch (error) {
-    console.error('Error fetching chart data:', error);
+    console.error('Error generating chart data:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch chart data' },
+      { error: 'Failed to generate chart data' },
       { status: 500 }
     );
   }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Card,
   Table,
@@ -28,21 +28,42 @@ import {
   TabPanels,
   BarChart,
   DonutChart,
+  Legend
 } from '@tremor/react';
 import { 
-  MagnifyingGlassIcon, 
-  ArrowPathIcon,
-  ChevronDownIcon,
-  ChevronUpIcon,
-  AdjustmentsHorizontalIcon,
-  ExclamationTriangleIcon,
-  ShieldExclamationIcon,
-  ArrowUturnLeftIcon,
-  ArrowTopRightOnSquareIcon,
-  DocumentArrowDownIcon,
-} from '@heroicons/react/24/outline';
+  FaSearch, 
+  FaSync, 
+  FaChevronRight, 
+  FaChevronLeft, 
+  FaCalendar,
+  FaFilter, 
+  FaExclamationTriangle,
+  FaInfoCircle,
+  FaCheck,
+  FaTrash,
+  FaExclamation,
+  FaShieldAlt,
+  FaExternalLinkAlt,
+  FaFileDownload,
+  FaChevronUp,
+  FaChevronDown,
+  FaSyncAlt,
+  FaTimes,
+  FaArrowLeft,
+  FaLock,
+  FaHistory,
+  FaCode,
+  FaBug,
+  FaBan,
+  FaEye,
+  FaExclamationCircle
+} from 'react-icons/fa';
+import Link from 'next/link';
 import { CodeBlock } from './CodeBlock';
 import { SimpleDonutChart } from './SimpleDonutChart';
+import { StableChartContainer } from './StableChartContainer';
+import useAlertTypes from '../hooks/useAlertTypes';
+import apiClient, { createEnhancedApiError } from '@/lib/api/client';
 
 // Define types
 type SecurityAlertData = {
@@ -121,37 +142,36 @@ export function SecurityAlertsDashboard() {
   // Function to fetch alerts
   const fetchAlerts = useCallback(async () => {
     try {
-      // Build URL with query parameters
-      const url = new URL('/api/alerts', window.location.origin);
+      setLoading(true);
+      setError(null);
       
-      // Add pagination
-      url.searchParams.append('page', pagination.currentPage.toString());
-      url.searchParams.append('pageSize', pagination.pageSize.toString());
+      // Build query parameters
+      const params: any = {
+        page: pagination.currentPage,
+        page_size: pagination.pageSize,
+      };
       
       // Add filters if any
-      if (searchQuery) url.searchParams.append('search', searchQuery);
-      if (severityFilter !== 'all') url.searchParams.append('severity', severityFilter);
-      if (typeFilter !== 'all') url.searchParams.append('type', typeFilter);
-      if (agentFilter !== 'all') url.searchParams.append('agentId', agentFilter);
+      if (searchQuery) params.search = searchQuery;
+      if (severityFilter !== 'all') params.severity = severityFilter;
+      if (typeFilter !== 'all') params.type = typeFilter;
+      if (agentFilter !== 'all') params.agent_id = agentFilter;
       
       // Add date range if set
       if (dateFilter.from) {
-        const fromDate = dateFilter.from.toISOString();
-        url.searchParams.append('from', fromDate);
+        params.start_time = dateFilter.from.toISOString();
       }
       if (dateFilter.to) {
-        const toDate = dateFilter.to.toISOString();
-        url.searchParams.append('to', toDate);
+        params.end_time = dateFilter.to.toISOString();
       }
       
       // Add sorting
-      url.searchParams.append('sort', sortField);
-      url.searchParams.append('order', sortDirection);
+      params.sort_by = sortField;
+      params.sort_order = sortDirection;
 
-      const response = await fetch(url.toString());
-      if (!response.ok) throw new Error('Failed to fetch security alerts');
-      
-      const data = await response.json();
+      // Use API client directly with correct path
+      const response = await apiClient.get('/alerts/', { params });
+      const data = response.data;
       
       // Check if there's an error from the API
       if (data.error) {
@@ -161,19 +181,19 @@ export function SecurityAlertsDashboard() {
         return;
       }
       
-      setAlerts(data.alerts || []);
-      setFilteredAlerts(data.alerts || []);
+      setAlerts(data.items || []);
+      setFilteredAlerts(data.items || []);
       
       // Update pagination based on API response
       setPagination({
-        currentPage: data.pagination?.currentPage || 1,
-        totalPages: data.pagination?.totalPages || 1,
-        pageSize: data.pagination?.pageSize || 25
+        currentPage: data.page || 1,
+        totalPages: Math.ceil(data.total / data.page_size) || 1,
+        pageSize: data.page_size || 25
       });
       
       // Extract alert types for filtering if not already fetched
-      if (alertTypes.length === 0 && data.alerts && data.alerts.length > 0) {
-        const types = Array.from(new Set(data.alerts.map((alert: SecurityAlertData) => 
+      if (alertTypes.length === 0 && data.items && data.items.length > 0) {
+        const types = Array.from(new Set(data.items.map((alert: SecurityAlertData) => 
           typeof alert.alert_type === 'string' ? alert.alert_type : String(alert.alert_type)
         ).filter(Boolean)));
         setAlertTypes(types as string[]);
@@ -183,7 +203,7 @@ export function SecurityAlertsDashboard() {
       setError(null);
     } catch (err) {
       console.error('Error fetching security alerts:', err);
-      setError(`Failed to load security alerts: ${err.message}`);
+      setError(`Failed to load security alerts: ${err.message || 'Unknown error'}`);
       setAlerts([]);
       setFilteredAlerts([]);
     } finally {
@@ -205,10 +225,8 @@ export function SecurityAlertsDashboard() {
   // Function to fetch alert types
   const fetchAlertTypes = useCallback(async () => {
     try {
-      const response = await fetch('/api/alerts/types');
-      if (!response.ok) throw new Error('Failed to fetch alert types');
-      
-      const data = await response.json();
+      const response = await apiClient.get('/metrics/alerts/types');
+      const data = response.data;
       
       // Check if there's an error from the API
       if (data.error) {
@@ -218,12 +236,12 @@ export function SecurityAlertsDashboard() {
       }
       
       // Update alert types for filtering
-      setAlertTypes(data.types?.map((item: {type: string, count: number}) => item.type) || []);
+      setAlertTypes(data.items?.map((item: {type: string, count: number}) => item.type) || []);
       
       // Update metrics
       setMetrics(prevMetrics => ({
         ...prevMetrics,
-        byType: data.types || []
+        byType: data.items || []
       }));
     } catch (err) {
       console.error('Error fetching alert types:', err);
@@ -234,14 +252,15 @@ export function SecurityAlertsDashboard() {
   // Function to fetch agents for filtering
   const fetchAgents = useCallback(async () => {
     try {
-      const response = await fetch('/api/agents');
-      if (!response.ok) throw new Error('Failed to fetch agents');
+      const response = await apiClient.get('/agents/');
+      const data = response.data;
       
-      const data = await response.json();
-      setAgents(data.map((agent: any) => ({ 
-        id: agent.id, 
-        name: agent.name || `Agent #${agent.id}` 
-      })));
+      if (data && data.items) {
+        setAgents(data.items.map((agent: any) => ({ 
+          id: agent.id || agent.agent_id, 
+          name: agent.name || `Agent #${agent.id || agent.agent_id}` 
+        })));
+      }
     } catch (err) {
       console.error('Error fetching agents:', err);
     }
@@ -250,10 +269,8 @@ export function SecurityAlertsDashboard() {
   // Function to fetch security metrics
   const fetchSecurityMetrics = useCallback(async () => {
     try {
-      const response = await fetch('/api/metrics/security');
-      if (!response.ok) throw new Error('Failed to fetch security metrics');
-      
-      const data = await response.json();
+      const response = await apiClient.get('/metrics/security');
+      const data = response.data;
       
       // Debug the API response
       console.log("Security metrics API response:", JSON.stringify(data));
@@ -598,19 +615,14 @@ export function SecurityAlertsDashboard() {
     
     console.log(`Fetching details for event ID: ${eventId}`);
     try {
-      // First, try the primary event endpoint
-      const response = await fetch(`/api/events/${eventId}`);
+      // Use apiClient instead of fetch with correct path
+      const response = await apiClient.get(`/events/${eventId}`);
       
       // Log the response status
-      console.log(`API Response status: ${response.status} ${response.statusText}`);
-      
-      if (!response.ok) {
-        console.warn(`Failed to fetch event details from primary endpoint: ${response.status} ${response.statusText}`);
-        return null;
-      }
+      console.log(`API Response status: ${response.status}`);
       
       // Get the data and log it
-      const data = await response.json();
+      const data = response.data;
       console.log('Event details response:', data);
       
       return data;
@@ -680,7 +692,7 @@ export function SecurityAlertsDashboard() {
 
   // JSON Viewer component
   const JsonViewer = ({data}: {data: any}) => {
-    if (!data) return <div>No data available</div>;
+    if (!data) return <Text>No data available</Text>;
     
     let content = data;
     if (typeof data === 'string') {
@@ -752,12 +764,12 @@ export function SecurityAlertsDashboard() {
   if (error && alerts.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-96 text-center">
-        <ExclamationTriangleIcon className="h-16 w-16 text-red-500 mb-6" />
+        <FaExclamationTriangle className="h-16 w-16 text-red-500 mb-6" />
         <Title className="mb-4">Unable to Load Security Alerts</Title>
         <Text className="text-lg mb-6 max-w-xl">{error}</Text>
         <div className="flex space-x-4">
           <Button 
-            icon={ArrowPathIcon} 
+            icon={FaSync} 
             color="blue" 
             onClick={() => {
               setLoading(true);
@@ -776,14 +788,14 @@ export function SecurityAlertsDashboard() {
   if (!loading && alerts.length === 0 && !error) {
     return (
       <div className="flex flex-col items-center justify-center h-96 text-center">
-        <ShieldExclamationIcon className="h-16 w-16 text-green-500 mb-6" />
+        <FaShieldAlt className="h-16 w-16 text-green-500 mb-6" />
         <Title className="mb-4">No Security Alerts Found</Title>
         <Text className="text-lg mb-6 max-w-xl">
           Good news! No security alerts have been detected in your system.
         </Text>
         <div className="flex space-x-4">
           <Button 
-            icon={ArrowPathIcon} 
+            icon={FaSync} 
             color="blue" 
             onClick={() => {
               setLoading(true);
@@ -823,7 +835,7 @@ export function SecurityAlertsDashboard() {
         <div className="flex justify-between items-center">
           <div className="flex items-center space-x-2">
             <Button 
-              icon={ArrowUturnLeftIcon} 
+              icon={FaChevronLeft} 
               variant="light" 
               onClick={handleBackFromDetail}
               color="gray"
@@ -842,7 +854,7 @@ export function SecurityAlertsDashboard() {
             </Button>
             {selectedAlert.event_id && (
               <Button
-                icon={ArrowTopRightOnSquareIcon}
+                icon={FaExternalLinkAlt}
                 variant="light"
                 onClick={() => viewRelatedEvents(selectedAlert.id, selectedAlert.event_id)}
               >
@@ -904,13 +916,13 @@ export function SecurityAlertsDashboard() {
               {selectedAlert.eventDetails ? (
                 selectedAlert.eventDetails.fetchFailed ? (
                   <div className="text-center py-6">
-                    <ExclamationTriangleIcon className="h-10 w-10 mx-auto text-amber-500 mb-2" />
+                    <FaExclamationTriangle className="h-10 w-10 mx-auto text-amber-500 mb-2" />
                     <Text className="text-amber-700">Could not retrieve event details</Text>
                     <Text className="text-sm text-gray-500 mt-2">
                       Event ID {selectedAlert.event_id} exists, but data could not be loaded.
                     </Text>
                     <Button
-                      icon={ArrowPathIcon}
+                      icon={FaSync}
                       variant="light"
                       color="amber"
                       className="mt-3"
@@ -961,7 +973,7 @@ export function SecurityAlertsDashboard() {
                 </div>
               ) : (
                 <div className="text-center py-10">
-                  <ExclamationTriangleIcon className="h-10 w-10 mx-auto text-gray-400 mb-2" />
+                  <FaExclamationTriangle className="h-10 w-10 mx-auto text-gray-400 mb-2" />
                   <Text>No associated event found</Text>
                 </div>
               )}
@@ -1052,7 +1064,7 @@ export function SecurityAlertsDashboard() {
           <div className="flex items-center space-x-2 text-sm text-gray-500">
             <span>Last updated: {lastUpdated.toLocaleString()}</span>
             <Button 
-              icon={ArrowPathIcon} 
+              icon={FaSync} 
               variant="light" 
               color="gray" 
               size="xs"
@@ -1081,7 +1093,7 @@ export function SecurityAlertsDashboard() {
               <Grid numItemsMd={2} numItemsLg={4} className="gap-6">
                 <Card decoration="top" decorationColor="red">
                   <div className="flex items-center space-x-4">
-                    <ShieldExclamationIcon className="h-8 w-8 text-red-500" />
+                    <FaShieldAlt className="h-8 w-8 text-red-500" />
                     <div>
                       <Text>Critical Alerts</Text>
                       <div className="text-2xl font-bold text-red-500">{metrics.critical}</div>
@@ -1091,7 +1103,7 @@ export function SecurityAlertsDashboard() {
 
                 <Card decoration="top" decorationColor="blue">
                   <div className="flex items-center space-x-4">
-                    <ExclamationTriangleIcon className="h-8 w-8 text-blue-500" />
+                    <FaExclamationTriangle className="h-8 w-8 text-blue-500" />
                     <div>
                       <Text>Total Alerts</Text>
                       <div className="text-2xl font-bold text-blue-500">{metrics.total}</div>
@@ -1112,18 +1124,20 @@ export function SecurityAlertsDashboard() {
                   <Text>Alert Trend (7d)</Text>
                   <div className="h-10 mt-2">
                     {metrics.trend.length > 0 && (
-                      <BarChart
-                        data={metrics.trend}
-                        index="date"
-                        categories={["count"]}
-                        colors={["blue"]}
-                        showXAxis={false}
-                        showYAxis={false}
-                        showLegend={false}
-                        showGridLines={false}
-                        showAnimation={false}
-                        noDataText=""
-                      />
+                      <StableChartContainer className="h-10">
+                        <BarChart
+                          data={metrics.trend}
+                          index="date"
+                          categories={["count"]}
+                          colors={["blue"]}
+                          showXAxis={false}
+                          showYAxis={false}
+                          showLegend={false}
+                          showGridLines={false}
+                          showAnimation={false}
+                          noDataText=""
+                        />
+                      </StableChartContainer>
                     )}
                   </div>
                 </Card>
@@ -1166,12 +1180,13 @@ export function SecurityAlertsDashboard() {
 
                 <Card>
                   <Title>Alerts by Severity</Title>
-                  <SimpleDonutChart
-                    className="mt-6"
-                    data={metrics.bySeverity}
-                    valueFormatter={(value) => `${value} alerts`}
-                    colors={["emerald", "amber", "rose", "red"]}
-                  />
+                  <StableChartContainer className="mt-6">
+                    <SimpleDonutChart
+                      data={metrics.bySeverity}
+                      valueFormatter={(value) => `${value} alerts`}
+                      colors={["emerald", "amber", "rose", "red"]}
+                    />
+                  </StableChartContainer>
                 </Card>
               </Grid>
             </div>
@@ -1183,21 +1198,21 @@ export function SecurityAlertsDashboard() {
               <Flex>
                 <div className="flex-grow">
                   <TextInput
-                    icon={MagnifyingGlassIcon}
+                    icon={FaSearch}
                     placeholder="Search alerts..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
                 </div>
                 <Button
-                  icon={AdjustmentsHorizontalIcon}
+                  icon={FaFilter}
                   variant="secondary"
                   onClick={() => setShowFilters(!showFilters)}
                 >
                   Filters
                 </Button>
                 <Button
-                  icon={DocumentArrowDownIcon}
+                  icon={FaFileDownload}
                   onClick={exportAlerts}
                 >
                   Export
@@ -1284,8 +1299,8 @@ export function SecurityAlertsDashboard() {
                           <span>Timestamp</span>
                           {sortField === 'timestamp' && (
                             sortDirection === 'asc' 
-                              ? <ChevronUpIcon className="h-4 w-4" /> 
-                              : <ChevronDownIcon className="h-4 w-4" />
+                              ? <FaChevronUp className="h-4 w-4" /> 
+                              : <FaChevronDown className="h-4 w-4" />
                           )}
                         </div>
                       </TableHeaderCell>
@@ -1294,8 +1309,8 @@ export function SecurityAlertsDashboard() {
                           <span>Type</span>
                           {sortField === 'alert_type' && (
                             sortDirection === 'asc' 
-                              ? <ChevronUpIcon className="h-4 w-4" /> 
-                              : <ChevronDownIcon className="h-4 w-4" />
+                              ? <FaChevronUp className="h-4 w-4" /> 
+                              : <FaChevronDown className="h-4 w-4" />
                           )}
                         </div>
                       </TableHeaderCell>
@@ -1304,8 +1319,8 @@ export function SecurityAlertsDashboard() {
                           <span>Severity</span>
                           {sortField === 'severity' && (
                             sortDirection === 'asc' 
-                              ? <ChevronUpIcon className="h-4 w-4" /> 
-                              : <ChevronDownIcon className="h-4 w-4" />
+                              ? <FaChevronUp className="h-4 w-4" /> 
+                              : <FaChevronDown className="h-4 w-4" />
                           )}
                         </div>
                       </TableHeaderCell>
@@ -1330,7 +1345,7 @@ export function SecurityAlertsDashboard() {
 
                 {filteredAlerts.length === 0 && (
                   <div className="text-center py-10">
-                    <ExclamationTriangleIcon className="h-10 w-10 mx-auto text-gray-400 mb-2" />
+                    <FaExclamationTriangle className="h-10 w-10 mx-auto text-gray-400 mb-2" />
                     <Text>No alerts found matching your filters</Text>
                   </div>
                 )}
@@ -1368,37 +1383,40 @@ export function SecurityAlertsDashboard() {
               <Grid numItemsMd={2} className="gap-6">
                 <Card>
                   <Title>Alerts by Type</Title>
-                  <BarChart
-                    className="mt-6"
-                    data={metrics.byType}
-                    index="type"
-                    categories={["count"]}
-                    colors={["blue"]}
-                    valueFormatter={(value) => `${value} alerts`}
-                  />
+                  <StableChartContainer className="mt-6">
+                    <BarChart
+                      data={metrics.byType}
+                      index="type"
+                      categories={["count"]}
+                      colors={["blue"]}
+                      valueFormatter={(value) => `${value} alerts`}
+                    />
+                  </StableChartContainer>
                 </Card>
 
                 <Card>
                   <Title>Alerts by Severity</Title>
-                  <SimpleDonutChart
-                    className="mt-6"
-                    data={metrics.bySeverity}
-                    valueFormatter={(value) => `${value} alerts`}
-                    colors={["emerald", "amber", "rose", "red"]}
-                  />
+                  <StableChartContainer className="mt-6">
+                    <SimpleDonutChart
+                      data={metrics.bySeverity}
+                      valueFormatter={(value) => `${value} alerts`}
+                      colors={["emerald", "amber", "rose", "red"]}
+                    />
+                  </StableChartContainer>
                 </Card>
               </Grid>
 
               <Card>
                 <Title>Alert Trend (Last 7 Days)</Title>
-                <BarChart
-                  className="mt-6 h-80"
-                  data={metrics.trend}
-                  index="date"
-                  categories={["count"]}
-                  colors={["blue"]}
-                  valueFormatter={(value) => `${value} alerts`}
-                />
+                <StableChartContainer className="mt-6 h-80">
+                  <BarChart
+                    data={metrics.trend}
+                    index="date"
+                    categories={["count"]}
+                    colors={["blue"]}
+                    valueFormatter={(value) => `${value} alerts`}
+                  />
+                </StableChartContainer>
               </Card>
 
               <Card>
@@ -1427,7 +1445,7 @@ export function SecurityAlertsDashboard() {
                 </Grid>
                 <div className="mt-6 flex justify-end">
                   <Button
-                    icon={DocumentArrowDownIcon}
+                    icon={FaFileDownload}
                     onClick={exportAlerts}
                   >
                     Export Compliance Report

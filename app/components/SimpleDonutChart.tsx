@@ -77,7 +77,7 @@ export function SimpleDonutChart({
         >
           <div className="w-32 h-32 bg-white rounded-full flex flex-col items-center justify-center">
             <Text className="text-gray-500 text-sm">Total</Text>
-            <div className="text-xl font-bold">{total}</div>
+            <span className="text-xl font-bold">{total}</span>
           </div>
         </div>
       </div>

@@ -1,33 +1,78 @@
 'use client';
 
+import React from 'react';
 import { useEffect, useState } from 'react';
 import { Card, Metric, Text, Flex, Grid } from '@tremor/react';
 import { 
-  ClockIcon, 
-  ExclamationTriangleIcon, 
-  ShieldExclamationIcon,
-  BoltIcon
-} from '@heroicons/react/24/outline';
+  FaServer, 
+  FaClock, 
+  FaExclamationTriangle, 
+  FaBolt
+} from 'react-icons/fa';
 import { useDataUpdates } from '../lib/hooks/useDataUpdates';
-import { DataUpdateType } from '../../src/lib/db/data-update-service';
+import { DataUpdateType } from '../lib/types';
 import { ConnectionStatus } from './ConnectionStatus';
 
-// Define metric data type
-export interface MetricsData {
-  title: string;
-  value: number | string;
+type Metric = {
+  name: string;
+  stat: string | number;
+  statLabel?: string;
   change?: number;
-  changeType?: 'increase' | 'decrease' | string;
-  icon?: React.ReactNode;
-}
+  changeType?: 'increase' | 'decrease' | 'moderateIncrease' | 'moderateDecrease' | 'unchanged';
+  icon: React.ComponentType<any>;
+  iconBgColor: string;
+  iconTextColor: string;
+};
 
-// Define props interface
 export interface DashboardMetricsProps {
-  data?: MetricsData[];
+  metrics: Metric[];
   isLoading?: boolean;
   className?: string;
   cardClassName?: string;
 }
+
+// Default metrics for demo purposes
+const defaultMetrics: Metric[] = [
+  {
+    name: 'Total Agents',
+    stat: '42',
+    change: 12,
+    changeType: 'increase',
+    icon: FaServer,
+    iconBgColor: 'bg-blue-50',
+    iconTextColor: 'text-blue-500',
+  },
+  {
+    name: 'Uptime',
+    stat: '99.9%',
+    statLabel: '8m downtime',
+    change: 0.1,
+    changeType: 'moderateIncrease',
+    icon: FaClock,
+    iconBgColor: 'bg-emerald-50',
+    iconTextColor: 'text-emerald-500',
+  },
+  {
+    name: 'Alerts',
+    stat: '3',
+    statLabel: '0 critical',
+    change: 25,
+    changeType: 'decrease',
+    icon: FaExclamationTriangle,
+    iconBgColor: 'bg-amber-50',
+    iconTextColor: 'text-amber-500',
+  },
+  {
+    name: 'Processing Rate',
+    stat: '1.2k',
+    statLabel: 'logs/sec',
+    change: 12.3,
+    changeType: 'increase',
+    icon: FaBolt,
+    iconBgColor: 'bg-violet-50',
+    iconTextColor: 'text-violet-500',
+  },
+];
 
 // In a real implementation, this would fetch from the API
 async function fetchMetrics() {
@@ -50,12 +95,12 @@ async function fetchMetrics() {
 }
 
 export default function DashboardMetrics({ 
-  data, 
+  metrics, 
   isLoading: externalLoading, 
   className = '', 
   cardClassName = '' 
 }: DashboardMetricsProps) {
-  const [metrics, setMetrics] = useState({
+  const [metricsData, setMetricsData] = useState({
     totalRequests: 0,
     avgResponseTime: 0,
     blockedRequests: 0,
@@ -75,7 +120,7 @@ export default function DashboardMetrics({
       if (update.type === DataUpdateType.EVENTS || update.type === DataUpdateType.ALL) {
         // Update total requests count if new events arrived
         if (update.data && Array.isArray(update.data) && update.data.length > 0) {
-          setMetrics(prev => ({
+          setMetricsData(prev => ({
             ...prev,
             totalRequests: prev.totalRequests + update.data.length
           }));
@@ -90,7 +135,7 @@ export default function DashboardMetrics({
             alert.action_taken !== 'blocked' && alert.severity !== 'LOW'
           ).length;
           
-          setMetrics(prev => ({
+          setMetricsData(prev => ({
             ...prev,
             blockedRequests: prev.blockedRequests + blockedCount,
             suspiciousRequests: prev.suspiciousRequests + suspiciousCount
@@ -110,7 +155,7 @@ export default function DashboardMetrics({
               (sum, metric) => sum + metric.value, 0
             ) / responseTimeMetrics.length;
             
-            setMetrics(prev => ({
+            setMetricsData(prev => ({
               ...prev,
               avgResponseTime: Math.round(avgTime)
             }));
@@ -122,7 +167,7 @@ export default function DashboardMetrics({
 
   useEffect(() => {
     // Only fetch from API if no data is provided as props
-    if (data) {
+    if (metrics) {
       setLoading(false);
       return;
     }
@@ -130,22 +175,22 @@ export default function DashboardMetrics({
     const getMetrics = async () => {
       setLoading(true);
       const data = await fetchMetrics();
-      setMetrics(data);
+      setMetricsData(data);
       setLoading(false);
     };
 
     getMetrics();
-  }, [data]);
+  }, [metrics]);
 
   // Use external loading state if provided
   const isLoading = externalLoading !== undefined ? externalLoading : loading;
 
   // If data is provided through props, render those instead
-  if (data && !isLoading) {
+  if (metrics && !isLoading) {
     return (
       <div className={`space-y-6 ${className}`}>
         <Grid numItemsMd={2} numItemsLg={4} className="gap-6">
-          {data.map((item, index) => (
+          {metrics.map((item, index) => (
             <Card 
               key={index} 
               decoration="top" 
@@ -153,10 +198,10 @@ export default function DashboardMetrics({
               className={cardClassName}
             >
               <Flex justifyContent="start" className="space-x-4">
-                {item.icon || <BoltIcon className="h-8 w-8 text-blue-500" />}
+                <item.icon className="h-8 w-8 text-blue-500" />
                 <div>
-                  <Text>{item.title}</Text>
-                  <Metric>{item.value}</Metric>
+                  <Text>{item.name}</Text>
+                  <Metric>{item.stat}</Metric>
                   {item.change && (
                     <Text color={item.changeType === 'increase' ? 'blue' : 'red'}>
                       {item.changeType === 'increase' ? '+' : '-'}{item.change}%
@@ -188,7 +233,7 @@ export default function DashboardMetrics({
   }
 
   // Show empty state if no data
-  if (!data && !metrics.totalRequests) {
+  if (!metrics && !metricsData.totalRequests) {
     return (
       <div className={`p-6 text-center ${className}`}>
         <p className="text-lg text-gray-500">No metrics available</p>
@@ -207,40 +252,40 @@ export default function DashboardMetrics({
       <Grid numItemsMd={2} numItemsLg={4} className="gap-6">
         <Card decoration="top" decorationColor="blue" className={cardClassName}>
           <Flex justifyContent="start" className="space-x-4">
-            <BoltIcon className="h-8 w-8 text-blue-500" />
+            <FaBolt className="h-8 w-8 text-blue-500" />
             <div>
               <Text>Total Requests</Text>
-              <Metric>{metrics.totalRequests.toLocaleString()}</Metric>
+              <Metric>{metricsData.totalRequests.toLocaleString()}</Metric>
             </div>
           </Flex>
         </Card>
         
         <Card decoration="top" decorationColor="teal" className={cardClassName}>
           <Flex justifyContent="start" className="space-x-4">
-            <ClockIcon className="h-8 w-8 text-teal-500" />
+            <FaClock className="h-8 w-8 text-teal-500" />
             <div>
               <Text>Avg Response Time</Text>
-              <Metric>{`${metrics.avgResponseTime.toLocaleString()} ms`}</Metric>
+              <Metric>{`${metricsData.avgResponseTime.toLocaleString()} ms`}</Metric>
             </div>
           </Flex>
         </Card>
         
         <Card decoration="top" decorationColor="red" className={cardClassName}>
           <Flex justifyContent="start" className="space-x-4">
-            <ShieldExclamationIcon className="h-8 w-8 text-red-500" />
+            <FaExclamationTriangle className="h-8 w-8 text-red-500" />
             <div>
               <Text>Blocked Requests</Text>
-              <Metric>{metrics.blockedRequests.toLocaleString()}</Metric>
+              <Metric>{metricsData.blockedRequests.toLocaleString()}</Metric>
             </div>
           </Flex>
         </Card>
         
         <Card decoration="top" decorationColor="amber" className={cardClassName}>
           <Flex justifyContent="start" className="space-x-4">
-            <ExclamationTriangleIcon className="h-8 w-8 text-amber-500" />
+            <FaExclamationTriangle className="h-8 w-8 text-amber-500" />
             <div>
               <Text>Suspicious Requests</Text>
-              <Metric>{metrics.suspiciousRequests.toLocaleString()}</Metric>
+              <Metric>{metricsData.suspiciousRequests.toLocaleString()}</Metric>
             </div>
           </Flex>
         </Card>

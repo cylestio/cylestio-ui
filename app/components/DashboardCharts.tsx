@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Card, Title, AreaChart, DonutChart, BarChart, Flex } from '@tremor/react'
 import { SimpleDonutChart } from './SimpleDonutChart'
+import { StableChartContainer } from './StableChartContainer'
 
 // Define chart data item type
 export type ChartDataItem = {
@@ -134,37 +135,40 @@ export default function DashboardCharts({
             <Card key={chart.id} className={`flex-1 min-w-[300px] ${chartClassName}`}>
               <Title>{chart.title}</Title>
               {chart.type === 'bar' && (
-                <BarChart
-                  className="h-72 mt-4"
-                  data={chart.data}
-                  index={chart.categories?.[0] || 'category'}
-                  categories={[chart.categories?.[1] || 'value']}
-                  colors={chart.colors || colors.bar}
-                  showLegend={false}
-                  showAnimation={true}
-                />
+                <StableChartContainer className="h-72 mt-4">
+                  <BarChart
+                    data={chart.data}
+                    index={chart.categories?.[0] || 'category'}
+                    categories={[chart.categories?.[1] || 'value']}
+                    colors={chart.colors || colors.bar}
+                    showLegend={false}
+                    showAnimation={true}
+                  />
+                </StableChartContainer>
               )}
               {(chart.type === 'line' || chart.type === 'area') && (
-                <AreaChart
-                  className="h-72 mt-4"
-                  data={chart.data}
-                  index={chart.categories?.[0] || 'category'}
-                  categories={[chart.categories?.[1] || 'value']}
-                  colors={chart.colors || colors.area}
-                  showLegend={false}
-                  showAnimation={true}
-                />
+                <StableChartContainer className="h-72 mt-4">
+                  <AreaChart
+                    data={chart.data}
+                    index={chart.categories?.[0] || 'category'}
+                    categories={[chart.categories?.[1] || 'value']}
+                    colors={chart.colors || colors.area}
+                    showLegend={false}
+                    showAnimation={true}
+                  />
+                </StableChartContainer>
               )}
               {chart.type === 'pie' && (
-                <SimpleDonutChart
-                  className="h-72 mt-4"
-                  data={chart.data.map((item: any) => ({
-                    name: String(item[chart.categories?.[0] || 'name']),
-                    count: Number(item[chart.categories?.[1] || 'value'])
-                  }))}
-                  colors={chart.colors || Object.values(colors.donut)}
-                  valueFormatter={(value) => `${value}`}
-                />
+                <StableChartContainer className="h-72 mt-4">
+                  <SimpleDonutChart
+                    data={chart.data.map((item: any) => ({
+                      name: String(item[chart.categories?.[0] || 'name']),
+                      count: Number(item[chart.categories?.[1] || 'value'])
+                    }))}
+                    colors={chart.colors || Object.values(colors.donut)}
+                    valueFormatter={(value) => `${value}`}
+                  />
+                </StableChartContainer>
               )}
             </Card>
           ))}
@@ -190,44 +194,47 @@ export default function DashboardCharts({
       <Flex className={`gap-6 ${gridClassName}`}>
         <Card className={`flex-1 ${chartClassName}`}>
           <Title>Calls Per Minute</Title>
-          <AreaChart
-            className="h-72 mt-4"
-            data={chartData.callsPerMinute}
-            index="minute"
-            categories={['calls']}
-            colors={colors.area}
-            showLegend={false}
-            showAnimation={true}
-            valueFormatter={value => `${value} calls`}
-          />
+          <StableChartContainer className="h-72 mt-4">
+            <AreaChart
+              data={chartData.callsPerMinute}
+              index="minute"
+              categories={['calls']}
+              colors={colors.area}
+              showLegend={false}
+              showAnimation={true}
+              valueFormatter={value => `${value} calls`}
+            />
+          </StableChartContainer>
         </Card>
 
         <Card className={`flex-1 ${chartClassName}`}>
           <Title>Alert Distribution</Title>
-          <SimpleDonutChart
-            className="h-72 mt-4"
-            data={chartData.alertDistribution.map(item => ({
-              name: String(item.name || ''),
-              count: Number(item.value || 0)
-            }))}
-            colors={Object.values(colors.donut)}
-            valueFormatter={value => `${value} events`}
-          />
+          <StableChartContainer className="h-72 mt-4">
+            <SimpleDonutChart
+              data={chartData.alertDistribution.map(item => ({
+                name: String(item.name || ''),
+                count: Number(item.value || 0)
+              }))}
+              colors={Object.values(colors.donut)}
+              valueFormatter={value => `${value} events`}
+            />
+          </StableChartContainer>
         </Card>
       </Flex>
 
       <Card className={chartClassName}>
         <Title>Alerts Over Time</Title>
-        <BarChart
-          className="h-72 mt-4"
-          data={chartData.alertsOverTime}
-          index="date"
-          categories={['count']}
-          colors={colors.bar}
-          showLegend={false}
-          showAnimation={true}
-          valueFormatter={value => `${value} alerts`}
-        />
+        <StableChartContainer className="h-72 mt-4">
+          <BarChart
+            data={chartData.alertsOverTime}
+            index="date"
+            categories={['count']}
+            colors={colors.bar}
+            showLegend={false}
+            showAnimation={true}
+            valueFormatter={value => `${value} alerts`}
+          />
+        </StableChartContainer>
       </Card>
     </div>
   )

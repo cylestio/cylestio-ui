@@ -4,22 +4,28 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import {
-  HomeIcon,
-  ClockIcon,
-  ExclamationTriangleIcon,
-  ChartBarIcon,
-  Cog6ToothIcon,
-  UserGroupIcon,
-} from '@heroicons/react/24/outline'
+  FaHome,
+  FaClock,
+  FaExclamationTriangle,
+  FaServer,
+  FaShieldAlt,
+  FaSearch,
+  FaTerminal,
+  FaNetworkWired
+} from 'react-icons/fa'
 import { useEffect, useState } from 'react'
 
 const navigation = [
-  { name: 'Dashboard', href: '/', icon: HomeIcon },
-  { name: 'Agents', href: '/agents', icon: UserGroupIcon },
-  { name: 'Events', href: '/events', icon: ClockIcon },
-  { name: 'Alerts', href: '/alerts', icon: ExclamationTriangleIcon },
-  { name: 'Analytics', href: '/analytics', icon: ChartBarIcon },
-  { name: 'Settings', href: '/settings', icon: Cog6ToothIcon },
+  { name: 'Dashboard', href: '/', icon: FaHome },
+  { name: 'Agents', href: '/agents', icon: FaServer },
+  { name: 'Events', href: '/events', icon: FaClock },
+  { name: 'Alerts', href: '/alerts', icon: FaExclamationTriangle },
+  { name: 'API Status', href: '/api-status', icon: FaNetworkWired },
+  
+  // Disabled/not implemented pages - hidden from navigation
+  // { name: 'Rules', href: '/rules', icon: FaShieldAlt, disabled: true },
+  // { name: 'Search', href: '/search', icon: FaSearch, disabled: true },
+  // { name: 'Logs', href: '/logs', icon: FaTerminal, disabled: true },
 ]
 
 // Define and export props interface
@@ -72,13 +78,20 @@ export default function Sidebar({ navigation: customNavigation, title = 'Cylesti
                 key={item.name}
                 href={item.href}
                 data-testid={`nav-${item.name.toLowerCase()}`}
-                className={`flex items-center px-2 py-2 text-sm font-medium rounded-md ${
-                  isActive
-                    ? 'text-blue-700 bg-blue-50'
+                className={`
+                  group flex items-center px-2 py-2 text-sm font-medium rounded-md 
+                  ${isActive 
+                    ? 'bg-gray-100 text-blue-600' 
                     : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                }`}
+                  }
+                `}
               >
-                <item.icon className="w-5 h-5 mr-3" aria-hidden="true" />
+                <item.icon
+                  className={`mr-3 h-5 w-5 ${
+                    isActive ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-500'
+                  }`}
+                  aria-hidden="true"
+                />
                 {item.name}
               </Link>
             )

@@ -20,55 +20,71 @@ import {
   Grid,
   Metric,
 } from '@tremor/react';
-import { MagnifyingGlassIcon, ArrowPathIcon, ChevronRightIcon, ArrowLeftIcon } from '@heroicons/react/24/outline';
+import { FaSearch, FaSync, FaChevronRight, FaChevronLeft } from 'react-icons/fa';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-
-// Define types
-type AgentData = {
-  id: number;
-  name: string;
-  status: 'active' | 'inactive' | 'error';
-  type: string;
-  last_active: string;
-  event_count: number;
-};
+import { usePagination } from '@/hooks/usePagination';
+import { Agent } from '@/types/api';
+import apiClient, { EnhancedApiError, createEnhancedApiError } from '@/lib/api/client';
+import { LoadingState } from '@/components/ui/loading-state';
+import { ErrorDisplay } from '@/components/ui/error-display';
+import { Pagination } from '@/components/ui/pagination';
 
 export function AgentsDashboard() {
   const router = useRouter();
-  const [agents, setAgents] = useState<AgentData[]>([]);
-  const [filteredAgents, setFilteredAgents] = useState<AgentData[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
-  const [sortField, setSortField] = useState<keyof AgentData>('last_active');
+  const [sortField, setSortField] = useState<string>('last_active');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [refreshInterval, setRefreshInterval] = useState<number>(30000); // 30 seconds by default
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [filteredAgents, setFilteredAgents] = useState<Agent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<EnhancedApiError | null>(null);
+  const [data, setData] = useState<{items: Agent[], total: number} | null>(null);
 
-  // Function to fetch agents
+  // Use the pagination hook
+  const pagination = usePagination({
+    initialPage: 1,
+    initialPageSize: 10,
+    initialSortBy: 'last_active',
+    initialSortOrder: 'desc'
+  });
+
   const fetchAgents = async () => {
+    setLoading(true);
+    setError(null);
+    
     try {
-      const response = await fetch('/api/agents');
-      if (!response.ok) throw new Error('Failed to fetch agents');
-      const data = await response.json();
-      setAgents(data);
+      const queryParams = {
+        page: pagination.page,
+        page_size: pagination.pageSize,
+        sort_by: sortField,
+        sort_order: sortDirection
+      };
+      
+      const response = await apiClient.get('/agents/', { params: queryParams });
+      setData(response.data);
       setLastUpdated(new Date());
-      setError(null);
     } catch (err) {
       console.error('Error fetching agents:', err);
-      setError('Failed to load agents. Please try again later.');
+      
+      // More detailed error handling
+      if (err instanceof Error) {
+        setError(createEnhancedApiError(err));
+      } else {
+        setError(createEnhancedApiError('Failed to load agents. Please try again later.'));
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  // Initial data fetch
+  // Initial fetch
   useEffect(() => {
     fetchAgents();
-  }, []);
+  }, [pagination.page, pagination.pageSize, sortField, sortDirection]);
 
   // Set up polling for real-time updates
   useEffect(() => {
@@ -81,9 +97,11 @@ export function AgentsDashboard() {
     return () => clearInterval(intervalId);
   }, [refreshInterval]);
 
-  // Filter and sort agents whenever dependencies change
+  // Filter agents whenever dependencies change
   useEffect(() => {
-    let result = [...agents];
+    if (!data?.items) return;
+    
+    let result = [...data.items];
 
     // Apply search filter
     if (searchQuery) {
@@ -91,50 +109,43 @@ export function AgentsDashboard() {
       result = result.filter(
         (agent) =>
           agent.name.toLowerCase().includes(lowerQuery) ||
-          agent.type.toLowerCase().includes(lowerQuery)
+          agent.description.toLowerCase().includes(lowerQuery)
       );
     }
 
     // Apply status filter
     if (statusFilter !== 'all') {
-      result = result.filter((agent) => agent.status === statusFilter);
+      const isActive = statusFilter === 'active';
+      result = result.filter((agent) => agent.active === isActive);
     }
 
     // Apply type filter
     if (typeFilter !== 'all') {
-      result = result.filter((agent) => agent.type === typeFilter);
+      result = result.filter((agent) => agent.version === typeFilter);
     }
 
-    // Apply sorting
-    result.sort((a, b) => {
-      const fieldA = a[sortField];
-      const fieldB = b[sortField];
-
-      // Handle string comparison
-      if (typeof fieldA === 'string' && typeof fieldB === 'string') {
-        return sortDirection === 'asc'
-          ? fieldA.localeCompare(fieldB)
-          : fieldB.localeCompare(fieldA);
-      }
-
-      // Handle number comparison
-      return sortDirection === 'asc'
-        ? (fieldA as number) - (fieldB as number)
-        : (fieldB as number) - (fieldA as number);
-    });
-
     setFilteredAgents(result);
-  }, [agents, searchQuery, statusFilter, typeFilter, sortField, sortDirection]);
+  }, [data, searchQuery, statusFilter, typeFilter]);
 
   // Get unique agent types for the filter
-  const agentTypes = Array.from(new Set(agents.map((agent) => agent.type)));
+  const agentTypes = data?.items ? Array.from(new Set(data.items.map((agent) => agent.version))) : [];
+
+  // Manual refresh handler
+  const handleRefresh = () => {
+    fetchAgents();
+  };
+
+  // Handle row click to navigate to agent details
+  const handleRowClick = (agentId: string) => {
+    router.push(`/agents/${agentId}`);
+  };
 
   // Format the last active date
-  const formatDate = (dateString: string | null) => {
+  const formatDate = (dateString: string | Date | null) => {
     if (!dateString) return 'Never';
     
     try {
-      const date = new Date(dateString);
+      const date = dateString instanceof Date ? dateString : new Date(dateString);
       const now = new Date();
       const diffMs = now.getTime() - date.getTime();
       const diffSecs = Math.floor(diffMs / 1000);
@@ -153,81 +164,75 @@ export function AgentsDashboard() {
     }
   };
 
-  // Status badge component
-  const StatusBadge = ({ status }: { status: string }) => {
-    switch (status) {
-      case 'active':
-        return <Badge color="green">Active</Badge>;
-      case 'inactive':
-        return <Badge color="gray">Inactive</Badge>;
-      case 'error':
-        return <Badge color="red">Error</Badge>;
-      default:
-        return <Badge color="gray">{status}</Badge>;
-    }
-  };
-
-  const handleRowClick = (agentId: number) => {
-    router.push(`/agents/${agentId}`);
+  // Render status badge
+  const StatusBadge = ({ active }: { active: boolean }) => {
+    return (
+      <Badge
+        color={active ? 'green' : 'gray'}
+        icon={active ? undefined : undefined}
+      >
+        {active ? 'Active' : 'Inactive'}
+      </Badge>
+    );
   };
 
   return (
-    <div className="p-6">
+    <div className="p-4 mx-auto max-w-7xl">
       <Flex justifyContent="between" alignItems="center" className="mb-6">
-        <Flex alignItems="center" className="gap-2">
-          <Link href="/">
-            <Button variant="light" icon={ArrowLeftIcon}>
-              Back to Dashboard
-            </Button>
-          </Link>
+        <div>
           <Title>Agent Management</Title>
-        </Flex>
-        <Flex justifyContent="end" className="space-x-4">
-          <Select
-            value={refreshInterval.toString()}
-            onValueChange={(value) => setRefreshInterval(parseInt(value))}
-            className="w-40"
-          >
-            <SelectItem value="0">Manual refresh</SelectItem>
-            <SelectItem value="5000">5 seconds</SelectItem>
-            <SelectItem value="15000">15 seconds</SelectItem>
-            <SelectItem value="30000">30 seconds</SelectItem>
-            <SelectItem value="60000">1 minute</SelectItem>
-          </Select>
-          <Button
-            icon={ArrowPathIcon}
-            variant="light"
-            loading={loading}
-            onClick={() => fetchAgents()}
-          >
-            Refresh
-          </Button>
-        </Flex>
+          <Text>View and manage all registered agents</Text>
+        </div>
+        <div className="flex items-center gap-2">
+          <Text className="text-sm text-gray-500">
+            {lastUpdated
+              ? `Last updated: ${formatDate(lastUpdated)}`
+              : 'Not yet updated'}
+          </Text>
+          <div className="flex gap-2">
+            <Select
+              className="w-40"
+              value={refreshInterval.toString()}
+              onValueChange={(value) => setRefreshInterval(parseInt(value, 10))}
+            >
+              <SelectItem value="0">No auto-refresh</SelectItem>
+              <SelectItem value="5000">5 seconds</SelectItem>
+              <SelectItem value="10000">10 seconds</SelectItem>
+              <SelectItem value="30000">30 seconds</SelectItem>
+              <SelectItem value="60000">1 minute</SelectItem>
+            </Select>
+            <Button
+              variant="secondary"
+              icon={FaSync}
+              onClick={handleRefresh}
+              disabled={loading}
+            >
+              Refresh
+            </Button>
+            <Link href="/agents/new">
+              <Button>Add Agent</Button>
+            </Link>
+          </div>
+        </div>
       </Flex>
-
-      {lastUpdated && (
-        <Text className="text-xs text-gray-500 mb-4">
-          Last updated: {lastUpdated.toLocaleTimeString()}
-        </Text>
-      )}
 
       <Grid numItemsMd={3} className="gap-6 mb-6">
         <Card>
           <div className="h-28">
             <Text>Total Agents</Text>
-            <Metric>{agents.length}</Metric>
+            <Metric>{data?.total || 0}</Metric>
           </div>
         </Card>
         <Card>
           <div className="h-28">
             <Text>Active Agents</Text>
-            <Metric>{agents.filter(a => a.status === 'active').length}</Metric>
+            <Metric>{data?.items?.filter(a => a.active).length || 0}</Metric>
           </div>
         </Card>
         <Card>
           <div className="h-28">
-            <Text>Agents with Errors</Text>
-            <Metric>{agents.filter(a => a.status === 'error').length}</Metric>
+            <Text>Inactive Agents</Text>
+            <Metric>{data?.items?.filter(a => !a.active).length || 0}</Metric>
           </div>
         </Card>
       </Grid>
@@ -235,182 +240,127 @@ export function AgentsDashboard() {
       <Card>
         <Flex justifyContent="between" className="mb-4 gap-2">
           <TextInput
-            icon={MagnifyingGlassIcon}
+            icon={FaSearch}
             placeholder="Search agents..."
             className="max-w-sm"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
-          <Flex className="gap-2">
+          <div className="flex gap-2">
             <Select
-              value={statusFilter}
-              onValueChange={(value) => setStatusFilter(value)}
-              placeholder="Filter by status"
               className="w-40"
+              placeholder="Filter by status"
+              value={statusFilter}
+              onValueChange={setStatusFilter}
             >
-              <SelectItem value="all">All statuses</SelectItem>
+              <SelectItem value="all">All Statuses</SelectItem>
               <SelectItem value="active">Active</SelectItem>
               <SelectItem value="inactive">Inactive</SelectItem>
-              <SelectItem value="error">Error</SelectItem>
             </Select>
             <Select
-              value={typeFilter}
-              onValueChange={(value) => setTypeFilter(value)}
-              placeholder="Filter by type"
               className="w-40"
+              placeholder="Filter by type"
+              value={typeFilter}
+              onValueChange={setTypeFilter}
+              disabled={!agentTypes.length}
             >
-              <SelectItem value="all">All types</SelectItem>
+              <SelectItem value="all">All Types</SelectItem>
               {agentTypes.map((type) => (
                 <SelectItem key={type} value={type}>
                   {type}
                 </SelectItem>
               ))}
             </Select>
-          </Flex>
+            <Select
+              className="w-40"
+              value={`${sortField}-${sortDirection}`}
+              onValueChange={(value) => {
+                const [field, direction] = value.split('-');
+                setSortField(field);
+                setSortDirection(direction as 'asc' | 'desc');
+              }}
+            >
+              <SelectItem value="name-asc">Name (A-Z)</SelectItem>
+              <SelectItem value="name-desc">Name (Z-A)</SelectItem>
+              <SelectItem value="last_active-desc">
+                Most Recently Active
+              </SelectItem>
+              <SelectItem value="last_active-asc">Least Recently Active</SelectItem>
+            </Select>
+          </div>
         </Flex>
 
-        {error ? (
-          <Text color="red">{error}</Text>
+        {error && (
+          <div className="mb-4">
+            <ErrorDisplay 
+              error={error} 
+              title="Failed to load agents"
+              onRetry={fetchAgents}
+              onClear={() => setError(null)}
+              withDetails={true}
+            />
+          </div>
+        )}
+
+        {loading && !data?.items?.length ? (
+          <LoadingState message="Loading agents..." />
+        ) : filteredAgents.length === 0 ? (
+          <div className="py-10 text-center">
+            <Text className="text-gray-500">No agents found</Text>
+          </div>
         ) : (
           <Table>
             <TableHead>
               <TableRow>
-                <TableHeaderCell
-                  className="cursor-pointer"
-                  onClick={() => {
-                    if (sortField === 'id') {
-                      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-                    } else {
-                      setSortField('id');
-                      setSortDirection('asc');
-                    }
-                  }}
-                >
-                  ID
-                </TableHeaderCell>
-                <TableHeaderCell
-                  className="cursor-pointer"
-                  onClick={() => {
-                    if (sortField === 'name') {
-                      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-                    } else {
-                      setSortField('name');
-                      setSortDirection('asc');
-                    }
-                  }}
-                >
-                  Name
-                </TableHeaderCell>
-                <TableHeaderCell
-                  className="cursor-pointer"
-                  onClick={() => {
-                    if (sortField === 'status') {
-                      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-                    } else {
-                      setSortField('status');
-                      setSortDirection('asc');
-                    }
-                  }}
-                >
-                  Status
-                </TableHeaderCell>
-                <TableHeaderCell
-                  className="cursor-pointer"
-                  onClick={() => {
-                    if (sortField === 'type') {
-                      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-                    } else {
-                      setSortField('type');
-                      setSortDirection('asc');
-                    }
-                  }}
-                >
-                  Type
-                </TableHeaderCell>
-                <TableHeaderCell
-                  className="cursor-pointer"
-                  onClick={() => {
-                    if (sortField === 'last_active') {
-                      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-                    } else {
-                      setSortField('last_active');
-                      setSortDirection('desc');
-                    }
-                  }}
-                >
-                  Last Active
-                </TableHeaderCell>
-                <TableHeaderCell
-                  className="cursor-pointer"
-                  onClick={() => {
-                    if (sortField === 'event_count') {
-                      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-                    } else {
-                      setSortField('event_count');
-                      setSortDirection('desc');
-                    }
-                  }}
-                >
-                  Events
-                </TableHeaderCell>
-                <TableHeaderCell>Details</TableHeaderCell>
+                <TableHeaderCell>Name</TableHeaderCell>
+                <TableHeaderCell>Status</TableHeaderCell>
+                <TableHeaderCell>Version</TableHeaderCell>
+                <TableHeaderCell>Last Active</TableHeaderCell>
+                <TableHeaderCell>Description</TableHeaderCell>
+                <TableHeaderCell className="text-right">Actions</TableHeaderCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center">
-                    <Text>Loading...</Text>
+              {filteredAgents.map((agent) => (
+                <TableRow 
+                  key={agent.id} 
+                  className="cursor-pointer hover:bg-gray-50"
+                  onClick={() => handleRowClick(agent.agent_id)}
+                >
+                  <TableCell>{agent.name}</TableCell>
+                  <TableCell><StatusBadge active={agent.active} /></TableCell>
+                  <TableCell>{agent.version}</TableCell>
+                  <TableCell>{formatDate(agent.last_active)}</TableCell>
+                  <TableCell className="max-w-xs truncate">{agent.description}</TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      size="xs"
+                      variant="light"
+                      icon={FaChevronRight}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRowClick(agent.agent_id);
+                      }}
+                    >
+                      Details
+                    </Button>
                   </TableCell>
                 </TableRow>
-              ) : filteredAgents.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center">
-                    <Text>No agents found.</Text>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredAgents.map((agent) => (
-                  <TableRow
-                    key={agent.id}
-                    className="cursor-pointer hover:bg-gray-50"
-                    onClick={() => handleRowClick(agent.id)}
-                  >
-                    <TableCell>
-                      <Badge color="blue">#{agent.id}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Text>{agent.name}</Text>
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge status={agent.status} />
-                    </TableCell>
-                    <TableCell>
-                      <Text>{agent.type}</Text>
-                    </TableCell>
-                    <TableCell>
-                      <Text>{formatDate(agent.last_active)}</Text>
-                    </TableCell>
-                    <TableCell>
-                      <Text>{agent.event_count.toLocaleString()}</Text>
-                    </TableCell>
-                    <TableCell>
-                      <Link
-                        href={`/agents/${agent.id}`}
-                        onClick={(e) => e.stopPropagation()}
-                        className="text-blue-500 hover:text-blue-700"
-                      >
-                        <Flex className="items-center gap-1">
-                          <Text>View Details (ID: {agent.id})</Text>
-                          <ChevronRightIcon className="h-4 w-4" />
-                        </Flex>
-                      </Link>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
+              ))}
             </TableBody>
           </Table>
+        )}
+
+        {data && (
+          <div className="mt-4">
+            <Pagination
+              currentPage={pagination.page}
+              pageSize={pagination.pageSize}
+              totalItems={data.total}
+              onPageChange={pagination.setPage}
+              onPageSizeChange={pagination.setPageSize}
+            />
+          </div>
         )}
       </Card>
     </div>

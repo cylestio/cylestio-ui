@@ -81,4 +81,37 @@ declare module '@cylestio/ui-dashboard' {
     children: ReactNode
   }
   export const RootLayout: React.FC<RootLayoutProps>
+
+  // API Types
+  // Base types
+  export type { ApiResponse, ApiError, ApiErrorDetail, PaginationParams } from './api'
+  
+  // Resource types
+  export type { 
+    // Agent
+    Agent,
+    
+    // Events
+    Event, BaseEvent, EventType,
+    LlmRequestEvent, LlmResponseEvent, ToolCallEvent,
+    UserMessageEvent, AgentMessageEvent, SystemEvent,
+    
+    // Alerts
+    Alert,
+    
+    // Metrics
+    TokenUsageMetrics, ResponseTimeMetrics,
+    
+    // Telemetry
+    TelemetryEvent
+  } from './api'
+  
+  // Type guards
+  export { 
+    isLlmRequestEvent, isLlmResponseEvent, isToolCallEvent,
+    isUserMessageEvent, isAgentMessageEvent, isSystemEvent
+  } from './api'
+  
+  // API paths
+  export { API_PATHS } from './api'
 }

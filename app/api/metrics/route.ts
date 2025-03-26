@@ -1,28 +1,39 @@
-import { NextResponse } from 'next/server';
-import { DbConnection } from '../../../src/lib/db/connection';
-import { DbUtils } from '../../../src/lib/db/utils';
+import { NextRequest, NextResponse } from 'next/server';
+import axios from 'axios';
 
-export async function GET() {
+// API server URL
+const API_SERVER_URL = 'http://localhost:8000/api/v1';
+
+export async function GET(request: NextRequest) {
   try {
-    const dbConnection = DbConnection.getInstance();
-    const dbUtils = new DbUtils(dbConnection);
+    // Extract query parameters
+    const { searchParams } = new URL(request.url);
+    const agentId = searchParams.get('agent_id');
+    const startTime = searchParams.get('start_time');
+    const endTime = searchParams.get('end_time');
     
-    // Use hardcoded fallback values for this MVP since the performance_metrics 
-    // table structure might not match our expectations
-    const avgResponseTime = 245; // ms
-    const successRate = 98.5; // percent
+    // Build query parameters for the API
+    const queryParams = new URLSearchParams();
+    if (agentId) queryParams.append('agent_id', agentId);
+    if (startTime) queryParams.append('start_time', startTime);
+    if (endTime) queryParams.append('end_time', endTime);
     
-    // We'll skip the actual database queries for now since they're causing errors
-    // In a production version, we would adapt these queries to match the actual schema
-    
-    return NextResponse.json({
-      avgResponseTime,
-      successRate
-    });
+    // Fetch metrics from API
+    const response = await axios.get(
+      `${API_SERVER_URL}/metrics?${queryParams.toString()}`
+    );
+
+    return NextResponse.json(response.data);
   } catch (error) {
     console.error('Error fetching metrics:', error);
+
+    // Return proper error response
     return NextResponse.json(
-      { error: 'Failed to fetch metrics' },
+      {
+        status: 'error',
+        message: 'Failed to fetch metrics from API server',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
     );
   }
