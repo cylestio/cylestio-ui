@@ -34,55 +34,116 @@ export default function DashboardPage() {
       // First try /dashboard endpoint
       try {
         const response = await apiClient.get('/dashboard');
-        setData(response.data);
+        
+        // Handle different response formats
+        if (response.data.items) {
+          // Real API response format might use 'items'
+          setData(response.data.items);
+        } else {
+          // Mock API format
+          setData(response.data);
+        }
+        
         setLastUpdated(new Date());
         return;
       } catch (err) {
-        console.log('Failed to fetch from /dashboard endpoint, trying alternative endpoints...');
+        // Check if it's a 404 error, indicating the endpoint doesn't exist
+        if (err && typeof err === 'object' && 'statusCode' in err && err.statusCode === 404) {
+          console.log('Dashboard endpoint not available, falling back to individual endpoints');
+          // Continue to alternative endpoints
+        } else {
+          console.error('Failed to fetch from /dashboard endpoint:', err);
+        }
       }
       
       // If that fails, try to construct dashboard data from multiple endpoints
       try {
-        // Get agent counts
-        const agentsResponse = await apiClient.get('/agents/count');
-        const agentCount = agentsResponse.data;
+        // Parallel fetch of essential metrics
+        const [agentsResponse, metricsResponse] = await Promise.allSettled([
+          apiClient.get('/agents', { params: { page_size: 5 } }),
+          apiClient.get('/metrics')
+        ]);
         
-        // Get events count
-        const eventsResponse = await apiClient.get('/events/', { params: { page_size: 1 } });
-        const eventsCount = eventsResponse.data.total || 0;
-        
-        // Get alerts count
-        const alertsResponse = await apiClient.get('/alerts/', { params: { page_size: 1 } });
-        const alertsCount = alertsResponse.data.total || 0;
-        
-        // Construct dashboard data
-        const dashboardData: DashboardData = {
-          metrics: {
-            total_agents: agentCount.total || 0,
-            active_agents: agentCount.active || 0,
-            total_events: eventsCount,
-            security_alerts: alertsCount
-          },
+        // Build dashboard data from available responses
+        const dashboardData: any = {
+          metrics: {},
           recent_events: [],
-          recent_alerts: [],
-          agent_status: {
-            active: agentCount.active || 0,
-            inactive: agentCount.inactive || 0
-          }
+          recent_alerts: []
         };
         
-        // Get recent events
-        const recentEventsResponse = await apiClient.get('/events/', { params: { page: 1, page_size: 5 } });
-        dashboardData.recent_events = recentEventsResponse.data.items || [];
+        // Process agents response if fulfilled
+        if (agentsResponse.status === 'fulfilled') {
+          const agentsData = agentsResponse.value.data;
+          
+          // Handle different API response formats
+          const agents = agentsData.items || agentsData;
+          
+          dashboardData.agents = agents;
+          
+          // Calculate agent metrics
+          const activeAgents = Array.isArray(agents) ? agents.filter(a => a.active).length : 0;
+          const totalAgents = Array.isArray(agents) ? agents.length : 0;
+          
+          dashboardData.metrics.total_agents = totalAgents;
+          dashboardData.metrics.active_agents = activeAgents;
+          dashboardData.metrics.inactive_agents = totalAgents - activeAgents;
+        }
         
-        // Get recent alerts
-        const recentAlertsResponse = await apiClient.get('/alerts/', { params: { page: 1, page_size: 5 } });
-        dashboardData.recent_alerts = recentAlertsResponse.data.items || [];
+        // Process metrics response if fulfilled
+        if (metricsResponse.status === 'fulfilled') {
+          // Add metrics data
+          const metricsData = metricsResponse.value.data;
+          dashboardData.metrics = {
+            ...dashboardData.metrics,
+            ...metricsData
+          };
+        }
+        
+        // Try to get events in a separate try/catch in case this endpoint isn't available
+        try {
+          const yesterday = new Date();
+          yesterday.setDate(yesterday.getDate() - 1);
+          const now = new Date();
+          
+          const eventsResponse = await apiClient.get('/events', {
+            params: {
+              page_size: 5,
+              start_time: yesterday.toISOString(),
+              end_time: now.toISOString()
+            }
+          });
+          
+          dashboardData.recent_events = eventsResponse.data.items || eventsResponse.data || [];
+        } catch (eventsError) {
+          // Silently fail if events endpoint is missing
+          console.log('Events endpoint not available');
+        }
+        
+        // Try to get alerts similarly
+        try {
+          const yesterday = new Date();
+          yesterday.setDate(yesterday.getDate() - 1);
+          const now = new Date();
+          
+          const alertsResponse = await apiClient.get('/alerts', {
+            params: {
+              page_size: 5,
+              start_time: yesterday.toISOString(),
+              end_time: now.toISOString()
+            }
+          });
+          
+          dashboardData.recent_alerts = alertsResponse.data.items || alertsResponse.data || [];
+        } catch (alertsError) {
+          // Silently fail if alerts endpoint is missing
+          console.log('Alerts endpoint not available');
+        }
         
         setData(dashboardData);
         setLastUpdated(new Date());
-      } catch (err) {
-        throw err; // Throw to be caught by the outer catch
+      } catch (fallbackErr) {
+        console.error('Error fetching dashboard components:', fallbackErr);
+        throw fallbackErr; // Re-throw to be caught by outer catch
       }
     } catch (err) {
       console.error('Error fetching dashboard data:', err);

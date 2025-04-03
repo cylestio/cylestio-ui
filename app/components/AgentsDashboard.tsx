@@ -64,8 +64,62 @@ export function AgentsDashboard() {
         sort_order: sortDirection
       };
       
+      console.log('Fetching agents with params:', queryParams);
       const response = await apiClient.get('/agents/', { params: queryParams });
-      setData(response.data);
+      
+      // Log the actual response structure for debugging
+      console.log('API response structure:', {
+        hasData: Boolean(response.data),
+        dataType: typeof response.data,
+        isArray: Array.isArray(response.data),
+        hasItems: Boolean(response.data?.items),
+        keys: response.data ? Object.keys(response.data) : [],
+        sample: response.data ? JSON.stringify(response.data).substring(0, 100) + '...' : 'No data',
+      });
+      
+      // Handle different response formats
+      let agentData;
+      
+      if (response.data?.items && Array.isArray(response.data.items)) {
+        // Standard format: { items: Agent[], total: number }
+        agentData = {
+          items: response.data.items,
+          total: response.data.total || response.data.items.length
+        };
+      } else if (Array.isArray(response.data)) {
+        // Simple array format
+        agentData = {
+          items: response.data,
+          total: response.data.length
+        };
+      } else if (response.data && typeof response.data === 'object') {
+        // Try to find an array property in the response
+        const possibleArrayProps = Object.entries(response.data)
+          .find(([_, value]) => Array.isArray(value));
+        
+        if (possibleArrayProps) {
+          const [key, value] = possibleArrayProps;
+          agentData = {
+            items: value as Agent[],
+            total: (response.data.total as number) || (value as any[]).length
+          };
+          console.log(`Found agents data in property: ${key}`);
+        } else {
+          // No array found, create empty result
+          agentData = { items: [], total: 0 };
+          console.warn('No array data found in API response');
+        }
+      } else {
+        // Fallback for unexpected format
+        agentData = { items: [], total: 0 };
+        console.warn('Unexpected API response format:', response.data);
+      }
+      
+      // Ensure items is always an array and total is a number
+      agentData.items = Array.isArray(agentData.items) ? agentData.items : [];
+      agentData.total = isNaN(Number(agentData.total)) ? 0 : Number(agentData.total);
+      
+      setData(agentData);
       setLastUpdated(new Date());
     } catch (err) {
       console.error('Error fetching agents:', err);
@@ -76,6 +130,9 @@ export function AgentsDashboard() {
       } else {
         setError(createEnhancedApiError('Failed to load agents. Please try again later.'));
       }
+      
+      // Set empty data to avoid undefined errors
+      setData({ items: [], total: 0 });
     } finally {
       setLoading(false);
     }
@@ -195,11 +252,11 @@ export function AgentsDashboard() {
               value={refreshInterval.toString()}
               onValueChange={(value) => setRefreshInterval(parseInt(value, 10))}
             >
-              <SelectItem value="0">No auto-refresh</SelectItem>
-              <SelectItem value="5000">5 seconds</SelectItem>
-              <SelectItem value="10000">10 seconds</SelectItem>
-              <SelectItem value="30000">30 seconds</SelectItem>
-              <SelectItem value="60000">1 minute</SelectItem>
+              <SelectItem key="refresh-0" value="0">No auto-refresh</SelectItem>
+              <SelectItem key="refresh-5000" value="5000">5 seconds</SelectItem>
+              <SelectItem key="refresh-10000" value="10000">10 seconds</SelectItem>
+              <SelectItem key="refresh-30000" value="30000">30 seconds</SelectItem>
+              <SelectItem key="refresh-60000" value="60000">1 minute</SelectItem>
             </Select>
             <Button
               variant="secondary"
@@ -253,9 +310,9 @@ export function AgentsDashboard() {
               value={statusFilter}
               onValueChange={setStatusFilter}
             >
-              <SelectItem value="all">All Statuses</SelectItem>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="inactive">Inactive</SelectItem>
+              <SelectItem key="status-all" value="all">All Statuses</SelectItem>
+              <SelectItem key="status-active" value="active">Active</SelectItem>
+              <SelectItem key="status-inactive" value="inactive">Inactive</SelectItem>
             </Select>
             <Select
               className="w-40"
@@ -264,9 +321,9 @@ export function AgentsDashboard() {
               onValueChange={setTypeFilter}
               disabled={!agentTypes.length}
             >
-              <SelectItem value="all">All Types</SelectItem>
+              <SelectItem key="all-types" value="all">All Types</SelectItem>
               {agentTypes.map((type) => (
-                <SelectItem key={type} value={type}>
+                <SelectItem key={`type-${type}`} value={type}>
                   {type}
                 </SelectItem>
               ))}
@@ -280,12 +337,12 @@ export function AgentsDashboard() {
                 setSortDirection(direction as 'asc' | 'desc');
               }}
             >
-              <SelectItem value="name-asc">Name (A-Z)</SelectItem>
-              <SelectItem value="name-desc">Name (Z-A)</SelectItem>
-              <SelectItem value="last_active-desc">
+              <SelectItem key="name-asc" value="name-asc">Name (A-Z)</SelectItem>
+              <SelectItem key="name-desc" value="name-desc">Name (Z-A)</SelectItem>
+              <SelectItem key="last_active-desc" value="last_active-desc">
                 Most Recently Active
               </SelectItem>
-              <SelectItem value="last_active-asc">Least Recently Active</SelectItem>
+              <SelectItem key="last_active-asc" value="last_active-asc">Least Recently Active</SelectItem>
             </Select>
           </div>
         </Flex>

@@ -1,141 +1,99 @@
 'use client'
 
 import React from 'react';
-import { FaExclamationTriangle, FaExclamation, FaInfoCircle } from 'react-icons/fa';
-import { IconBaseProps } from 'react-icons';
+import { Card, Title, Text, Button } from '@tremor/react';
 import { EnhancedApiError } from '@/lib/api/client';
+import { RefreshCw, AlertTriangle, XCircle, Info } from 'lucide-react';
 
-export interface ErrorDisplayProps {
+interface ErrorDisplayProps {
   error: EnhancedApiError | Error | string;
   title?: string;
   onRetry?: () => void;
   onClear?: () => void;
-  variant?: 'error' | 'warning' | 'info';
   withDetails?: boolean;
   className?: string;
+  showFallbackUI?: boolean;
 }
 
 export function ErrorDisplay({
   error,
-  title,
+  title = 'Error',
   onRetry,
   onClear,
-  variant = 'error',
-  withDetails = true,
+  withDetails = false,
   className = '',
+  showFallbackUI = false
 }: ErrorDisplayProps) {
-  // Helper function to safely stringify errors
-  const safeStringify = (obj: any): string => {
-    if (obj === null || obj === undefined) return 'null';
-    if (typeof obj === 'string') return obj;
-    if (obj instanceof Error) return obj.message || 'Unknown error';
-    if (typeof obj === 'object') {
-      // For EnhancedApiError objects
-      if ('message' in obj) return obj.message;
-      
-      // For other objects
-      try {
-        return JSON.stringify(obj);
-      } catch (e) {
-        return 'Error object could not be stringified';
-      }
-    }
-    return String(obj);
+  // Extract error message
+  const errorMessage = typeof error === 'string' 
+    ? error 
+    : 'message' in error 
+      ? error.message 
+      : 'An unexpected error occurred';
+  
+  // Get status code if available (for API errors)
+  const statusCode = typeof error === 'object' && 'statusCode' in error 
+    ? error.statusCode 
+    : undefined;
+  
+  // Check if 404 error (missing endpoint)
+  const is404 = statusCode === 404;
+  
+  // Determine severity type
+  const getSeverityColor = () => {
+    if (is404) return 'yellow';
+    if (statusCode && statusCode >= 500) return 'red';
+    if (statusCode && statusCode >= 400) return 'orange';
+    return 'red';
   };
-  
-  // Extract error details
-  const errorMessage = safeStringify(error);
-  
-  const statusCode = error instanceof Error && 'statusCode' in error 
-    ? (error as any).statusCode 
-    : null;
-  
-  const errorCode = error instanceof Error && 'errorCode' in error 
-    ? (error as any).errorCode 
-    : (error instanceof Error && 'code' in error ? (error as any).code : null);
-  
-  const timestamp = error instanceof Error && 'timestamp' in error 
-    ? (error as any).timestamp 
-    : new Date().toLocaleString();
 
-  // Determine variant styling
-  const bgColor = 
-    variant === 'error' ? 'bg-red-50' : 
-    variant === 'warning' ? 'bg-amber-50' : 
-    'bg-blue-50';
+  // Determine appropriate icon
+  const Icon = is404 ? Info : AlertTriangle;
   
-  const borderColor = 
-    variant === 'error' ? 'border-red-200' : 
-    variant === 'warning' ? 'border-amber-200' : 
-    'border-blue-200';
+  // For 404 errors, provide a more helpful message
+  const displayMessage = is404 
+    ? 'This feature is not available in the current API. The endpoint may not be implemented yet.'
+    : errorMessage;
   
-  const textColor = 
-    variant === 'error' ? 'text-red-700' : 
-    variant === 'warning' ? 'text-amber-700' : 
-    'text-blue-700';
+  // Short title based on error type
+  const shortTitle = is404 ? 'Feature Unavailable' : title;
 
-  // Instead of using IconType, just specify which icon to use directly
-  let IconComponent;
-  if (variant === 'error') {
-    IconComponent = FaExclamationTriangle;
-  } else if (variant === 'warning') {
-    IconComponent = FaExclamation;
-  } else {
-    IconComponent = FaInfoCircle;
-  }
-
+  // Simple card display for all error types
   return (
-    <div className={`rounded-md ${bgColor} p-4 border ${borderColor} ${className}`} role="alert">
-      <div className="flex items-start">
-        <div className="flex-shrink-0">
-          <IconComponent className={`h-5 w-5 ${textColor}`} />
+    <Card className={`p-4 ${className}`}>
+      <div className={`${showFallbackUI ? 'text-center p-6' : 'p-2'}`}>
+        <div className="flex items-center mb-2">
+          <Icon className={`h-5 w-5 mr-2 text-${getSeverityColor()}-500`} />
+          <Title className="text-base">{shortTitle}</Title>
         </div>
-        <div className="ml-3 flex-1">
-          <h3 className={`text-sm font-medium ${textColor}`}>
-            {title || (variant === 'error' ? 'An unexpected error occurred' : 'Warning')}
-          </h3>
-          <div className="mt-2 text-sm text-gray-700">
-            <div>{errorMessage}</div>
-            
-            {withDetails && statusCode && (
-              <div className="mt-1 text-xs">Status: {statusCode}</div>
-            )}
-            
-            {withDetails && errorCode && (
-              <div className="mt-1 text-xs">Code: {errorCode}</div>
-            )}
-            
-            {withDetails && (
-              <div className="mt-1 text-xs">
-                Time: {timestamp}
-              </div>
-            )}
+        
+        <Text className="mb-4">{displayMessage}</Text>
+        
+        {withDetails && typeof error === 'object' && 'statusCode' in error && (
+          <div className="text-xs font-mono bg-gray-100 dark:bg-gray-800 p-2 rounded mt-2 overflow-auto max-h-32">
+            {JSON.stringify({
+              code: error.errorCode || 'UNKNOWN',
+              status: error.statusCode,
+              url: error.requestUrl,
+              method: error.requestMethod,
+              timestamp: error.timestamp
+            }, null, 2)}
           </div>
-
-          {(onRetry || onClear) && (
-            <div className="mt-3 flex space-x-2">
-              {onRetry && (
-                <button
-                  type="button"
-                  className={`rounded-md px-3 py-1.5 text-sm font-medium text-${variant === 'error' ? 'red' : variant === 'warning' ? 'amber' : 'blue'}-700 hover:bg-${variant === 'error' ? 'red' : variant === 'warning' ? 'amber' : 'blue'}-100 focus:outline-none focus:ring-2 focus:ring-${variant === 'error' ? 'red' : variant === 'warning' ? 'amber' : 'blue'}-500`}
-                  onClick={onRetry}
-                >
-                  Retry
-                </button>
-              )}
-              {onClear && (
-                <button
-                  type="button"
-                  className="rounded-md px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-500"
-                  onClick={onClear}
-                >
-                  Dismiss
-                </button>
-              )}
-            </div>
+        )}
+        
+        <div className="flex gap-2 mt-2">
+          {onRetry && (
+            <Button size="xs" onClick={onRetry} icon={RefreshCw} variant="secondary">
+              Try Again
+            </Button>
+          )}
+          {onClear && (
+            <Button size="xs" onClick={onClear} icon={XCircle} variant="light">
+              Dismiss
+            </Button>
           )}
         </div>
       </div>
-    </div>
+    </Card>
   );
 } 

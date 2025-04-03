@@ -12,6 +12,7 @@ export interface AgentMetrics {
   llm_calls: number;
   tool_calls: number;
   security_alerts: number;
+  average_response_time?: number; // Optional field for average response time in milliseconds
 }
 
 /**
@@ -106,15 +107,24 @@ export const AgentService = {
       return response.data;
     } catch (error) {
       console.error(`Error fetching metrics for agent ${agentId}:`, error);
-      // Return fallback metrics
-      return {
-        total_sessions: 0,
-        total_conversations: 0,
-        total_events: 0,
-        llm_calls: 0,
-        tool_calls: 0,
-        security_alerts: 0
-      };
+      
+      // If the endpoint doesn't exist (404), return default values instead of throwing an error
+      if (error && typeof error === 'object' && 'statusCode' in error && error.statusCode === 404) {
+        console.log(`Metrics endpoint not available for agent ${agentId}, returning default values`);
+        // Return default metrics structure with zeros
+        return {
+          total_sessions: 0,
+          total_conversations: 0,
+          total_events: 0,
+          llm_calls: 0,
+          tool_calls: 0,
+          security_alerts: 0,
+          average_response_time: 0
+        };
+      }
+      
+      // For other errors, rethrow
+      throw error;
     }
   },
   

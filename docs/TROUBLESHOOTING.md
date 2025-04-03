@@ -115,4 +115,45 @@ Always run the mock API server during development:
 npm run mock-api
 ```
 
-The mock server provides test data for all UI components and helps isolate frontend issues from backend dependencies. 
+The mock server provides test data for all UI components and helps isolate frontend issues from backend dependencies.
+
+## Real API Connection Issues
+
+If you're having issues connecting to the real API server instead of the mock API:
+
+1. **Verify Environment Configuration**
+   - Make sure `.env.development` contains `NEXT_PUBLIC_USE_MOCK_API=false`
+   - Ensure `API_BASE_URL` is set correctly without `/api/v1` at the end: `API_BASE_URL=http://localhost:8000`
+
+2. **Check API Server Status**
+   - Verify the real API server is running
+   - Test with a direct request: `curl http://localhost:8000/api/v1/status`
+   - Common issue: Missing API endpoints that exist in mock but not real API
+
+3. **API Path Consistency Issues**
+   - Components expecting data at `/agents` while API serves at `/api/v1/agents`
+   - Response data format differences - mock returns data directly, real API may use `data.items`
+   - Case sensitivity - check if real API uses camelCase vs snake_case
+
+4. **Debugging Real API Access**
+   - Run the app with additional debugging: `DEBUG=api:* npm run dev`
+   - Monitor browser Network tab to see actual API URLs and responses
+   - Check browser console for detailed API logs from the client
+
+## Additional API Troubleshooting
+
+When switching between mock and real API, you might encounter these issues:
+
+1. **Different Response Structures**
+   - Mock API may return: `{ data: {...} }`
+   - Real API might return: `{ items: [...], total: 10, page: 1 }`
+   - Fix: Update components to handle both formats
+
+2. **Endpoint Path Differences**
+   - Double check trailing slashes (real API may require them)
+   - Ensure proper URL encoding for path parameters or query strings
+
+3. **Pagination Parameter Format**
+   - Mock: `?page=1&pageSize=10`
+   - Real: `?page=1&page_size=10`
+   - Verify parameters match what the server expects 

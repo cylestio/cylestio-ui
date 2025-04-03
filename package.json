@@ -30,7 +30,13 @@
     "security:deps": "npx audit-ci --high",
     "security:retire": "npx retire --severity high --path ./",
     "prepare": "husky install",
-    "mock-api": "node scripts/mock-api-server.js"
+    "mock-api": "node scripts/mock-api-server.js",
+    "dev:real-api": "env-cmd -f .env.development npm run dev",
+    "verify-api": "node scripts/verify-api-connection.js",
+    "api:use-mock": "node scripts/switch-api-mode.js mock",
+    "api:use-real": "node scripts/switch-api-mode.js real",
+    "api:debug": "node scripts/api-debug.js",
+    "api:fix-endpoints": "node scripts/api-endpoint-fixer.js"
   },
   "repository": {
     "type": "git",

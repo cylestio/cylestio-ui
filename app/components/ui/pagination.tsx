@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react';
+import React, { useState } from 'react';
 
 interface PaginationProps {
   currentPage: number;
@@ -23,25 +23,37 @@ export function Pagination({
   pageSizeOptions = [10, 25, 50, 100],
   className = '',
 }: PaginationProps) {
-  const totalPages = Math.ceil(totalItems / pageSize);
+  const [jumpToPage, setJumpToPage] = useState('');
+  
+  // Ensure all values are valid numbers, not NaN
+  const validCurrentPage = isNaN(Number(currentPage)) ? 1 : Number(currentPage);
+  const validPageSize = isNaN(Number(pageSize)) ? 10 : Number(pageSize);
+  const validTotalItems = isNaN(Number(totalItems)) ? 0 : Number(totalItems);
+  
+  // Calculate total pages with safety checks
+  const totalPages = Math.max(1, Math.ceil(validTotalItems / validPageSize));
+  
+  // Calculate the range of displayed items
+  const startItem = validTotalItems === 0 ? 0 : ((validCurrentPage - 1) * validPageSize) + 1;
+  const endItem = Math.min(validCurrentPage * validPageSize, validTotalItems);
   
   // Generate page numbers array with ellipsis
   const getPageNumbers = () => {
     const pages = [];
     
     // Always show first page
-    if (currentPage > 1) {
+    if (validCurrentPage > 1) {
       pages.push(1);
     }
     
     // Add ellipsis if needed
-    if (currentPage > 2 + siblingCount) {
+    if (validCurrentPage > 2 + siblingCount) {
       pages.push('...');
     }
     
     // Add sibling pages
-    const start = Math.max(2, currentPage - siblingCount);
-    const end = Math.min(totalPages - 1, currentPage + siblingCount);
+    const start = Math.max(2, validCurrentPage - siblingCount);
+    const end = Math.min(totalPages - 1, validCurrentPage + siblingCount);
     
     for (let i = start; i <= end; i++) {
       if (i !== 1 && i !== totalPages) {
@@ -50,12 +62,12 @@ export function Pagination({
     }
     
     // Add ellipsis if needed
-    if (currentPage < totalPages - 1 - siblingCount) {
+    if (validCurrentPage < totalPages - 1 - siblingCount) {
       pages.push('...');
     }
     
     // Always show last page
-    if (currentPage < totalPages) {
+    if (validCurrentPage < totalPages) {
       pages.push(totalPages);
     }
     
@@ -64,23 +76,21 @@ export function Pagination({
   
   const pageNumbers = getPageNumbers();
   
-  // Calculate display range
-  const startItem = (currentPage - 1) * pageSize + 1;
-  const endItem = Math.min(currentPage * pageSize, totalItems);
-  
-  // Handle direct page input
-  const [jumpToPage, setJumpToPage] = React.useState('');
-  
+  // In handleJumpToPage, validate the input
   const handleJumpToPage = (e: React.FormEvent) => {
     e.preventDefault();
-    const page = parseInt(jumpToPage);
-    if (!isNaN(page) && page >= 1 && page <= totalPages) {
-      onPageChange(page);
+    const pageNumber = parseInt(jumpToPage, 10);
+    if (!isNaN(pageNumber) && pageNumber >= 1 && pageNumber <= totalPages) {
+      onPageChange(pageNumber);
+      setJumpToPage('');
+    } else {
+      // Invalid input, clear it
       setJumpToPage('');
     }
   };
   
-  if (totalItems <= 0) {
+  // Don't render if we have no items or invalid counts
+  if (validTotalItems <= 0 || totalPages <= 0) {
     return null;
   }
   
@@ -89,7 +99,7 @@ export function Pagination({
       <div className="text-sm text-gray-700">
         Showing <span className="font-medium">{startItem}</span> to{' '}
         <span className="font-medium">{endItem}</span> of{' '}
-        <span className="font-medium">{totalItems}</span> results
+        <span className="font-medium">{validTotalItems}</span> results
       </div>
       
       <div className="flex items-center space-x-4">
@@ -101,7 +111,7 @@ export function Pagination({
             </label>
             <select
               id="pageSize"
-              value={pageSize}
+              value={validPageSize}
               onChange={(e) => onPageSizeChange(Number(e.target.value))}
               className="rounded-md border-gray-300 py-1 text-sm focus:border-blue-500 focus:ring-blue-500"
             >
@@ -117,8 +127,8 @@ export function Pagination({
         {/* Navigation */}
         <nav className="flex items-center">
           <button
-            onClick={() => onPageChange(currentPage - 1)}
-            disabled={currentPage === 1}
+            onClick={() => onPageChange(validCurrentPage - 1)}
+            disabled={validCurrentPage === 1}
             className="relative inline-flex items-center rounded-l-md border border-gray-300 bg-white px-2 py-1 text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Previous
@@ -135,7 +145,7 @@ export function Pagination({
                   <button
                     onClick={() => onPageChange(page as number)}
                     className={`relative inline-flex items-center border border-gray-300 px-3 py-1 text-sm font-medium ${
-                      currentPage === page
+                      validCurrentPage === page
                         ? 'z-10 bg-blue-50 border-blue-500 text-blue-600'
                         : 'bg-white text-gray-500 hover:bg-gray-50'
                     }`}
@@ -148,8 +158,8 @@ export function Pagination({
           </div>
           
           <button
-            onClick={() => onPageChange(currentPage + 1)}
-            disabled={currentPage === totalPages || totalPages === 0}
+            onClick={() => onPageChange(validCurrentPage + 1)}
+            disabled={validCurrentPage === totalPages || totalPages === 0}
             className="relative inline-flex items-center rounded-r-md border border-gray-300 bg-white px-2 py-1 text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Next

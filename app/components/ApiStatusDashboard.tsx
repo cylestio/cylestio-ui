@@ -29,17 +29,35 @@ export default function ApiStatusDashboard() {
       setLoading(true);
       setError(null);
       
-      // First try to get status from dedicated endpoint
+      // Try each endpoint until one works
+      // 1. /api/v1/status
       try {
         const response = await apiClient.get('/status');
         setApiStatus(response.data);
         setLastChecked(new Date());
         return;
       } catch (err) {
-        console.log('Could not fetch from /status endpoint, trying root...');
+        console.log('Could not fetch from /status endpoint, trying alternative endpoints...');
       }
       
-      // If that fails, try root endpoint
+      // 2. /status (without /api/v1 prefix)
+      try {
+        // Try with a direct fetch to handle base URL differences
+        const baseUrl = IS_MOCK_API 
+          ? process.env.NEXT_PUBLIC_MOCK_API_URL?.replace('/api/v1', '') || 'http://localhost:8080'
+          : API_BASE_URL;
+        const response = await fetch(`${baseUrl}/status`);
+        if (response.ok) {
+          const data = await response.json();
+          setApiStatus(data);
+          setLastChecked(new Date());
+          return;
+        }
+      } catch (err) {
+        console.log('Could not fetch from direct /status endpoint, trying root...');
+      }
+      
+      // 3. Root endpoint (/)
       const response = await apiClient.get('/');
       setApiStatus({
         status: response.data.status || 'connected',

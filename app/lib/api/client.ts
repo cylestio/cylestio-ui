@@ -12,8 +12,9 @@ const USE_MOCK_API = process.env.NEXT_PUBLIC_USE_MOCK_API === 'true';
 
 // API configuration constants
 export const API_BASE_URL = USE_MOCK_API 
-  ? process.env.NEXT_PUBLIC_MOCK_API_URL?.replace('/api/v1', '') || 'http://localhost:8080'
-  : process.env.API_BASE_URL?.replace('/api/v1', '') || 'http://localhost:8000';
+  ? process.env.NEXT_PUBLIC_MOCK_API_URL || 'http://localhost:8080'
+  : process.env.API_BASE_URL || 'http://localhost:8000';
+  
 export const API_VERSION = '/api/v1';
 export const API_TIMEOUT = parseInt(process.env.API_TIMEOUT || '10000', 10);
 export const MAX_RETRIES = 2;
@@ -105,9 +106,15 @@ apiClient.interceptors.request.use(
     }
     
     // Fix for double API version prefixing
-    if (config.url && config.url.startsWith('/api/v1/')) {
+    if (config.url && (config.url.startsWith('/api/v1/') || config.url.includes('/v1/'))) {
+      // Remove any instances of duplicate /v1/ in the URL
+      config.url = config.url.replace('/api/v1/v1/', '/api/v1/');
+      config.url = config.url.replace('/v1/v1/', '/v1/');
+      
       // If the URL already has /api/v1/ and we're adding it from the baseURL, strip one
-      config.url = config.url.replace('/api/v1/', '/');
+      if (config.url.startsWith('/api/v1/') && config.baseURL?.includes('/api/v1')) {
+        config.url = config.url.replace('/api/v1/', '/');
+      }
     }
     
     // Log the request for debugging
@@ -156,13 +163,21 @@ apiClient.interceptors.response.use(
     let errorMessage = 'An unexpected error occurred';
     let errorCode = 'UNKNOWN_ERROR';
     
-    // Log detailed error information
-    console.error('API Error:', {
+    // Enhanced error logging with more details
+    console.error('API Error Details:', {
       url: error.config?.url,
       method: error.config?.method?.toUpperCase(),
       status: error.response?.status,
+      statusText: error.response?.statusText,
+      config: {
+        baseURL: error.config?.baseURL,
+        timeout: error.config?.timeout,
+        headers: error.config?.headers
+      },
       data: error.response?.data,
       message: error.message,
+      code: error.code,
+      stack: error.stack,
       retryCount: config?.retryCount || 0
     });
     
@@ -177,6 +192,9 @@ apiClient.interceptors.response.use(
       
       if (errorResponse && typeof errorResponse === 'object' && errorResponse.message) {
         errorMessage = errorResponse.message;
+      } else if (error.response.statusText) {
+        // Use status text if no error message is provided
+        errorMessage = `${error.response.status} ${error.response.statusText}`;
       }
       
       // If we have detailed field errors, we can extract them
