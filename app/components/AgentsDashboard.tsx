@@ -19,42 +19,102 @@ import {
   Flex,
   Grid,
   Metric,
+  Subtitle,
+  Divider,
+  AreaChart,
 } from '@tremor/react';
 import { MagnifyingGlassIcon, ArrowPathIcon, ChevronRightIcon, ArrowLeftIcon } from '@heroicons/react/24/outline';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { fetchAPI, buildQueryParams } from '../lib/api';
+import { AGENTS } from '../lib/api-endpoints';
 
-// Define types
-type AgentData = {
-  id: number;
+// Define types based on new API schema
+type Agent = {
+  agent_id: string;
   name: string;
-  status: 'active' | 'inactive' | 'error';
   type: string;
-  last_active: string;
-  event_count: number;
+  status: string;
+  description?: string;
+  created_at: string;
+  updated_at: string;
+  request_count?: number;
+  token_usage?: number;
+  error_count?: number;
+};
+
+type PaginationInfo = {
+  page: number;
+  page_size: number;
+  total_items: number;
+  total_pages: number;
+};
+
+type AgentsResponse = {
+  items: Agent[];
+  pagination: PaginationInfo;
+  meta: {
+    total_agents: number;
+    active_agents: number;
+    inactive_agents: number;
+  };
 };
 
 export function AgentsDashboard() {
   const router = useRouter();
-  const [agents, setAgents] = useState<AgentData[]>([]);
-  const [filteredAgents, setFilteredAgents] = useState<AgentData[]>([]);
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [pagination, setPagination] = useState<PaginationInfo>({
+    page: 1,
+    page_size: 10,
+    total_items: 0,
+    total_pages: 0,
+  });
+  const [meta, setMeta] = useState<{
+    total_agents: number;
+    active_agents: number;
+    inactive_agents: number;
+  }>({
+    total_agents: 0,
+    active_agents: 0,
+    inactive_agents: 0,
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
-  const [sortField, setSortField] = useState<keyof AgentData>('last_active');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
-  const [refreshInterval, setRefreshInterval] = useState<number>(30000); // 30 seconds by default
+  const [sortBy, setSortBy] = useState<string>('request_count');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [timeRange, setTimeRange] = useState<string>('30d');
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [agentTypes, setAgentTypes] = useState<string[]>([]);
 
-  // Function to fetch agents
+  // Function to fetch agents from the new API
   const fetchAgents = async () => {
     try {
-      const response = await fetch('/api/agents');
-      if (!response.ok) throw new Error('Failed to fetch agents');
-      const data = await response.json();
-      setAgents(data);
+      setLoading(true);
+      // Build query parameters
+      const params = {
+        page: pagination.page,
+        page_size: pagination.page_size,
+        sort_by: sortBy,
+        sort_dir: sortDir,
+        status: statusFilter !== 'all' ? statusFilter : undefined,
+        agent_type: typeFilter !== 'all' ? typeFilter : undefined,
+        search: searchQuery || undefined
+      };
+
+      // Use the centralized API endpoint configuration and fetchAPI utility
+      const data = await fetchAPI<AgentsResponse>(`${AGENTS.LIST}${buildQueryParams(params)}`);
+      
+      setAgents(data.items);
+      setPagination(data.pagination);
+      setMeta(data.meta);
+
+      // Extract unique agent types for filter dropdown
+      const types = Array.from(new Set(data.items.map(agent => agent.type)));
+      setAgentTypes(types);
+      
       setLastUpdated(new Date());
       setError(null);
     } catch (err) {
@@ -68,73 +128,20 @@ export function AgentsDashboard() {
   // Initial data fetch
   useEffect(() => {
     fetchAgents();
-  }, []);
+  }, [pagination.page, pagination.page_size, sortBy, sortDir, statusFilter, typeFilter, timeRange]);
 
-  // Set up polling for real-time updates
-  useEffect(() => {
-    if (refreshInterval === 0) return; // No refresh
+  // Handle page change
+  const handlePageChange = (newPage: number) => {
+    setPagination(prev => ({
+      ...prev,
+      page: newPage
+    }));
+  };
 
-    const intervalId = setInterval(() => {
-      fetchAgents();
-    }, refreshInterval);
-
-    return () => clearInterval(intervalId);
-  }, [refreshInterval]);
-
-  // Filter and sort agents whenever dependencies change
-  useEffect(() => {
-    let result = [...agents];
-
-    // Apply search filter
-    if (searchQuery) {
-      const lowerQuery = searchQuery.toLowerCase();
-      result = result.filter(
-        (agent) =>
-          agent.name.toLowerCase().includes(lowerQuery) ||
-          agent.type.toLowerCase().includes(lowerQuery)
-      );
-    }
-
-    // Apply status filter
-    if (statusFilter !== 'all') {
-      result = result.filter((agent) => agent.status === statusFilter);
-    }
-
-    // Apply type filter
-    if (typeFilter !== 'all') {
-      result = result.filter((agent) => agent.type === typeFilter);
-    }
-
-    // Apply sorting
-    result.sort((a, b) => {
-      const fieldA = a[sortField];
-      const fieldB = b[sortField];
-
-      // Handle string comparison
-      if (typeof fieldA === 'string' && typeof fieldB === 'string') {
-        return sortDirection === 'asc'
-          ? fieldA.localeCompare(fieldB)
-          : fieldB.localeCompare(fieldA);
-      }
-
-      // Handle number comparison
-      return sortDirection === 'asc'
-        ? (fieldA as number) - (fieldB as number)
-        : (fieldB as number) - (fieldA as number);
-    });
-
-    setFilteredAgents(result);
-  }, [agents, searchQuery, statusFilter, typeFilter, sortField, sortDirection]);
-
-  // Get unique agent types for the filter
-  const agentTypes = Array.from(new Set(agents.map((agent) => agent.type)));
-
-  // Format the last active date
-  const formatDate = (dateString: string | null) => {
-    if (!dateString) return 'Never';
-    
+  // Format the timestamp
+  const formatTimestamp = (timestamp: string) => {
     try {
-      const date = new Date(dateString);
+      const date = new Date(timestamp);
       const now = new Date();
       const diffMs = now.getTime() - date.getTime();
       const diffSecs = Math.floor(diffMs / 1000);
@@ -155,10 +162,11 @@ export function AgentsDashboard() {
 
   // Status badge component
   const StatusBadge = ({ status }: { status: string }) => {
-    switch (status) {
+    switch (status.toLowerCase()) {
       case 'active':
         return <Badge color="green">Active</Badge>;
       case 'inactive':
+      case 'paused':
         return <Badge color="gray">Inactive</Badge>;
       case 'error':
         return <Badge color="red">Error</Badge>;
@@ -167,8 +175,82 @@ export function AgentsDashboard() {
     }
   };
 
-  const handleRowClick = (agentId: number) => {
+  const handleRowClick = (agentId: string) => {
     router.push(`/agents/${agentId}`);
+  };
+
+  const handleSortChange = (field: string) => {
+    if (sortBy === field) {
+      setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(field);
+      setSortDir('desc');
+    }
+  };
+
+  // Generate pagination controls
+  const renderPagination = () => {
+    const { page, total_pages } = pagination;
+    
+    if (total_pages <= 1) return null;
+    
+    const pageButtons = [];
+    const maxButtonsToShow = 5;
+    
+    let startPage = Math.max(1, page - Math.floor(maxButtonsToShow / 2));
+    let endPage = Math.min(total_pages, startPage + maxButtonsToShow - 1);
+    
+    if (endPage - startPage + 1 < maxButtonsToShow) {
+      startPage = Math.max(1, endPage - maxButtonsToShow + 1);
+    }
+    
+    if (page > 1) {
+      pageButtons.push(
+        <Button 
+          key="prev" 
+          variant="light" 
+          onClick={() => handlePageChange(page - 1)}
+          icon={ArrowLeftIcon}
+          size="xs"
+        >
+          Previous
+        </Button>
+      );
+    }
+    
+    for (let i = startPage; i <= endPage; i++) {
+      pageButtons.push(
+        <Button
+          key={i}
+          variant={i === page ? "primary" : "light"}
+          onClick={() => handlePageChange(i)}
+          size="xs"
+        >
+          {i}
+        </Button>
+      );
+    }
+    
+    if (page < total_pages) {
+      pageButtons.push(
+        <Button 
+          key="next" 
+          variant="light" 
+          onClick={() => handlePageChange(page + 1)}
+          iconPosition="right"
+          icon={ChevronRightIcon}
+          size="xs"
+        >
+          Next
+        </Button>
+      );
+    }
+    
+    return (
+      <Flex justifyContent="center" className="mt-4 gap-2">
+        {pageButtons}
+      </Flex>
+    );
   };
 
   return (
@@ -184,15 +266,14 @@ export function AgentsDashboard() {
         </Flex>
         <Flex justifyContent="end" className="space-x-4">
           <Select
-            value={refreshInterval.toString()}
-            onValueChange={(value) => setRefreshInterval(parseInt(value))}
+            value={timeRange}
+            onValueChange={(value) => setTimeRange(value)}
             className="w-40"
           >
-            <SelectItem value="0">Manual refresh</SelectItem>
-            <SelectItem value="5000">5 seconds</SelectItem>
-            <SelectItem value="15000">15 seconds</SelectItem>
-            <SelectItem value="30000">30 seconds</SelectItem>
-            <SelectItem value="60000">1 minute</SelectItem>
+            <SelectItem value="1h">Last hour</SelectItem>
+            <SelectItem value="1d">Last 24 hours</SelectItem>
+            <SelectItem value="7d">Last 7 days</SelectItem>
+            <SelectItem value="30d">Last 30 days</SelectItem>
           </Select>
           <Button
             icon={ArrowPathIcon}
@@ -215,19 +296,19 @@ export function AgentsDashboard() {
         <Card>
           <div className="h-28">
             <Text>Total Agents</Text>
-            <Metric>{agents.length}</Metric>
+            <Metric>{meta.total_agents}</Metric>
           </div>
         </Card>
         <Card>
           <div className="h-28">
             <Text>Active Agents</Text>
-            <Metric>{agents.filter(a => a.status === 'active').length}</Metric>
+            <Metric>{meta.active_agents}</Metric>
           </div>
         </Card>
         <Card>
           <div className="h-28">
-            <Text>Agents with Errors</Text>
-            <Metric>{agents.filter(a => a.status === 'error').length}</Metric>
+            <Text>Inactive Agents</Text>
+            <Metric>{meta.inactive_agents}</Metric>
           </div>
         </Card>
       </Grid>
@@ -240,6 +321,11 @@ export function AgentsDashboard() {
             className="max-w-sm"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                fetchAgents();
+              }
+            }}
           />
           <Flex className="gap-2">
             <Select
@@ -251,7 +337,7 @@ export function AgentsDashboard() {
               <SelectItem value="all">All statuses</SelectItem>
               <SelectItem value="active">Active</SelectItem>
               <SelectItem value="inactive">Inactive</SelectItem>
-              <SelectItem value="error">Error</SelectItem>
+              <SelectItem value="paused">Paused</SelectItem>
             </Select>
             <Select
               value={typeFilter}
@@ -277,81 +363,39 @@ export function AgentsDashboard() {
               <TableRow>
                 <TableHeaderCell
                   className="cursor-pointer"
-                  onClick={() => {
-                    if (sortField === 'id') {
-                      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-                    } else {
-                      setSortField('id');
-                      setSortDirection('asc');
-                    }
-                  }}
+                  onClick={() => handleSortChange('agent_id')}
                 >
                   ID
                 </TableHeaderCell>
                 <TableHeaderCell
                   className="cursor-pointer"
-                  onClick={() => {
-                    if (sortField === 'name') {
-                      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-                    } else {
-                      setSortField('name');
-                      setSortDirection('asc');
-                    }
-                  }}
+                  onClick={() => handleSortChange('name')}
                 >
                   Name
                 </TableHeaderCell>
                 <TableHeaderCell
                   className="cursor-pointer"
-                  onClick={() => {
-                    if (sortField === 'status') {
-                      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-                    } else {
-                      setSortField('status');
-                      setSortDirection('asc');
-                    }
-                  }}
+                  onClick={() => handleSortChange('status')}
                 >
                   Status
                 </TableHeaderCell>
                 <TableHeaderCell
                   className="cursor-pointer"
-                  onClick={() => {
-                    if (sortField === 'type') {
-                      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-                    } else {
-                      setSortField('type');
-                      setSortDirection('asc');
-                    }
-                  }}
+                  onClick={() => handleSortChange('type')}
                 >
                   Type
                 </TableHeaderCell>
                 <TableHeaderCell
                   className="cursor-pointer"
-                  onClick={() => {
-                    if (sortField === 'last_active') {
-                      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-                    } else {
-                      setSortField('last_active');
-                      setSortDirection('desc');
-                    }
-                  }}
+                  onClick={() => handleSortChange('updated_at')}
                 >
                   Last Active
                 </TableHeaderCell>
                 <TableHeaderCell
                   className="cursor-pointer"
-                  onClick={() => {
-                    if (sortField === 'event_count') {
-                      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-                    } else {
-                      setSortField('event_count');
-                      setSortDirection('desc');
-                    }
-                  }}
+                  onClick={() => handleSortChange('request_count')}
                 >
-                  Events
+                  Requests
                 </TableHeaderCell>
                 <TableHeaderCell>Details</TableHeaderCell>
               </TableRow>
@@ -363,24 +407,29 @@ export function AgentsDashboard() {
                     <Text>Loading...</Text>
                   </TableCell>
                 </TableRow>
-              ) : filteredAgents.length === 0 ? (
+              ) : agents.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center">
                     <Text>No agents found.</Text>
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredAgents.map((agent) => (
+                agents.map((agent) => (
                   <TableRow
-                    key={agent.id}
+                    key={agent.agent_id}
                     className="cursor-pointer hover:bg-gray-50"
-                    onClick={() => handleRowClick(agent.id)}
+                    onClick={() => handleRowClick(agent.agent_id)}
                   >
                     <TableCell>
-                      <Badge color="blue">#{agent.id}</Badge>
+                      <Badge color="blue">{agent.agent_id}</Badge>
                     </TableCell>
                     <TableCell>
                       <Text>{agent.name}</Text>
+                      {agent.description && (
+                        <Text className="text-xs text-gray-500 truncate max-w-xs">
+                          {agent.description}
+                        </Text>
+                      )}
                     </TableCell>
                     <TableCell>
                       <StatusBadge status={agent.status} />
@@ -389,19 +438,19 @@ export function AgentsDashboard() {
                       <Text>{agent.type}</Text>
                     </TableCell>
                     <TableCell>
-                      <Text>{formatDate(agent.last_active)}</Text>
+                      <Text>{formatTimestamp(agent.updated_at)}</Text>
                     </TableCell>
                     <TableCell>
-                      <Text>{agent.event_count.toLocaleString()}</Text>
+                      <Text>{agent.request_count?.toLocaleString() || '0'}</Text>
                     </TableCell>
                     <TableCell>
                       <Link
-                        href={`/agents/${agent.id}`}
+                        href={`/agents/${agent.agent_id}`}
                         onClick={(e) => e.stopPropagation()}
                         className="text-blue-500 hover:text-blue-700"
                       >
                         <Flex className="items-center gap-1">
-                          <Text>View Details (ID: {agent.id})</Text>
+                          <Text>Details</Text>
                           <ChevronRightIcon className="h-4 w-4" />
                         </Flex>
                       </Link>
@@ -412,6 +461,8 @@ export function AgentsDashboard() {
             </TableBody>
           </Table>
         )}
+        
+        {renderPagination()}
       </Card>
     </div>
   );

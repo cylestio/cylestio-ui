@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Card,
   Table,
@@ -17,117 +17,183 @@ import {
   SelectItem,
   Button,
   Flex,
+  Divider,
   Grid,
   Metric,
-  DateRangePicker,
-  DateRangePickerValue,
-  Divider,
-  Tab,
-  TabGroup,
-  TabList,
-  TabPanel,
-  TabPanels,
+  AreaChart,
+  DonutChart,
 } from '@tremor/react';
 import { 
   MagnifyingGlassIcon, 
-  ArrowPathIcon,
-  ChevronDownIcon,
-  ChevronUpIcon,
-  AdjustmentsHorizontalIcon,
-  InformationCircleIcon
+  ArrowPathIcon, 
+  ArrowLeftIcon,
+  DocumentTextIcon,
+  EyeIcon,
 } from '@heroicons/react/24/outline';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { CodeBlock } from '../components/CodeBlock';
+import { EventDetail } from './EventDetail';
+import { fetchAPI, buildQueryParams } from '../lib/api';
+import { TELEMETRY } from '../lib/api-endpoints';
 
-// Define types
-type EventData = {
-  id: number;
+// Define types based on new API
+type Event = {
+  id: string;
+  event_id?: string; // For backwards compatibility
   timestamp: string;
-  type: string;
-  agent_id?: number;
-  agent_name?: string;
-  session_id?: number;
-  conversation_id?: number;
-  status: string;
-  duration?: number;
-  details?: string;
-  data?: any;
+  name: string; 
+  agent_id: string;
+  trace_id: string;
+  span_id?: string;
+  parent_span_id?: string;
+  level: string;
+  attributes: Record<string, any>;
+  schema_version?: string;
+};
+
+type PaginationInfo = {
+  page: number;
+  page_size: number;
+  total_items: number;
+  total_pages: number;
+};
+
+type EventsResponse = {
+  items: Event[];
+  pagination: PaginationInfo;
+  meta?: {
+    time_period?: string;
+    from_time?: string;
+    to_time?: string;
+  };
+};
+
+type EventMetric = {
+  name: string;
+  value: number;
+};
+
+type ChartDataPoint = {
+  timestamp: string;
+  value: number;
+  dimensions?: Record<string, string>;
 };
 
 export function EventsDashboard() {
-  const router = useRouter();
-  const [events, setEvents] = useState<EventData[]>([]);
-  const [filteredEvents, setFilteredEvents] = useState<EventData[]>([]);
+  const [events, setEvents] = useState<Event[]>([]);
+  const [pagination, setPagination] = useState<PaginationInfo>({
+    page: 1,
+    page_size: 20,
+    total_items: 0,
+    total_pages: 0,
+  });
+  const [eventTrend, setEventTrend] = useState<ChartDataPoint[]>([]);
+  const [eventsByType, setEventsByType] = useState<EventMetric[]>([]);
+  const [eventsBySource, setEventsBySource] = useState<EventMetric[]>([]);
+  
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
+  const [levelFilter, setLevelFilter] = useState('all');
   const [agentFilter, setAgentFilter] = useState('all');
-  const [dateFilter, setDateFilter] = useState<DateRangePickerValue>({ from: undefined, to: undefined });
-  const [sortField, setSortField] = useState<keyof EventData>('timestamp');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
-  const [refreshInterval, setRefreshInterval] = useState<number>(30000); // 30 seconds by default
+  const [timeRange, setTimeRange] = useState<string>('30d');
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [pagination, setPagination] = useState({ currentPage: 1, totalPages: 1, pageSize: 25 });
-  const [showFilters, setShowFilters] = useState(false);
-  const [selectedEvent, setSelectedEvent] = useState<EventData | null>(null);
-  const [agents, setAgents] = useState<{id: number, name: string}[]>([]);
-  const [eventTypes, setEventTypes] = useState<string[]>([]);
-  const [isDetailView, setIsDetailView] = useState(false);
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
 
-  // Function to fetch events
-  const fetchEvents = useCallback(async () => {
+  // Function to fetch events from the API
+  const fetchEvents = async (page = currentPage) => {
     try {
-      // Build URL with query parameters
-      const url = new URL('/api/events', window.location.origin);
+      setLoading(true);
       
-      // Add pagination
-      url.searchParams.append('page', pagination.currentPage.toString());
-      url.searchParams.append('pageSize', pagination.pageSize.toString());
+      // Build query parameters
+      const params: Record<string, any> = {
+        page,
+        page_size: pagination.page_size,
+        time_range: timeRange
+      };
       
-      // Add filters if any
-      if (searchQuery) url.searchParams.append('search', searchQuery);
-      if (statusFilter !== 'all') url.searchParams.append('status', statusFilter);
-      if (typeFilter !== 'all') url.searchParams.append('type', typeFilter);
-      if (agentFilter !== 'all') url.searchParams.append('agentId', agentFilter);
-      
-      // Add date range if set
-      if (dateFilter.from) {
-        const fromDate = dateFilter.from.toISOString();
-        url.searchParams.append('from', fromDate);
-      }
-      if (dateFilter.to) {
-        const toDate = dateFilter.to.toISOString();
-        url.searchParams.append('to', toDate);
-      }
-      
-      // Add sorting
-      url.searchParams.append('sort', sortField);
-      url.searchParams.append('order', sortDirection);
+      // Add filters if specified
+      if (typeFilter !== 'all') params.event_name = typeFilter;
+      if (levelFilter !== 'all') params.level = levelFilter;
+      if (agentFilter !== 'all') params.agent_id = agentFilter;
 
-      const response = await fetch(url.toString());
-      if (!response.ok) throw new Error('Failed to fetch events');
+      // Use the centralized API endpoint configuration and fetchAPI utility
+      const endpoint = `${TELEMETRY.EVENTS}${buildQueryParams(params)}`;
+      console.log('Fetching events from:', endpoint);
       
-      const data = await response.json();
-      setEvents(data.events);
-      setFilteredEvents(data.events);
+      // For the telemetry events endpoint, the API returns an array directly
+      const data = await fetchAPI<Event[]>(endpoint);
       
-      // Update pagination based on API response
+      // Since API returns array instead of pagination object, we need to handle it
+      setEvents(data || []);
+      
+      // Update pagination to reflect what we have
+      const totalItems = data?.length || 0;
+      const totalPages = Math.max(1, Math.ceil(totalItems / pagination.page_size));
       setPagination({
-        currentPage: data.pagination?.currentPage || 1,
-        totalPages: data.pagination?.totalPages || 1,
-        pageSize: data.pagination?.pageSize || 25
+        page,
+        page_size: pagination.page_size,
+        total_items: totalItems,
+        total_pages: totalPages
+      });
+            
+      // Process event data for charts
+      // Group events by type for the donut chart
+      const eventTypes: Record<string, number> = {};
+      data?.forEach(event => {
+        const type = event.name;
+        eventTypes[type] = (eventTypes[type] || 0) + 1;
       });
       
-      // Extract event types for filtering
-      if (data.events && data.events.length > 0) {
-        const types = Array.from(new Set(data.events.map((event: EventData) => 
-          typeof event.type === 'string' ? event.type : String(event.type)
-        ).filter(Boolean)));
-        setEventTypes(types as string[]);
-      }
+      const typeMetrics = Object.entries(eventTypes)
+        .map(([name, count]) => ({ name, value: count }));
+        
+      setEventsByType(typeMetrics);
+      
+      // Generate timeline data for area chart
+      // Group events by hour/day for the timeline
+      const timePoints: Record<string, number> = {};
+      
+      // Generate appropriate time points based on range
+      const interval = getInterval(timeRange);
+      const now = new Date();
+      const points = getTimePoints(now, timeRange, interval);
+      
+      // Initialize all time points with zero
+      points.forEach(point => {
+        timePoints[point] = 0;
+      });
+      
+      // Count events per time point
+      data?.forEach(event => {
+        const date = new Date(event.timestamp);
+        const timeKey = formatDateForGrouping(date, interval);
+        if (timePoints[timeKey] !== undefined) {
+          timePoints[timeKey]++;
+        }
+      });
+      
+      // Convert to chart format
+      const chartData = Object.entries(timePoints).map(([timestamp, count]) => ({
+        timestamp,
+        value: count
+      }));
+      
+      setEventTrend(chartData);
+      
+      // For event source, extract from the available data
+      const sourceTypes: Record<string, number> = {};
+      data?.forEach(event => {
+        // Use agent_id as source if available
+        const source = event.agent_id || 'unknown';
+        sourceTypes[source] = (sourceTypes[source] || 0) + 1;
+      });
+      
+      const sourceMetrics = Object.entries(sourceTypes)
+        .map(([name, count]) => ({ name, value: count }));
+        
+      setEventsBySource(sourceMetrics);
       
       setLastUpdated(new Date());
       setError(null);
@@ -137,50 +203,109 @@ export function EventsDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [
-    pagination.currentPage,
-    pagination.pageSize,
-    searchQuery,
-    statusFilter,
-    typeFilter,
-    agentFilter,
-    dateFilter,
-    sortField,
-    sortDirection
-  ]);
+  };
 
-  // Function to fetch agents for filtering
-  const fetchAgents = useCallback(async () => {
-    try {
-      const response = await fetch('/api/agents');
-      if (!response.ok) throw new Error('Failed to fetch agents');
-      
-      const data = await response.json();
-      setAgents(data.map((agent: any) => ({ 
-        id: agent.id, 
-        name: agent.name || `Agent #${agent.id}` 
-      })));
-    } catch (err) {
-      console.error('Error fetching agents:', err);
+  // Get appropriate interval based on time range
+  const getInterval = (range: string): string => {
+    switch (range) {
+      case '1h': return '5m';
+      case '1d': return '1h';
+      case '7d': return '6h';
+      case '30d': return '1d';
+      default: return '1d';
     }
-  }, []);
+  };
+  
+  // Generate time points for the chart based on interval
+  const getTimePoints = (endDate: Date, range: string, interval: string): string[] => {
+    const points: string[] = [];
+    const end = new Date(endDate);
+    let start: Date;
+    
+    // Determine start date based on range
+    switch(range) {
+      case '1h':
+        start = new Date(end);
+        start.setHours(end.getHours() - 1);
+        break;
+      case '1d':
+        start = new Date(end);
+        start.setDate(end.getDate() - 1);
+        break;
+      case '7d':
+        start = new Date(end);
+        start.setDate(end.getDate() - 7);
+        break;
+      case '30d':
+        start = new Date(end);
+        start.setDate(end.getDate() - 30);
+        break;
+      default:
+        start = new Date(end);
+        start.setDate(end.getDate() - 7);
+    }
+    
+    // Generate points between start and end based on interval
+    let current = new Date(start);
+    while (current <= end) {
+      points.push(formatDateForGrouping(current, interval));
+      
+      // Increment by interval
+      switch(interval) {
+        case '5m':
+          current.setMinutes(current.getMinutes() + 5);
+          break;
+        case '1h':
+          current.setHours(current.getHours() + 1);
+          break;
+        case '6h':
+          current.setHours(current.getHours() + 6);
+          break;
+        case '1d':
+          current.setDate(current.getDate() + 1);
+          break;
+        default:
+          current.setDate(current.getDate() + 1);
+      }
+    }
+    
+    return points;
+  };
+  
+  // Format date for grouping in charts
+  const formatDateForGrouping = (date: Date, interval: string): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    
+    switch(interval) {
+      case '5m':
+        // Round to nearest 5 minutes
+        const roundedMinutes = Math.floor(date.getMinutes() / 5) * 5;
+        return `${year}-${month}-${day} ${hours}:${String(roundedMinutes).padStart(2, '0')}`;
+      case '1h':
+        return `${year}-${month}-${day} ${hours}:00`;
+      case '6h':
+        // Round to 0, 6, 12, 18
+        const roundedHours = Math.floor(date.getHours() / 6) * 6;
+        return `${year}-${month}-${day} ${String(roundedHours).padStart(2, '0')}:00`;
+      case '1d':
+      default:
+        return `${year}-${month}-${day}`;
+    }
+  };
 
   // Initial data fetch
   useEffect(() => {
-    fetchEvents();
-    fetchAgents();
-  }, [fetchEvents, fetchAgents]);
+    fetchEvents(currentPage);
+  }, [currentPage, timeRange, typeFilter, levelFilter, agentFilter]);
 
-  // Set up polling for real-time updates
-  useEffect(() => {
-    if (refreshInterval === 0) return; // No refresh
-
-    const intervalId = setInterval(() => {
-      fetchEvents();
-    }, refreshInterval);
-
-    return () => clearInterval(intervalId);
-  }, [refreshInterval, fetchEvents]);
+  // Handle page change
+  const handlePageChange = (newPage: number) => {
+    setCurrentPage(newPage);
+  };
 
   // Format the timestamp
   const formatTimestamp = (timestamp: string) => {
@@ -192,241 +317,154 @@ export function EventsDashboard() {
     }
   };
 
-  // Get friendly name for event types
-  const getEventTypeName = (type?: string): string => {
-    if (!type) return 'Unknown';
+  // Format date for charts
+  const formatChartDate = (timestamp: string, range: string) => {
+    const date = new Date(timestamp);
     
-    const eventTypeMap: Record<string, string> = {
-      'llm_request': 'LLM Request',
-      'llm_response': 'LLM Response',
-      'tool_call': 'Tool Call',
-      'tool_response': 'Tool Response',
-      'user_message': 'User Message',
-      'agent_message': 'Agent Message',
-      'session_start': 'Session Start',
-      'session_end': 'Session End',
-      'api_call': 'API Call',
-      'security_alert': 'Security Alert',
+    switch (range) {
+      case '1h':
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      case '1d':
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      default:
+        return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    }
+  };
+
+  // Transform time series data for charts
+  const prepareChartData = (data: ChartDataPoint[]) => {
+    return data.map(item => ({
+      date: formatChartDate(item.timestamp, timeRange),
+      value: item.value
+    }));
+  };
+
+  // Get a friendly display name for event types
+  const getEventTypeDisplay = (name: string) => {
+    // Updated to map telemetry event names
+    const typeMap: Record<string, string> = {
+      'llm.request': 'LLM Request',
+      'llm.response': 'LLM Response',
+      'tool.execution': 'Tool Execution',
+      'tool.response': 'Tool Response',
+      'session.start': 'Session Start',
+      'session.end': 'Session End',
       'error': 'Error',
+      'trace.start': 'Trace Start',
+      'trace.end': 'Trace End',
+      'message.user': 'User Message',
+      'message.assistant': 'Assistant Message'
     };
     
-    return eventTypeMap[type.toLowerCase()] || type;
+    return typeMap[name] || name.split('.').map(word => 
+      word.charAt(0).toUpperCase() + word.slice(1)
+    ).join(' ');
   };
 
-  // Status badge component
-  const StatusBadge = ({ status }: { status: string }) => {
-    switch (status?.toLowerCase() || '') {
-      case 'success':
-        return <Badge color="green">Success</Badge>;
-      case 'error':
-        return <Badge color="red">Error</Badge>;
-      case 'warning':
-        return <Badge color="amber">Warning</Badge>;
-      case 'info':
-        return <Badge color="blue">Info</Badge>;
-      case 'pending':
-        return <Badge color="indigo">Pending</Badge>;
-      default:
-        return <Badge color="gray">{status || 'Unknown'}</Badge>;
-    }
-  };
-
-  // Handle row click to show event detail
-  const handleRowClick = (event: EventData) => {
-    setSelectedEvent(event);
-    setIsDetailView(true);
-  };
-
-  // Handle page change
-  const handlePageChange = (newPage: number) => {
-    if (newPage < 1 || newPage > pagination.totalPages) return;
-    setPagination({...pagination, currentPage: newPage});
-  };
-
-  // Handle sorting
-  const handleSort = (field: keyof EventData) => {
-    if (sortField === field) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortField(field);
-      setSortDirection('desc');
-    }
-  };
-
-  // Reset filters
-  const resetFilters = () => {
-    setSearchQuery('');
-    setStatusFilter('all');
-    setTypeFilter('all');
-    setAgentFilter('all');
-    setDateFilter({ from: undefined, to: undefined });
-  };
-
-  // Handle back from detail view
-  const handleBackFromDetail = () => {
-    setIsDetailView(false);
-    setSelectedEvent(null);
-  };
-
-  // JSON viewer for detailed event data
-  const JsonViewer = ({data}: {data: any}) => {
-    if (!data) return <Text>No data available</Text>;
+  // Generate pagination controls
+  const renderPagination = () => {
+    const { page, total_pages } = pagination;
     
-    const jsonString = JSON.stringify(data, null, 2);
+    if (total_pages <= 1) return null;
+    
+    const pageButtons = [];
+    const maxButtonsToShow = 5;
+    
+    let startPage = Math.max(1, page - Math.floor(maxButtonsToShow / 2));
+    let endPage = Math.min(total_pages, startPage + maxButtonsToShow - 1);
+    
+    if (endPage - startPage + 1 < maxButtonsToShow) {
+      startPage = Math.max(1, endPage - maxButtonsToShow + 1);
+    }
+    
+    if (page > 1) {
+      pageButtons.push(
+        <Button 
+          key="prev" 
+          variant="light" 
+          onClick={() => handlePageChange(page - 1)}
+          icon={ArrowLeftIcon}
+          size="xs"
+        >
+          Previous
+        </Button>
+      );
+    }
+    
+    for (let i = startPage; i <= endPage; i++) {
+      pageButtons.push(
+        <Button
+          key={i}
+          variant={i === page ? "primary" : "light"}
+          onClick={() => handlePageChange(i)}
+          size="xs"
+        >
+          {i}
+        </Button>
+      );
+    }
+    
+    if (page < total_pages) {
+      pageButtons.push(
+        <Button 
+          key="next" 
+          variant="light" 
+          onClick={() => handlePageChange(page + 1)}
+          iconPosition="right"
+          icon={ArrowLeftIcon}
+          className="rotate-180"
+          size="xs"
+        >
+          Next
+        </Button>
+      );
+    }
+    
     return (
-      <CodeBlock code={jsonString} language="json" />
+      <Flex justifyContent="center" className="mt-4 gap-2">
+        {pageButtons}
+      </Flex>
     );
   };
 
-  // Render the event detail view
-  if (isDetailView && selectedEvent) {
+  // If an event is selected, show its details
+  if (selectedEventId) {
     return (
-      <div className="p-6 space-y-6">
-        <Flex justifyContent="between" alignItems="center" className="mb-6">
-          <Button 
-            variant="light" 
-            onClick={handleBackFromDetail}
-            icon={ArrowPathIcon}
-            iconPosition="left"
-          >
-            Back to Events List
-          </Button>
-          <Text>Event ID: {selectedEvent.id}</Text>
-        </Flex>
-
-        <Card>
-          <Grid numItemsMd={2} className="gap-6">
-            <div>
-              <Title>Event Details</Title>
-              <Divider />
-              <div className="space-y-4 mt-4">
-                <div>
-                  <Text className="font-semibold">Event ID</Text>
-                  <Text>{selectedEvent.id}</Text>
-                </div>
-                <div>
-                  <Text className="font-semibold">Timestamp</Text>
-                  <Text>{formatTimestamp(selectedEvent.timestamp)}</Text>
-                </div>
-                <div>
-                  <Text className="font-semibold">Type</Text>
-                  <Text>{getEventTypeName(selectedEvent.type)}</Text>
-                </div>
-                <div>
-                  <Text className="font-semibold">Status</Text>
-                  <StatusBadge status={selectedEvent.status} />
-                </div>
-                {selectedEvent.duration !== undefined && (
-                  <div>
-                    <Text className="font-semibold">Duration</Text>
-                    <Text>{selectedEvent.duration} ms</Text>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div>
-              <Title>Related Information</Title>
-              <Divider />
-              <div className="space-y-4 mt-4">
-                {selectedEvent.agent_id && (
-                  <div>
-                    <Text className="font-semibold">Agent</Text>
-                    <Link href={`/agents/${selectedEvent.agent_id}`}>
-                      <Text className="text-blue-500 hover:underline">
-                        {selectedEvent.agent_name || `Agent #${selectedEvent.agent_id}`}
-                      </Text>
-                    </Link>
-                  </div>
-                )}
-                {selectedEvent.session_id && (
-                  <div>
-                    <Text className="font-semibold">Session ID</Text>
-                    <Text>{selectedEvent.session_id}</Text>
-                  </div>
-                )}
-                {selectedEvent.conversation_id && (
-                  <div>
-                    <Text className="font-semibold">Conversation ID</Text>
-                    <Text>{selectedEvent.conversation_id}</Text>
-                  </div>
-                )}
-                {selectedEvent.details && (
-                  <div>
-                    <Text className="font-semibold">Details</Text>
-                    <Text>{selectedEvent.details}</Text>
-                  </div>
-                )}
-              </div>
-            </div>
-          </Grid>
-        </Card>
-
-        {selectedEvent.data && (
-          <Card>
-            <TabGroup>
-              <TabList>
-                <Tab>Raw Data</Tab>
-                {selectedEvent.type && selectedEvent.type.toLowerCase().includes('llm') && <Tab>LLM Content</Tab>}
-                {selectedEvent.type && selectedEvent.type.toLowerCase().includes('tool') && <Tab>Tool Data</Tab>}
-              </TabList>
-              <TabPanels>
-                <TabPanel>
-                  <div className="mt-4">
-                    <JsonViewer data={selectedEvent.data} />
-                  </div>
-                </TabPanel>
-                {selectedEvent.type && selectedEvent.type.toLowerCase().includes('llm') && (
-                  <TabPanel>
-                    <div className="mt-4 bg-gray-50 p-4 rounded-md">
-                      <Text className="whitespace-pre-wrap">
-                        {selectedEvent.data?.content || selectedEvent.data?.message || 'No content available'}
-                      </Text>
-                    </div>
-                  </TabPanel>
-                )}
-                {selectedEvent.type && selectedEvent.type.toLowerCase().includes('tool') && (
-                  <TabPanel>
-                    <div className="mt-4">
-                      <Text className="font-semibold">Tool Name</Text>
-                      <Text>{selectedEvent.data?.tool_name || 'Unknown'}</Text>
-                      <div className="mt-4">
-                        <Text className="font-semibold">Tool Input</Text>
-                        <JsonViewer data={selectedEvent.data?.input || {}} />
-                      </div>
-                      {selectedEvent.type && selectedEvent.type.toLowerCase() === 'tool_response' && (
-                        <div className="mt-4">
-                          <Text className="font-semibold">Tool Output</Text>
-                          <JsonViewer data={selectedEvent.data?.output || {}} />
-                        </div>
-                      )}
-                    </div>
-                  </TabPanel>
-                )}
-              </TabPanels>
-            </TabGroup>
-          </Card>
-        )}
+      <div>
+        <Button
+          variant="light"
+          icon={ArrowLeftIcon}
+          onClick={() => setSelectedEventId(null)}
+          className="mb-4"
+        >
+          Back to Events
+        </Button>
+        <EventDetail eventId={selectedEventId} />
       </div>
     );
   }
 
-  // Render the main events list view
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6">
       <Flex justifyContent="between" alignItems="center" className="mb-6">
-        <Title>Events and Logs</Title>
+        <Flex alignItems="center" className="gap-2">
+          <Link href="/">
+            <Button variant="light" icon={ArrowLeftIcon}>
+              Back to Dashboard
+            </Button>
+          </Link>
+          <Title>Events</Title>
+        </Flex>
         <Flex justifyContent="end" className="space-x-4">
           <Select
-            value={refreshInterval.toString()}
-            onValueChange={(value) => setRefreshInterval(parseInt(value))}
+            value={timeRange}
+            onValueChange={(value) => setTimeRange(value)}
             className="w-40"
           >
-            <SelectItem value="0">Manual refresh</SelectItem>
-            <SelectItem value="5000">5 seconds</SelectItem>
-            <SelectItem value="15000">15 seconds</SelectItem>
-            <SelectItem value="30000">30 seconds</SelectItem>
-            <SelectItem value="60000">1 minute</SelectItem>
+            <SelectItem value="1h">Last hour</SelectItem>
+            <SelectItem value="1d">Last 24 hours</SelectItem>
+            <SelectItem value="7d">Last 7 days</SelectItem>
+            <SelectItem value="30d">Last 30 days</SelectItem>
           </Select>
           <Button
             icon={ArrowPathIcon}
@@ -445,210 +483,192 @@ export function EventsDashboard() {
         </Text>
       )}
 
+      {/* Summary Cards */}
       <Grid numItemsMd={3} className="gap-6 mb-6">
-        <Card>
-          <div className="h-28">
-            <Text>Total Events</Text>
-            <Metric>{events.length > 0 ? pagination.totalPages * pagination.pageSize : 0}</Metric>
-          </div>
+        <Card decoration="top" decorationColor="blue">
+          <Flex justifyContent="start" className="gap-2">
+            <DocumentTextIcon className="h-6 w-6 text-blue-500" />
+            <div>
+              <Text>Total Events</Text>
+              <Metric>{pagination.total_items}</Metric>
+            </div>
+          </Flex>
         </Card>
         <Card>
-          <div className="h-28">
-            <Text>Success Rate</Text>
-            <Metric>
-              {events.length > 0
-                ? `${Math.round((events.filter(e => e.status && e.status.toLowerCase() === 'success').length / events.length) * 100)}%`
-                : 'N/A'}
-            </Metric>
-          </div>
+          <Text>Top Event Type</Text>
+          <Metric>
+            {eventsByType.length > 0 
+              ? getEventTypeDisplay(eventsByType.sort((a, b) => b.value - a.value)[0].name)
+              : 'None'}
+          </Metric>
         </Card>
         <Card>
-          <div className="h-28">
-            <Text>Recent Errors</Text>
-            <Metric>{events.filter(e => e.status && e.status.toLowerCase() === 'error').length}</Metric>
-          </div>
+          <Text>Top Event Source</Text>
+          <Metric>
+            {eventsBySource.length > 0 
+              ? eventsBySource.sort((a, b) => b.value - a.value)[0].name
+              : 'None'}
+          </Metric>
         </Card>
       </Grid>
 
-      <Card>
-        <Flex justifyContent="between" className="mb-4">
+      {/* Charts */}
+      <Grid numItemsMd={2} className="gap-6 mb-6">
+        <Card>
+          <Title>Event Count Over Time</Title>
+          <AreaChart
+            className="h-72 mt-4"
+            data={prepareChartData(eventTrend)}
+            index="date"
+            categories={["value"]}
+            colors={["blue"]}
+            valueFormatter={(value) => `${value} events`}
+            showLegend={false}
+          />
+        </Card>
+        <Card>
+          <Title>Events by Type</Title>
+          <DonutChart
+            className="h-72 mt-4"
+            data={eventsByType}
+            category="value"
+            index="name"
+            colors={["blue", "cyan", "indigo", "sky", "violet"]}
+            valueFormatter={(value) => `${value} events`}
+          />
+        </Card>
+      </Grid>
+
+      {/* Event Filters */}
+      <Card className="mb-6">
+        <Flex justifyContent="between" className="mb-4 gap-2">
           <TextInput
             icon={MagnifyingGlassIcon}
             placeholder="Search events..."
-            className="max-w-md"
+            className="max-w-sm"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                fetchEvents();
+              }
+            }}
           />
-          <Button
-            onClick={() => setShowFilters(!showFilters)}
-            icon={AdjustmentsHorizontalIcon}
-            variant="light"
-          >
-            {showFilters ? "Hide Filters" : "Show Filters"}
-          </Button>
+          <Flex className="gap-2">
+            <Select
+              value={typeFilter}
+              onValueChange={(value) => setTypeFilter(value)}
+              placeholder="Filter by type"
+              className="w-48"
+            >
+              <SelectItem value="all">All types</SelectItem>
+              <SelectItem value="message">Message</SelectItem>
+              <SelectItem value="user_message">User Message</SelectItem>
+              <SelectItem value="assistant_message">Assistant Message</SelectItem>
+              <SelectItem value="llm_request">LLM Request</SelectItem>
+              <SelectItem value="llm_response">LLM Response</SelectItem>
+              <SelectItem value="tool_execution">Tool Execution</SelectItem>
+              <SelectItem value="tool_response">Tool Response</SelectItem>
+              <SelectItem value="error">Error</SelectItem>
+            </Select>
+            <Select
+              value={levelFilter}
+              onValueChange={(value) => setLevelFilter(value)}
+              placeholder="Filter by level"
+              className="w-40"
+            >
+              <SelectItem value="all">All levels</SelectItem>
+              <SelectItem value="info">Info</SelectItem>
+              <SelectItem value="warning">Warning</SelectItem>
+              <SelectItem value="error">Error</SelectItem>
+            </Select>
+            <Select
+              value={agentFilter}
+              onValueChange={(value) => setAgentFilter(value)}
+              placeholder="Filter by agent"
+              className="w-40"
+            >
+              <SelectItem value="all">All agents</SelectItem>
+              <SelectItem value="agent">Agent</SelectItem>
+              <SelectItem value="user">User</SelectItem>
+              <SelectItem value="llm">LLM</SelectItem>
+              <SelectItem value="system">System</SelectItem>
+              <SelectItem value="tool">Tool</SelectItem>
+            </Select>
+          </Flex>
         </Flex>
 
-        {showFilters && (
-          <div className="mb-6 p-4 bg-gray-50 rounded-md">
-            <Grid numItemsMd={3} className="gap-4">
-              <Select
-                value={statusFilter}
-                onValueChange={(value) => setStatusFilter(value)}
-                placeholder="Filter by status"
-              >
-                <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="success">Success</SelectItem>
-                <SelectItem value="error">Error</SelectItem>
-                <SelectItem value="warning">Warning</SelectItem>
-                <SelectItem value="info">Info</SelectItem>
-              </Select>
-
-              <Select
-                value={typeFilter}
-                onValueChange={(value) => setTypeFilter(value)}
-                placeholder="Filter by type"
-              >
-                <SelectItem value="all">All Types</SelectItem>
-                {eventTypes.map((type) => (
-                  <SelectItem key={type} value={type}>
-                    {getEventTypeName(type)}
-                  </SelectItem>
-                ))}
-              </Select>
-
-              <Select
-                value={agentFilter}
-                onValueChange={(value) => setAgentFilter(value)}
-                placeholder="Filter by agent"
-              >
-                <SelectItem value="all">All Agents</SelectItem>
-                {agents.map((agent) => (
-                  <SelectItem key={agent.id} value={agent.id.toString()}>
-                    {agent.name}
-                  </SelectItem>
-                ))}
-              </Select>
-            </Grid>
-
-            <div className="mt-4">
-              <DateRangePicker
-                className="w-full"
-                value={dateFilter}
-                onValueChange={setDateFilter}
-                displayFormat="MMM dd, yyyy"
-                placeholder="Filter by date range"
-              />
-            </div>
-
-            <Flex justifyContent="end" className="mt-4">
-              <Button
-                onClick={resetFilters}
-                variant="light"
-              >
-                Reset Filters
-              </Button>
-            </Flex>
-          </div>
-        )}
+        <Divider />
 
         {error ? (
-          <div className="text-center py-10">
-            <Text color="red">{error}</Text>
-          </div>
-        ) : loading ? (
-          <div className="text-center py-10">
-            <Text>Loading events...</Text>
-          </div>
-        ) : filteredEvents.length === 0 ? (
-          <div className="text-center py-10">
-            <Text>No events found matching your criteria.</Text>
-          </div>
+          <Text color="red">{error}</Text>
         ) : (
-          <>
-            <Table>
-              <TableHead>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableHeaderCell>Event ID</TableHeaderCell>
+                <TableHeaderCell>Time</TableHeaderCell>
+                <TableHeaderCell>Type</TableHeaderCell>
+                <TableHeaderCell>Level</TableHeaderCell>
+                <TableHeaderCell>Agent</TableHeaderCell>
+                <TableHeaderCell>Trace ID</TableHeaderCell>
+                <TableHeaderCell>Actions</TableHeaderCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {loading ? (
                 <TableRow>
-                  <TableHeaderCell 
-                    className="cursor-pointer"
-                    onClick={() => handleSort('id')}
-                  >
-                    <Flex alignItems="center" justifyContent="between">
-                      ID
-                      {sortField === 'id' && (
-                        sortDirection === 'asc' ? <ChevronUpIcon className="h-4 w-4" /> : <ChevronDownIcon className="h-4 w-4" />
-                      )}
-                    </Flex>
-                  </TableHeaderCell>
-                  <TableHeaderCell 
-                    className="cursor-pointer"
-                    onClick={() => handleSort('timestamp')}
-                  >
-                    <Flex alignItems="center" justifyContent="between">
-                      Timestamp
-                      {sortField === 'timestamp' && (
-                        sortDirection === 'asc' ? <ChevronUpIcon className="h-4 w-4" /> : <ChevronDownIcon className="h-4 w-4" />
-                      )}
-                    </Flex>
-                  </TableHeaderCell>
-                  <TableHeaderCell>Type</TableHeaderCell>
-                  <TableHeaderCell>Status</TableHeaderCell>
-                  <TableHeaderCell>Agent</TableHeaderCell>
-                  <TableHeaderCell>Details</TableHeaderCell>
+                  <TableCell colSpan={7} className="text-center">
+                    <Text>Loading...</Text>
+                  </TableCell>
                 </TableRow>
-              </TableHead>
-              <TableBody>
-                {filteredEvents.map((event) => (
-                  <TableRow 
-                    key={event.id} 
-                    className="cursor-pointer hover:bg-gray-50"
-                    onClick={() => handleRowClick(event)}
-                  >
+              ) : events.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center">
+                    <Text>No events found.</Text>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                events.map((event) => (
+                  <TableRow key={event.id}>
                     <TableCell>{event.id}</TableCell>
                     <TableCell>{formatTimestamp(event.timestamp)}</TableCell>
-                    <TableCell>{getEventTypeName(event.type)}</TableCell>
+                    <TableCell>{getEventTypeDisplay(event.name)}</TableCell>
+                    <TableCell>{event.level}</TableCell>
                     <TableCell>
-                      <StatusBadge status={event.status} />
+                      <Link 
+                        href={`/agents/${event.agent_id}`}
+                        className="text-blue-500 hover:text-blue-700"
+                      >
+                        {event.attributes.agent_name || event.agent_id}
+                      </Link>
                     </TableCell>
                     <TableCell>
-                      {event.agent_id ? (
-                        <Link href={`/agents/${event.agent_id}`}>
-                          <span className="text-blue-500 hover:underline">
-                            {event.agent_name || `Agent #${event.agent_id}`}
-                          </span>
-                        </Link>
-                      ) : (
-                        '-'
-                      )}
+                      <Link 
+                        href={`/traces/${event.trace_id}`}
+                        className="text-blue-500 hover:text-blue-700"
+                      >
+                        {event.trace_id.slice(0, 8)}...
+                      </Link>
                     </TableCell>
-                    <TableCell className="truncate max-w-xs">{event.details || '-'}</TableCell>
+                    <TableCell>
+                      <Button 
+                        variant="light"
+                        size="xs"
+                        icon={EyeIcon}
+                        onClick={() => setSelectedEventId(event.id)}
+                      >
+                        View
+                      </Button>
+                    </TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-
-            <Flex justifyContent="between" className="mt-4">
-              <Text>
-                Showing {(pagination.currentPage - 1) * pagination.pageSize + 1} - {Math.min(pagination.currentPage * pagination.pageSize, pagination.totalPages * pagination.pageSize)} of {pagination.totalPages * pagination.pageSize}
-              </Text>
-              <Flex className="space-x-2">
-                <Button
-                  variant="light"
-                  disabled={pagination.currentPage === 1}
-                  onClick={() => handlePageChange(pagination.currentPage - 1)}
-                >
-                  Previous
-                </Button>
-                <Button
-                  variant="light"
-                  disabled={pagination.currentPage === pagination.totalPages}
-                  onClick={() => handlePageChange(pagination.currentPage + 1)}
-                >
-                  Next
-                </Button>
-              </Flex>
-            </Flex>
-          </>
+                ))
+              )}
+            </TableBody>
+          </Table>
         )}
+        
+        {renderPagination()}
       </Card>
     </div>
   );

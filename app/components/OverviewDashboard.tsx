@@ -15,6 +15,22 @@ import {
   Tab,
   TabPanels,
   TabPanel,
+  Select,
+  SelectItem,
+  Button,
+  Table,
+  TableHead,
+  TableRow,
+  TableHeaderCell,
+  TableBody,
+  TableCell,
+  Divider,
+  BarChart,
+  DonutChart,
+  Color,
+  Legend,
+  List,
+  ListItem
 } from '@tremor/react'
 import {
   BoltIcon,
@@ -26,721 +42,1136 @@ import {
   ArrowPathIcon,
   ArrowTrendingUpIcon,
   ChevronRightIcon,
+  ServerIcon,
+  ChartBarIcon,
+  CheckCircleIcon,
+  XCircleIcon,
+  InformationCircleIcon,
+  ClockIcon as ClockIconOutline,
+  RocketLaunchIcon,
+  CpuChipIcon as CpuChipIconOutline,
+  EyeIcon,
+  UserCircleIcon,
+  DocumentTextIcon,
+  ChevronDoubleRightIcon,
+  ChartPieIcon
 } from '@heroicons/react/24/outline'
 import { ConnectionStatus } from './ConnectionStatus'
 import { SimpleDonutChart } from './SimpleDonutChart'
 import Link from 'next/link'
+import { fetchAPI, buildQueryParams } from '../lib/api'
+import { DASHBOARD, AGENTS, METRICS } from '../lib/api-endpoints'
 
-// Define API base URL
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '';
+// Define types based on the new API
+type DashboardMetric = {
+  metric: string;
+  value: number;
+  change: number;
+  trend: 'up' | 'down' | 'stable';
+};
 
-// Define types
-type MetricsData = {
-  totalAgents: number
-  activeAgents: number
-  totalEvents: number
-  recentEvents: number
-  securityAlerts: number
-  criticalAlerts: number
-  avgResponseTime: number
-  successRate: number
-}
+type TimeSeriesData = {
+  timestamp: string;
+  value: number;
+  dimensions?: Record<string, string>;
+};
 
-type AgentData = {
-  id: number
-  name: string
-  status: 'active' | 'inactive' | 'error'
-  type: string
-  last_active: string
-  event_count: number
-}
+type MetricsResponse = {
+  period: string;
+  time_range: string;
+  from_time: string;
+  to_time: string;
+  agent_id: string | null;
+  metrics: DashboardMetric[];
+};
 
-type EventData = {
-  id: number
-  timestamp: string
-  type: string
-  agent_id: number
-  agent_name: string
-  description: string
-  status: string
-}
+type Agent = {
+  agent_id: string;
+  name: string;
+  type: string;
+  status: string;
+  request_count: number;
+  token_usage: number;
+  error_count: number;
+};
 
-type AlertData = {
-  id: number
-  timestamp: string
-  severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
-  type: string
-  description: string
-  agent_id: number
-  agent_name: string
-  action_taken: string
-}
+type TopAgentsResponse = {
+  items: Agent[];
+};
+
+type MetricChartData = {
+  metric: string;
+  from_time: string;
+  to_time: string;
+  interval: string;
+  data: TimeSeriesData[];
+};
+
+// Calculate health score based on metrics
+const calculateHealthScore = (metrics: DashboardMetric[]): number => {
+  if (!metrics || metrics.length === 0) return 100;
+  
+  // Base score
+  let score = 100;
+  
+  // Find error metrics and reduce score if they exist
+  const errorMetrics = metrics.filter(m => 
+    m.metric.includes('error') || 
+    m.metric.includes('failure')
+  );
+  
+  if (errorMetrics.length > 0) {
+    errorMetrics.forEach(m => {
+      if (m.value > 0) {
+        score -= Math.min(25, m.value * 5); // Reduce score based on error count
+      }
+    });
+  }
+  
+  // Reduce score for poor response times
+  const responseTimeMetric = metrics.find(m => m.metric.includes('response_time'));
+  if (responseTimeMetric && responseTimeMetric.value > 3000) {
+    score -= Math.min(15, (responseTimeMetric.value - 3000) / 200);
+  }
+  
+  return Math.max(0, Math.min(100, score));
+};
+
+// Get health status based on score
+const getHealthStatus = (score: number): { status: string; color: Color } => {
+  if (score >= 90) return { status: 'Healthy', color: 'green' };
+  if (score >= 75) return { status: 'Good', color: 'emerald' };
+  if (score >= 60) return { status: 'Fair', color: 'yellow' };
+  if (score >= 40) return { status: 'Degraded', color: 'amber' };
+  return { status: 'Critical', color: 'red' };
+};
 
 export default function OverviewDashboard() {
-  // State for all dashboard data
-  const [metrics, setMetrics] = useState<MetricsData>({
-    totalAgents: 0,
-    activeAgents: 0,
-    totalEvents: 0,
-    recentEvents: 0,
-    securityAlerts: 0,
-    criticalAlerts: 0,
-    avgResponseTime: 0,
-    successRate: 98.5,
-  })
-
-  const [agents, setAgents] = useState<AgentData[]>([])
-  const [events, setEvents] = useState<EventData[]>([])
-  const [alerts, setAlerts] = useState<AlertData[]>([])
-  const [eventsByHour, setEventsByHour] = useState<{ hour: string; count: number }[]>([])
-  const [alertsByType, setAlertsByType] = useState<{ type: string; count: number }[]>([])
+  const [metrics, setMetrics] = useState<DashboardMetric[]>([])
+  const [topAgents, setTopAgents] = useState<Agent[]>([])
+  const [llmRequests, setLlmRequests] = useState<TimeSeriesData[]>([])
+  const [tokenUsage, setTokenUsage] = useState<TimeSeriesData[]>([])
+  const [toolExecutions, setToolExecutions] = useState<TimeSeriesData[]>([])
+  const [sessionCounts, setSessionCounts] = useState<TimeSeriesData[]>([])
+  
+  const [timeRange, setTimeRange] = useState<string>('30d')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [activeTab, setActiveTab] = useState(0)
+  const [healthScore, setHealthScore] = useState(100)
+  const [selectedMetric, setSelectedMetric] = useState<string | null>(null)
 
-  // Function to fetch all data
-  const fetchAllData = async (isInitialLoad = false) => {
-    // Only show loading state on initial load, not during refreshes
-    if (isInitialLoad) {
-      setLoading(true)
-    }
-    setError(null)
-
+  // Fetch all dashboard data
+  const fetchDashboardData = async () => {
     try {
-      // Fetch agents
-      const agentsResponse = await fetch(`${API_BASE_URL}/api/agents`)
-      if (!agentsResponse.ok) throw new Error('Failed to fetch agents')
-      const agentsData = await agentsResponse.json()
+      setLoading(true)
+      setError(null)
 
-      // Fetch events
-      const eventsResponse = await fetch(`${API_BASE_URL}/api/events`)
-      if (!eventsResponse.ok) throw new Error('Failed to fetch events')
-      const eventsData = await eventsResponse.json()
-
-      // Fetch alerts
-      const alertsResponse = await fetch(`${API_BASE_URL}/api/alerts`)
-      if (!alertsResponse.ok) throw new Error('Failed to fetch alerts')
-      const alertsData = await alertsResponse.json()
-
-      // Fetch metrics
-      const metricsResponse = await fetch(`${API_BASE_URL}/api/metrics`)
-      if (!metricsResponse.ok) throw new Error('Failed to fetch metrics')
-      const metricsData = await metricsResponse.json()
-
-      // Fetch events by hour
-      const hourlyResponse = await fetch(`${API_BASE_URL}/api/events/hourly`)
-      if (!hourlyResponse.ok) throw new Error('Failed to fetch hourly events')
-      const hourlyData = await hourlyResponse.json()
-
-      // Fetch alerts by type
-      const typesResponse = await fetch(`${API_BASE_URL}/api/alerts/types`)
-      if (!typesResponse.ok) throw new Error('Failed to fetch alert types')
-      const typesData = await typesResponse.json()
-
-      // Update state only after all requests complete to minimize renders
-      setAgents(agentsData || [])
-      setEvents(eventsData.events || [])
-      setAlerts(alertsData.alerts || [])
-      setEventsByHour(hourlyData || [])
-      setAlertsByType(typesData || [])
-
-      // Update metrics
-      setMetrics({
-        totalAgents: agentsData.length,
-        activeAgents: agentsData.filter((a: AgentData) =>
-          (a.status || '').toLowerCase().includes('active')
-        ).length,
-        totalEvents: eventsData.total || 0,
-        recentEvents: Math.min(100, eventsData.events?.length || 0),
-        securityAlerts: alertsData.total || 0,
-        criticalAlerts: alertsData.critical || 0,
-        avgResponseTime: metricsData.avgResponseTime || 0,
-        successRate: metricsData.successRate || 98.5,
-      })
-
-      if (isInitialLoad) {
-        setLoading(false)
+      // Fetch top-level metrics
+      const params = { time_range: timeRange };
+      const metricsData = await fetchAPI<MetricsResponse>(`${DASHBOARD.METRICS}${buildQueryParams(params)}`);
+      setMetrics(metricsData.metrics)
+      
+      // Calculate health score
+      setHealthScore(calculateHealthScore(metricsData.metrics));
+      
+      // Fetch top agents
+      const agentsParams = {
+        page: 1,
+        page_size: 5,
+        sort_by: 'request_count',
+        sort_dir: 'desc',
+        status: 'active'
+      };
+      
+      try {
+        const agentsData = await fetchAPI<TopAgentsResponse>(`${AGENTS.LIST}${buildQueryParams(agentsParams)}`);
+        setTopAgents(agentsData.items || []);
+      } catch (error) {
+        console.warn('Failed to fetch top agents:', error);
       }
+      
+      // Fetch LLM requests time series
+      try {
+        const llmParams = {
+          time_range: timeRange,
+          interval: getInterval(timeRange)
+        };
+        
+        const llmData = await fetchAPI<MetricChartData>(`${METRICS.LLM_REQUEST_COUNT}${buildQueryParams(llmParams)}`);
+        setLlmRequests(llmData.data || []);
+      } catch (error) {
+        console.warn('Failed to fetch LLM requests:', error);
+      }
+      
+      // Fetch token usage time series
+      try {
+        const tokenParams = {
+          time_range: timeRange,
+          interval: getInterval(timeRange)
+        };
+        
+        const tokenData = await fetchAPI<MetricChartData>(`${METRICS.LLM_TOKEN_USAGE}${buildQueryParams(tokenParams)}`);
+        setTokenUsage(tokenData.data || []);
+      } catch (error) {
+        console.warn('Failed to fetch token usage:', error);
+      }
+      
+      // Fetch tool executions time series
+      try {
+        const toolParams = {
+          time_range: timeRange,
+          interval: getInterval(timeRange)
+        };
+        
+        const toolData = await fetchAPI<MetricChartData>(`${METRICS.TOOL_EXECUTION_COUNT}${buildQueryParams(toolParams)}`);
+        setToolExecutions(toolData.data || []);
+      } catch (error) {
+        console.warn('Failed to fetch tool executions:', error);
+      }
+      
+      // Fetch session counts time series
+      try {
+        const sessionParams = {
+          time_range: timeRange,
+          interval: getInterval(timeRange)
+        };
+        
+        const sessionData = await fetchAPI<MetricChartData>(`${METRICS.SESSION_COUNT}${buildQueryParams(sessionParams)}`);
+        setSessionCounts(sessionData.data || []);
+      } catch (error) {
+        console.warn('Failed to fetch session counts:', error);
+      }
+      
+      setLastUpdated(new Date())
     } catch (err) {
-      console.error('Error fetching data:', err)
-      setError('Failed to fetch data. Please try again later.')
+      console.error('Error fetching dashboard data:', err)
+      setError(`${err instanceof Error ? err.message : 'Failed to load dashboard data'}`)
+    } finally {
       setLoading(false)
-
-      // Use mock data as fallback
-      initializeMockData()
+    }
+  }
+  
+  // Helper function to get appropriate interval based on time range
+  const getInterval = (range: string): string => {
+    switch (range) {
+      case '1h': return '1m'
+      case '1d': return '1h'
+      case '7d': return '1d'
+      case '30d': return '1d'
+      default: return '1d'
     }
   }
 
-  // Initial data load
+  // Initial data fetch
   useEffect(() => {
-    fetchAllData(true)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    fetchDashboardData()
+  }, [timeRange])
 
-  // Mock data initialization (as fallback)
-  const initializeMockData = () => {
-    // Mock agents
-    const mockAgents: AgentData[] = [
-      {
-        id: 1,
-        name: 'Customer Service Bot',
-        status: 'active',
-        type: 'chat',
-        last_active: new Date().toISOString(),
-        event_count: 2435,
-      },
-      {
-        id: 2,
-        name: 'Data Analyzer',
-        status: 'active',
-        type: 'analysis',
-        last_active: new Date().toISOString(),
-        event_count: 1526,
-      },
-      {
-        id: 3,
-        name: 'Security Monitor',
-        status: 'active',
-        type: 'security',
-        last_active: new Date().toISOString(),
-        event_count: 892,
-      },
-      {
-        id: 4,
-        name: 'Legacy Integration',
-        status: 'inactive',
-        type: 'integration',
-        last_active: new Date(Date.now() - 86400000).toISOString(),
-        event_count: 421,
-      },
-      {
-        id: 5,
-        name: 'Inventory Assistant',
-        status: 'error',
-        type: 'assistant',
-        last_active: new Date(Date.now() - 3600000).toISOString(),
-        event_count: 198,
-      },
-    ]
-
-    // Mock events
-    const eventTypes = ['query', 'response', 'tool_call', 'llm_call', 'action', 'error']
-    const mockEvents: EventData[] = Array(20)
-      .fill(null)
-      .map((_, i) => {
-        const agentIndex = Math.floor(Math.random() * mockAgents.length)
-        return {
-          id: i + 1,
-          timestamp: new Date(Date.now() - i * 300000).toISOString(),
-          type: eventTypes[Math.floor(Math.random() * eventTypes.length)],
-          agent_id: mockAgents[agentIndex].id,
-          agent_name: mockAgents[agentIndex].name,
-          description: `Event ${i + 1} description`,
-          status: Math.random() > 0.2 ? 'success' : Math.random() > 0.5 ? 'warning' : 'error',
-        }
-      })
-
-    // Mock alerts
-    const alertTypes = [
-      'prompt_injection',
-      'sensitive_data_leak',
-      'unusual_behavior',
-      'rate_limit',
-      'authorization_bypass',
-    ]
-    const severityLevels: ('LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL')[] = [
-      'LOW',
-      'MEDIUM',
-      'HIGH',
-      'CRITICAL',
-    ]
-    const mockAlerts: AlertData[] = Array(10)
-      .fill(null)
-      .map((_, i) => {
-        const agentIndex = Math.floor(Math.random() * mockAgents.length)
-        const severity = severityLevels[Math.floor(Math.random() * severityLevels.length)]
-        return {
-          id: i + 1,
-          timestamp: new Date(Date.now() - i * 600000).toISOString(),
-          severity,
-          type: alertTypes[Math.floor(Math.random() * alertTypes.length)],
-          description: `Alert ${i + 1} description`,
-          agent_id: mockAgents[agentIndex].id,
-          agent_name: mockAgents[agentIndex].name,
-          action_taken: severity === 'CRITICAL' || severity === 'HIGH' ? 'blocked' : 'logged',
-        }
-      })
-
-    // Mock hourly data
-    const mockHourlyData = []
-    for (let i = 0; i < 24; i++) {
-      const hour = `${i < 10 ? '0' + i : i}:00`
-      const count = Math.floor(Math.random() * 10)
-      mockHourlyData.push({ hour, count })
-    }
-
-    // Mock alert types
-    const mockAlertTypes = alertTypes.map(type => ({
-      type,
-      count: Math.floor(Math.random() * 20),
-    }))
-
-    // Initialize state with mock values
-    setAgents(mockAgents)
-    setEvents(mockEvents)
-    setAlerts(mockAlerts)
-    setEventsByHour(mockHourlyData)
-    setAlertsByType(mockAlertTypes)
-
-    setMetrics({
-      totalAgents: mockAgents.length,
-      activeAgents: mockAgents.filter(a => a.status === 'active').length,
-      totalEvents: 5472,
-      recentEvents: mockEvents.length,
-      securityAlerts: 48,
-      criticalAlerts: mockAlerts.filter(a => a.severity === 'CRITICAL').length,
-      avgResponseTime: 245,
-      successRate: 98.5,
-    })
+  // Format metric name for display
+  const formatMetricName = (metric: string) => {
+    const parts = metric.split('.')
+    return parts.map(part => 
+      part.charAt(0).toUpperCase() + part.slice(1)
+    ).join(' ')
   }
 
+  // Format metric value
+  const formatMetricValue = (metric: string, value: number) => {
+    if (metric.includes('token')) {
+      return `${value.toLocaleString()} tokens`
+    } else if (metric.includes('time') || metric.includes('duration')) {
+      return `${value.toLocaleString()} ms`
+    } else if (metric.includes('rate')) {
+      return `${(value * 100).toFixed(1)}%`
+    } else if (metric.includes('cost')) {
+      return `$${value.toFixed(2)}`
+    }
+    return value.toLocaleString()
+  }
+
+  // Format date for charts
+  const formatChartDate = (timestamp: string, range: string) => {
+    const date = new Date(timestamp)
+    
+    switch (range) {
+      case '1h':
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      case '1d':
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      default:
+        return date.toLocaleDateString([], { month: 'short', day: 'numeric' })
+    }
+  }
+
+  // Format the timestamp
+  const formatTimestamp = (timestamp: string) => {
+    try {
+      const date = new Date(timestamp)
+      return date.toLocaleString()
+    } catch (e) {
+      return 'Invalid date'
+    }
+  }
+  
   // Status badge component
   const StatusBadge = ({ status }: { status: string }) => {
-    let color
-
-    // Normalize status to lowercase for more reliable matching
-    const normalizedStatus = (status || '').toLowerCase()
-
-    if (
-      normalizedStatus.includes('active') ||
-      normalizedStatus === 'running' ||
-      normalizedStatus === 'online'
-    ) {
-      color = 'green'
-    } else if (
-      normalizedStatus.includes('inactive') ||
-      normalizedStatus === 'offline' ||
-      normalizedStatus === 'stopped'
-    ) {
-      color = 'gray'
-    } else if (normalizedStatus.includes('error') || normalizedStatus === 'failed') {
-      color = 'red'
-    } else if (normalizedStatus.includes('warning')) {
-      color = 'yellow'
-    } else if (normalizedStatus.includes('success')) {
-      color = 'green'
-    } else {
-      color = 'blue'
-    }
-
-    return (
-      <Badge color={color} size="xs">
-        {status || 'unknown'}
-      </Badge>
-    )
-  }
-
-  // Alert severity badge component
-  const SeverityBadge = ({ severity }: { severity: string }) => {
-    let color
-
-    switch (severity) {
-      case 'CRITICAL':
-        color = 'red'
-        break
-      case 'HIGH':
-        color = 'orange'
-        break
-      case 'MEDIUM':
-        color = 'yellow'
-        break
-      case 'LOW':
-        color = 'green'
-        break
+    switch (status.toLowerCase()) {
+      case 'active':
+        return <Badge color="green">Active</Badge>
+      case 'inactive':
+      case 'paused':
+        return <Badge color="gray">Inactive</Badge>
+      case 'error':
+        return <Badge color="red">Error</Badge>
       default:
-        color = 'blue'
+        return <Badge color="gray">{status}</Badge>
     }
-
-    return (
-      <Badge color={color} size="xs">
-        {severity}
-      </Badge>
-    )
   }
 
-  // Helper function to format dates safely
-  const formatDate = (dateString: string | null) => {
-    if (!dateString) return 'N/A'
+  // Helper to transform time series data for charts
+  const prepareChartData = (data: TimeSeriesData[]) => {
+    return data.map(item => ({
+      date: formatChartDate(item.timestamp, timeRange),
+      value: item.value
+    }))
+  }
 
-    try {
-      const date = new Date(dateString)
-      // Check if date is valid
-      if (isNaN(date.getTime())) {
-        return 'Invalid Date'
+  // Get icon for metric
+  const getMetricIcon = (metric: string) => {
+    if (metric.includes('llm') || metric.includes('token')) return <BoltIcon className="h-5 w-5" />
+    if (metric.includes('tool')) return <CpuChipIcon className="h-5 w-5" />
+    if (metric.includes('error')) return <ExclamationTriangleIcon className="h-5 w-5" />
+    if (metric.includes('session')) return <ChatBubbleLeftRightIcon className="h-5 w-5" />
+    if (metric.includes('time') || metric.includes('duration')) return <ClockIcon className="h-5 w-5" />
+    return <ChartBarIcon className="h-5 w-5" />
+  }
+
+  // Get color for metric
+  const getMetricColor = (metric: string): Color => {
+    if (metric.includes('llm') || metric.includes('token')) return 'blue'
+    if (metric.includes('tool')) return 'indigo'
+    if (metric.includes('error')) return 'red'
+    if (metric.includes('session')) return 'emerald'
+    if (metric.includes('time') || metric.includes('duration')) return 'amber'
+    return 'slate'
+  }
+
+  // Determine if trend is positive
+  const isPositiveTrend = (metric: string, trend: string): boolean => {
+    if (metric.includes('error') || metric.includes('failure')) {
+      return trend === 'down'
+    }
+    return trend === 'up'
+  }
+
+  // Get metrics by category
+  const getMetricsByCategory = () => {
+    const categories = {
+      'LLM': metrics.filter(m => m.metric.includes('llm') || m.metric.includes('token')),
+      'Tools': metrics.filter(m => m.metric.includes('tool')),
+      'Sessions': metrics.filter(m => m.metric.includes('session')),
+      'Performance': metrics.filter(m => m.metric.includes('time') || m.metric.includes('duration')),
+      'Errors': metrics.filter(m => m.metric.includes('error') || m.metric.includes('failure')),
+      'Other': metrics.filter(m => 
+        !m.metric.includes('llm') && 
+        !m.metric.includes('token') && 
+        !m.metric.includes('tool') && 
+        !m.metric.includes('session') && 
+        !m.metric.includes('time') && 
+        !m.metric.includes('duration') && 
+        !m.metric.includes('error') && 
+        !m.metric.includes('failure')
+      )
+    }
+    
+    // Remove empty categories
+    Object.keys(categories).forEach(key => {
+      if (categories[key as keyof typeof categories].length === 0) {
+        delete categories[key as keyof typeof categories]
       }
-      return date.toLocaleString()
-    } catch (error) {
-      return 'Invalid Date'
+    })
+    
+    return categories
+  }
+
+  // Get chart data for agent comparison
+  const getAgentComparisonData = () => {
+    if (!topAgents || topAgents.length === 0) return []
+    
+    return topAgents.map(agent => ({
+      name: agent.name,
+      'Requests': agent.request_count,
+      'Tokens': agent.token_usage / 1000 // Show in thousands
+    }))
+  }
+
+  // Format large numbers for display
+  const formatNumber = (value: number): string => {
+    if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`
+    if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`
+    return value.toString()
+  }
+
+  // Generate summary metrics for overview section
+  const getSummaryMetrics = () => {
+    const summaryMetrics = []
+    
+    // LLM Requests
+    const llmRequestMetric = metrics.find(m => m.metric === 'llm_request_count')
+    if (llmRequestMetric) {
+      summaryMetrics.push({
+        name: 'LLM Requests',
+        value: llmRequestMetric.value,
+        change: llmRequestMetric.change,
+        trend: llmRequestMetric.trend,
+        icon: <BoltIcon className="h-6 w-6" />,
+        color: 'blue' as Color
+      })
     }
+    
+    // Token Usage
+    const tokenUsageMetric = metrics.find(m => m.metric === 'llm_token_usage')
+    if (tokenUsageMetric) {
+      summaryMetrics.push({
+        name: 'Token Usage',
+        value: tokenUsageMetric.value,
+        change: tokenUsageMetric.change,
+        trend: tokenUsageMetric.trend,
+        icon: <DocumentTextIcon className="h-6 w-6" />,
+        color: 'indigo' as Color,
+        suffix: ' tokens'
+      })
+    }
+    
+    // Tool Executions
+    const toolExecMetric = metrics.find(m => m.metric === 'tool_execution_count')
+    if (toolExecMetric) {
+      summaryMetrics.push({
+        name: 'Tool Executions',
+        value: toolExecMetric.value,
+        change: toolExecMetric.change,
+        trend: toolExecMetric.trend,
+        icon: <CpuChipIcon className="h-6 w-6" />,
+        color: 'emerald' as Color
+      })
+    }
+    
+    // Avg Response Time
+    const responseTimeMetric = metrics.find(m => m.metric === 'llm_avg_response_time')
+    if (responseTimeMetric) {
+      summaryMetrics.push({
+        name: 'Avg Response Time',
+        value: responseTimeMetric.value,
+        change: responseTimeMetric.change,
+        trend: responseTimeMetric.trend,
+        icon: <ClockIcon className="h-6 w-6" />,
+        color: 'amber' as Color,
+        suffix: ' ms',
+        inverseTrend: true
+      })
+    }
+    
+    // Error Count
+    const errorCountMetric = metrics.find(m => m.metric === 'error_count')
+    if (errorCountMetric) {
+      summaryMetrics.push({
+        name: 'Errors',
+        value: errorCountMetric.value,
+        change: errorCountMetric.change,
+        trend: errorCountMetric.trend,
+        icon: <ExclamationTriangleIcon className="h-6 w-6" />,
+        color: 'red' as Color,
+        inverseTrend: true
+      })
+    }
+    
+    // Sessions
+    const sessionCountMetric = metrics.find(m => m.metric === 'session_count')
+    if (sessionCountMetric) {
+      summaryMetrics.push({
+        name: 'Sessions',
+        value: sessionCountMetric.value,
+        change: sessionCountMetric.change,
+        trend: sessionCountMetric.trend,
+        icon: <ChatBubbleLeftRightIcon className="h-6 w-6" />,
+        color: 'green' as Color
+      })
+    }
+    
+    return summaryMetrics
   }
 
-  // Loading state
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-      </div>
-    )
-  }
-
-  // Error state
-  if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center h-96">
-        <ExclamationTriangleIcon className="h-16 w-16 text-amber-500 mb-4" />
-        <h3 className="text-xl font-semibold text-gray-800 mb-2">Error Loading Dashboard</h3>
-        <p className="text-gray-600 mb-4">{error}</p>
-        <button
-          onClick={() => fetchAllData(true)}
-          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center"
-        >
-          <ArrowPathIcon className="h-4 w-4 mr-2" /> Retry
-        </button>
-      </div>
-    )
-  }
+  // Get health status based on the health score
+  const healthStatus = getHealthStatus(healthScore)
 
   return (
     <div className="space-y-6">
-      {/* Header with title and connection status */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-800">Cylestio Monitor</h1>
-          <p className="text-gray-500 mt-1">AI Agent Observability Dashboard</p>
+      {/* Streamlined header with embedded connection status */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
+        <div className="flex items-center justify-between p-6 border-b border-gray-100">
+          <div className="flex items-center space-x-4">
+            <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-3 rounded-xl shadow-md">
+              <EyeIcon className="h-6 w-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-800">Cylestio Monitor</h1>
+              <p className="text-gray-500">AI Agent Observability Dashboard</p>
+            </div>
+            <div className="ml-4">
+              <ConnectionStatus />
+            </div>
+          </div>
+          
+          <Flex justifyContent="end" alignItems="center" className="gap-4">
+            <Select
+              value={timeRange}
+              onValueChange={(value) => setTimeRange(value)}
+              className="w-40 border border-gray-200 rounded-md shadow-sm"
+            >
+              <SelectItem value="1h">Last hour</SelectItem>
+              <SelectItem value="1d">Last 24 hours</SelectItem>
+              <SelectItem value="7d">Last 7 days</SelectItem>
+              <SelectItem value="30d">Last 30 days</SelectItem>
+            </Select>
+            
+            <Button
+              icon={ArrowPathIcon}
+              color="blue"
+              size="sm"
+              loading={loading}
+              onClick={fetchDashboardData}
+              tooltip="Refresh all data"
+              className="shadow-sm"
+            >
+              Refresh
+            </Button>
+          </Flex>
         </div>
-        <ConnectionStatus />
+        
+        {error && (
+          <div className="bg-red-50 px-6 py-3 border-b border-red-100">
+            <Flex alignItems="center" className="gap-2 text-red-600">
+              <ExclamationTriangleIcon className="h-5 w-5" />
+              <Text className="font-medium">{error}</Text>
+            </Flex>
+          </div>
+        )}
+        
+        {/* Real-time status bar */}
+        <div className="bg-gray-50 px-6 py-3 border-b border-gray-100 flex justify-between items-center">
+          <Flex alignItems="center" className="gap-3">
+            <div className="flex items-center">
+              <div className={`w-3 h-3 rounded-full mr-2 ${healthScore >= 90 ? 'bg-green-500' : healthScore >= 75 ? 'bg-yellow-500' : 'bg-red-500'}`}></div>
+              <Text className="font-medium">System Health: {healthScore}% ({healthStatus.status})</Text>
+            </div>
+            <div className="h-4 border-r border-gray-300 mx-2"></div>
+            <Text className="text-gray-600">
+              Last updated: {lastUpdated ? lastUpdated.toLocaleTimeString() : 'Never'}
+            </Text>
+          </Flex>
+          <Flex className="gap-6">
+            {metrics.find(m => m.metric === 'error_count')?.value > 0 && (
+              <Flex alignItems="center" className="gap-1 text-red-600">
+                <ExclamationTriangleIcon className="h-4 w-4" />
+                <Text className="font-medium">{metrics.find(m => m.metric === 'error_count')?.value} Errors</Text>
+              </Flex>
+            )}
+            <Flex alignItems="center" className="gap-1 text-blue-600">
+              <BoltIcon className="h-4 w-4" />
+              <Text className="font-medium">{metrics.find(m => m.metric === 'llm_request_count')?.value || 0} LLM Requests</Text>
+            </Flex>
+          </Flex>
+        </div>
       </div>
 
-      {/* Key Metrics */}
-      <Grid numItemsMd={2} numItemsLg={4} className="gap-6 mt-6">
-        <Card decoration="top" decorationColor="blue">
-          <Flex justifyContent="start" className="space-x-4">
-            <CpuChipIcon className="h-8 w-8 text-blue-500" />
-            <div>
-              <Text>Total Agents</Text>
-              <Metric>{metrics.totalAgents}</Metric>
-              <Text className="text-blue-500 flex items-center">
-                <span>{metrics.activeAgents} active</span>
-                <div className="w-2 h-2 rounded-full bg-green-500 ml-2"></div>
-              </Text>
-            </div>
-          </Flex>
-        </Card>
+      {/* Key Metrics Summary */}
+      <div className="grid grid-cols-1 lg:grid-cols-6 gap-6">
+        {/* Key performance indicators */}
+        <div className="lg:col-span-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+          {/* LLM Requests */}
+          <Card className="shadow-sm border border-gray-100 bg-gradient-to-b from-white to-blue-50">
+            <Flex alignItems="start" justifyContent="between">
+              <div>
+                <Text className="text-gray-500">LLM Requests</Text>
+                <Metric className="text-3xl my-1">{metrics.find(m => m.metric === 'llm_request_count')?.value || 0}</Metric>
+                <Flex alignItems="center" className="mt-1">
+                  <Badge color="blue" size="xs">
+                    {metrics.find(m => m.metric === 'llm_request_count')?.trend === 'up' ? '↑' : '↓'} 
+                    {Math.abs(metrics.find(m => m.metric === 'llm_request_count')?.change || 0).toFixed(1)}%
+                  </Badge>
+                  <Text className="text-xs text-gray-500 ml-2">vs. previous period</Text>
+                </Flex>
+              </div>
+              <div className="bg-blue-100 rounded-full p-2">
+                <BoltIcon className="h-8 w-8 text-blue-600" />
+              </div>
+            </Flex>
+            {llmRequests.length > 0 && (
+              <div className="mt-4 -mb-4 -ml-4 -mr-4">
+                <AreaChart
+                  data={prepareChartData(llmRequests)}
+                  index="date"
+                  categories={["value"]}
+                  colors={["blue"]}
+                  showAnimation={false}
+                  showLegend={false}
+                  showXAxis={false}
+                  showYAxis={false}
+                  showGridLines={false}
+                  showTooltip={false}
+                  curveType="natural"
+                  className="h-16 mt-2"
+                />
+              </div>
+            )}
+          </Card>
+          
+          {/* Token Usage */}
+          <Card className="shadow-sm border border-gray-100 bg-gradient-to-b from-white to-indigo-50">
+            <Flex alignItems="start" justifyContent="between">
+              <div>
+                <Text className="text-gray-500">Token Usage</Text>
+                <Metric className="text-3xl my-1">
+                  {metrics.find(m => m.metric === 'llm_token_usage')?.value?.toLocaleString() || 0}
+                </Metric>
+                <Flex alignItems="center" className="mt-1">
+                  <Badge color="indigo" size="xs">
+                    {metrics.find(m => m.metric === 'llm_token_usage')?.trend === 'up' ? '↑' : '↓'} 
+                    {Math.abs(metrics.find(m => m.metric === 'llm_token_usage')?.change || 0).toFixed(1)}%
+                  </Badge>
+                  <Text className="text-xs text-gray-500 ml-2">vs. previous period</Text>
+                </Flex>
+              </div>
+              <div className="bg-indigo-100 rounded-full p-2">
+                <DocumentTextIcon className="h-8 w-8 text-indigo-600" />
+              </div>
+            </Flex>
+            {tokenUsage.length > 0 && (
+              <div className="mt-4 -mb-4 -ml-4 -mr-4">
+                <AreaChart
+                  data={prepareChartData(tokenUsage)}
+                  index="date"
+                  categories={["value"]}
+                  colors={["indigo"]}
+                  showAnimation={false}
+                  showLegend={false}
+                  showXAxis={false}
+                  showYAxis={false}
+                  showGridLines={false}
+                  showTooltip={false}
+                  curveType="natural"
+                  className="h-16 mt-2"
+                />
+              </div>
+            )}
+          </Card>
+          
+          {/* Response Time */}
+          <Card className="shadow-sm border border-gray-100 bg-gradient-to-b from-white to-amber-50">
+            <Flex alignItems="start" justifyContent="between">
+              <div>
+                <Text className="text-gray-500">Avg Response Time</Text>
+                <Metric className="text-3xl my-1">
+                  {metrics.find(m => m.metric === 'llm_avg_response_time')?.value?.toLocaleString() || 0} ms
+                </Metric>
+                <Flex alignItems="center" className="mt-1">
+                  <Badge 
+                    color={metrics.find(m => m.metric === 'llm_avg_response_time')?.trend === 'down' ? 'green' : 'red'} 
+                    size="xs"
+                  >
+                    {metrics.find(m => m.metric === 'llm_avg_response_time')?.trend === 'up' ? '↑' : '↓'} 
+                    {Math.abs(metrics.find(m => m.metric === 'llm_avg_response_time')?.change || 0).toFixed(1)}%
+                  </Badge>
+                  <Text className="text-xs text-gray-500 ml-2">vs. previous period</Text>
+                </Flex>
+              </div>
+              <div className="bg-amber-100 rounded-full p-2">
+                <ClockIcon className="h-8 w-8 text-amber-600" />
+              </div>
+            </Flex>
+          </Card>
+          
+          {/* Sessions */}
+          <Card className="shadow-sm border border-gray-100 bg-gradient-to-b from-white to-emerald-50">
+            <Flex alignItems="start" justifyContent="between">
+              <div>
+                <Text className="text-gray-500">Sessions</Text>
+                <Metric className="text-3xl my-1">
+                  {metrics.find(m => m.metric === 'session_count')?.value || 0}
+                </Metric>
+                <Flex alignItems="center" className="mt-1">
+                  <Badge color="emerald" size="xs">
+                    {metrics.find(m => m.metric === 'session_count')?.trend === 'up' ? '↑' : '↓'} 
+                    {Math.abs(metrics.find(m => m.metric === 'session_count')?.change || 0).toFixed(1)}%
+                  </Badge>
+                  <Text className="text-xs text-gray-500 ml-2">vs. previous period</Text>
+                </Flex>
+              </div>
+              <div className="bg-emerald-100 rounded-full p-2">
+                <ChatBubbleLeftRightIcon className="h-8 w-8 text-emerald-600" />
+              </div>
+            </Flex>
+            {sessionCounts.length > 0 && (
+              <div className="mt-4 -mb-4 -ml-4 -mr-4">
+                <AreaChart
+                  data={prepareChartData(sessionCounts)}
+                  index="date"
+                  categories={["value"]}
+                  colors={["emerald"]}
+                  showAnimation={false}
+                  showLegend={false}
+                  showXAxis={false}
+                  showYAxis={false}
+                  showGridLines={false}
+                  showTooltip={false}
+                  curveType="natural"
+                  className="h-16 mt-2"
+                />
+              </div>
+            )}
+          </Card>
+        </div>
 
-        <Card decoration="top" decorationColor="teal">
-          <Flex justifyContent="start" className="space-x-4">
-            <BoltIcon className="h-8 w-8 text-teal-500" />
-            <div>
-              <Text>Total Events</Text>
-              <Metric>{(metrics.totalEvents || 0).toLocaleString()}</Metric>
-              <Text className="text-teal-500 flex items-center">
-                <ArrowTrendingUpIcon className="h-4 w-4 mr-1" />
-                <span>+{metrics.recentEvents} new</span>
-              </Text>
+        {/* Health & Errors Section */}
+        <div className="lg:col-span-2">
+          <Card className="shadow-sm border border-gray-100 h-full">
+            <Title>System Status</Title>
+            <Flex justifyContent="center" alignItems="center" className="mt-4 relative">
+              <DonutChart
+                data={[
+                  { name: 'Health', value: healthScore },
+                  { name: 'Remaining', value: 100 - healthScore }
+                ]}
+                showLabel={false}
+                showAnimation={true}
+                category="value"
+                index="name"
+                colors={[healthScore >= 90 ? 'green' : healthScore >= 75 ? 'yellow' : 'red', 'gray']}
+                variant="donut"
+                className="w-44 h-44 mx-auto"
+              />
+              <div className="absolute inset-0 flex flex-col justify-center items-center">
+                <Text className="text-lg font-medium">{healthStatus.status}</Text>
+                <Metric className="text-4xl">{healthScore}%</Metric>
+              </div>
+            </Flex>
+            
+            <Divider className="my-4" />
+            
+            <div className="space-y-4">
+              <Flex alignItems="center" justifyContent="between">
+                <Flex alignItems="center" className="gap-2">
+                  <div className={`p-1 rounded-full ${metrics.find(m => m.metric === 'error_count')?.value > 0 ? 'bg-red-100' : 'bg-green-100'}`}>
+                    {metrics.find(m => m.metric === 'error_count')?.value > 0 ? (
+                      <ExclamationTriangleIcon className="h-4 w-4 text-red-600" />
+                    ) : (
+                      <CheckCircleIcon className="h-4 w-4 text-green-600" />
+                    )}
+                  </div>
+                  <Text className="font-medium">Error Rate</Text>
+                </Flex>
+                <Badge 
+                  color={metrics.find(m => m.metric === 'error_count')?.value > 0 ? 'red' : 'green'}
+                  size="sm"
+                >
+                  {metrics.find(m => m.metric === 'error_count')?.value || 0} errors
+                </Badge>
+              </Flex>
+              
+              <Flex alignItems="center" justifyContent="between">
+                <Flex alignItems="center" className="gap-2">
+                  <div className={`p-1 rounded-full ${metrics.find(m => m.metric === 'llm_avg_response_time')?.value > 2000 ? 'bg-amber-100' : 'bg-green-100'}`}>
+                    {metrics.find(m => m.metric === 'llm_avg_response_time')?.value > 2000 ? (
+                      <ClockIcon className="h-4 w-4 text-amber-600" />
+                    ) : (
+                      <CheckCircleIcon className="h-4 w-4 text-green-600" />
+                    )}
+                  </div>
+                  <Text className="font-medium">Response Time</Text>
+                </Flex>
+                <Badge 
+                  color={metrics.find(m => m.metric === 'llm_avg_response_time')?.value > 2000 ? 'amber' : 'green'}
+                  size="sm"
+                >
+                  {metrics.find(m => m.metric === 'llm_avg_response_time')?.value?.toLocaleString() || 0} ms
+                </Badge>
+              </Flex>
+              
+              <Flex alignItems="center" justifyContent="between">
+                <Flex alignItems="center" className="gap-2">
+                  <div className="p-1 rounded-full bg-blue-100">
+                    <ServerIcon className="h-4 w-4 text-blue-600" />
+                  </div>
+                  <Text className="font-medium">API Status</Text>
+                </Flex>
+                <Badge color="green" size="sm">Operational</Badge>
+              </Flex>
             </div>
-          </Flex>
-        </Card>
+          </Card>
+        </div>
+      </div>
 
-        <Card decoration="top" decorationColor="amber">
-          <Flex justifyContent="start" className="space-x-4">
-            <ExclamationTriangleIcon className="h-8 w-8 text-amber-500" />
-            <div>
-              <Text>Security Alerts</Text>
-              <Metric>{metrics.securityAlerts}</Metric>
-              <Text className="text-red-500 flex items-center">
-                <ShieldExclamationIcon className="h-4 w-4 mr-1" />
-                <span>{metrics.criticalAlerts} critical</span>
-              </Text>
-            </div>
-          </Flex>
-        </Card>
-
-        <Card decoration="top" decorationColor="indigo">
-          <Flex justifyContent="start" className="space-x-4">
-            <ClockIcon className="h-8 w-8 text-indigo-500" />
-            <div>
-              <Text>Avg Response Time</Text>
-              <Metric>{`${metrics.avgResponseTime} ms`}</Metric>
-              <Text className="text-green-500 flex items-center">
-                <span>{metrics.successRate}% success rate</span>
-              </Text>
-            </div>
-          </Flex>
-        </Card>
-      </Grid>
-
-      {/* Main Dashboard View with Tabs */}
-      <div className="mt-6">
-        <TabGroup>
-          <TabList className="mb-6">
-            <Tab icon={CpuChipIcon}>Agents</Tab>
-            <Tab icon={ChatBubbleLeftRightIcon}>Recent Events</Tab>
-            <Tab icon={ShieldExclamationIcon}>Security Alerts</Tab>
+      {/* Main Analytics Section */}
+      <TabGroup>
+        <div className="bg-white rounded-t-lg shadow-sm border border-gray-100 p-4">
+          <TabList className="gap-2">
+            <Tab className="px-4 py-2 rounded-md data-[selected=true]:bg-blue-50 data-[selected=true]:text-blue-700 hover:bg-gray-50">
+              <Flex alignItems="center" className="gap-2">
+                <ChartBarIcon className="h-5 w-5" />
+                <span>Performance Trends</span>
+              </Flex>
+            </Tab>
+            <Tab className="px-4 py-2 rounded-md data-[selected=true]:bg-blue-50 data-[selected=true]:text-blue-700 hover:bg-gray-50">
+              <Flex alignItems="center" className="gap-2">
+                <UserCircleIcon className="h-5 w-5" />
+                <span>Agent Activity</span>
+              </Flex>
+            </Tab>
+            <Tab className="px-4 py-2 rounded-md data-[selected=true]:bg-blue-50 data-[selected=true]:text-blue-700 hover:bg-gray-50">
+              <Flex alignItems="center" className="gap-2">
+                <ChartPieIcon className="h-5 w-5" />
+                <span>Metrics Breakdown</span>
+              </Flex>
+            </Tab>
           </TabList>
-
+        </div>
+        
+        <div className="bg-white rounded-b-lg shadow-sm border-x border-b border-gray-100 p-6">
           <TabPanels>
-            {/* Agents Panel */}
+            {/* Performance Trends Tab */}
             <TabPanel>
-              <Grid numItemsMd={1} numItemsLg={2} className="gap-6">
-                <Card>
-                  <div className="flex justify-between items-center mb-4">
-                    <Title>Agent Status</Title>
-                    <Link
-                      href="/agents"
-                      className="text-blue-500 text-sm flex items-center hover:underline"
-                    >
-                      View All <ArrowPathIcon className="h-4 w-4 ml-1" />
-                    </Link>
+              <div className="space-y-6">
+                {/* Performance Overview */}
+                <Grid numItemsMd={2} className="gap-6">
+                  {/* LLM Requests Chart */}
+                  <Card className="shadow-sm border border-gray-100">
+                    <Flex alignItems="center" className="gap-2">
+                      <div className="bg-blue-100 p-1.5 rounded-full">
+                        <BoltIcon className="h-5 w-5 text-blue-600" />
+                      </div>
+                      <Title>LLM Requests</Title>
+                    </Flex>
+                    
+                    {llmRequests.length > 0 ? (
+                      <AreaChart
+                        className="h-72 mt-4"
+                        data={prepareChartData(llmRequests)}
+                        index="date"
+                        categories={["value"]}
+                        colors={["blue"]}
+                        valueFormatter={(value) => value.toLocaleString()}
+                        showLegend={false}
+                        showAnimation={true}
+                        curveType="natural"
+                      />
+                    ) : (
+                      <Flex justifyContent="center" alignItems="center" className="h-72 bg-gray-50 rounded-lg border border-gray-200 mt-4">
+                        <Text>No data available</Text>
+                      </Flex>
+                    )}
+                  </Card>
+                  
+                  {/* Token Usage Chart */}
+                  <Card className="shadow-sm border border-gray-100">
+                    <Flex alignItems="center" className="gap-2">
+                      <div className="bg-indigo-100 p-1.5 rounded-full">
+                        <DocumentTextIcon className="h-5 w-5 text-indigo-600" />
+                      </div>
+                      <Title>Token Usage</Title>
+                    </Flex>
+                    
+                    {tokenUsage.length > 0 ? (
+                      <AreaChart
+                        className="h-72 mt-4"
+                        data={prepareChartData(tokenUsage)}
+                        index="date"
+                        categories={["value"]}
+                        colors={["indigo"]}
+                        valueFormatter={(value) => `${value.toLocaleString()} tokens`}
+                        showLegend={false}
+                        showAnimation={true}
+                        curveType="natural"
+                      />
+                    ) : (
+                      <Flex justifyContent="center" alignItems="center" className="h-72 bg-gray-50 rounded-lg border border-gray-200 mt-4">
+                        <Text>No data available</Text>
+                      </Flex>
+                    )}
+                  </Card>
+                  
+                  {/* Tool Executions Chart */}
+                  <Card className="shadow-sm border border-gray-100">
+                    <Flex alignItems="center" className="gap-2">
+                      <div className="bg-emerald-100 p-1.5 rounded-full">
+                        <CpuChipIcon className="h-5 w-5 text-emerald-600" />
+                      </div>
+                      <Title>Tool Executions</Title>
+                    </Flex>
+                    
+                    {toolExecutions.length > 0 ? (
+                      <AreaChart
+                        className="h-72 mt-4"
+                        data={prepareChartData(toolExecutions)}
+                        index="date"
+                        categories={["value"]}
+                        colors={["emerald"]}
+                        valueFormatter={(value) => value.toLocaleString()}
+                        showLegend={false}
+                        showAnimation={true}
+                        curveType="natural"
+                      />
+                    ) : (
+                      <Flex justifyContent="center" alignItems="center" className="h-72 bg-gray-50 rounded-lg border border-gray-200 mt-4">
+                        <Text>No data available</Text>
+                      </Flex>
+                    )}
+                  </Card>
+                  
+                  {/* Sessions Chart */}
+                  <Card className="shadow-sm border border-gray-100">
+                    <Flex alignItems="center" className="gap-2">
+                      <div className="bg-green-100 p-1.5 rounded-full">
+                        <ChatBubbleLeftRightIcon className="h-5 w-5 text-green-600" />
+                      </div>
+                      <Title>Sessions</Title>
+                    </Flex>
+                    
+                    {sessionCounts.length > 0 ? (
+                      <AreaChart
+                        className="h-72 mt-4"
+                        data={prepareChartData(sessionCounts)}
+                        index="date"
+                        categories={["value"]}
+                        colors={["green"]}
+                        valueFormatter={(value) => value.toLocaleString()}
+                        showLegend={false}
+                        showAnimation={true}
+                        curveType="natural"
+                      />
+                    ) : (
+                      <Flex justifyContent="center" alignItems="center" className="h-72 bg-gray-50 rounded-lg border border-gray-200 mt-4">
+                        <Text>No data available</Text>
+                      </Flex>
+                    )}
+                  </Card>
+                </Grid>
+              </div>
+            </TabPanel>
+            
+            {/* Agent Activity Tab */}
+            <TabPanel>
+              <div className="space-y-6">
+                <Flex alignItems="center" className="gap-2">
+                  <div className="bg-blue-100 p-1.5 rounded-full">
+                    <UserCircleIcon className="h-5 w-5 text-blue-600" />
                   </div>
-
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="border-b border-gray-200">
-                          <th className="py-3 px-2 text-sm font-medium text-gray-500">Name</th>
-                          <th className="py-3 px-2 text-sm font-medium text-gray-500">Type</th>
-                          <th className="py-3 px-2 text-sm font-medium text-gray-500">Status</th>
-                          <th className="py-3 px-2 text-sm font-medium text-gray-500">Events</th>
-                          <th className="py-3 px-2 text-sm font-medium text-gray-500">
-                            Last Active
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {agents.map(agent => (
-                          <tr key={agent.id} className="cursor-pointer hover:bg-gray-50">
-                            <td className="py-3 px-2">
-                              <Link
-                                href={`/agents/${agent.id}`}
-                                className="text-blue-600 hover:text-blue-800"
+                  <Title>Top Performing Agents</Title>
+                </Flex>
+                
+                {topAgents.length === 0 ? (
+                  <Card className="shadow-sm border border-gray-100">
+                    <Flex justifyContent="center" alignItems="center" className="py-12 bg-gray-50 rounded-lg">
+                      <Text>No agent data available.</Text>
+                    </Flex>
+                  </Card>
+                ) : (
+                  <Grid numItemsMd={12} className="gap-6">
+                    {/* Agent Activity Overview */}
+                    <Card className="md:col-span-4 shadow-sm border border-gray-100">
+                      <Title>Agent Overview</Title>
+                      
+                      <div className="mt-4 space-y-4">
+                        {topAgents.slice(0, 3).map((agent, index) => (
+                          <div key={agent.agent_id} className={`p-4 rounded-lg ${index === 0 ? 'bg-blue-50 border border-blue-100' : 'bg-gray-50 border border-gray-100'}`}>
+                            <Flex justifyContent="between" alignItems="start">
+                              <div>
+                                <Text className="font-medium">{agent.name}</Text>
+                                <Flex className="mt-1 gap-2">
+                                  <Badge color="slate" size="xs">{agent.type}</Badge>
+                                  <StatusBadge status={agent.status} />
+                                </Flex>
+                              </div>
+                              <Flex direction="col" className="text-right">
+                                <Text className="text-lg font-semibold">{agent.request_count}</Text>
+                                <Text className="text-xs text-gray-500">requests</Text>
+                              </Flex>
+                            </Flex>
+                            
+                            <Grid numItemsMd={3} className="mt-3 gap-2">
+                              <div className="bg-white rounded p-2 border border-gray-200">
+                                <Flex alignItems="center" className="gap-1">
+                                  <BoltIcon className="h-3 w-3 text-blue-500" />
+                                  <Text className="text-xs">Requests</Text>
+                                </Flex>
+                                <Text className="font-medium">{formatNumber(agent.request_count)}</Text>
+                              </div>
+                              
+                              <div className="bg-white rounded p-2 border border-gray-200">
+                                <Flex alignItems="center" className="gap-1">
+                                  <DocumentTextIcon className="h-3 w-3 text-indigo-500" />
+                                  <Text className="text-xs">Tokens</Text>
+                                </Flex>
+                                <Text className="font-medium">{formatNumber(agent.token_usage)}</Text>
+                              </div>
+                              
+                              <div className="bg-white rounded p-2 border border-gray-200">
+                                <Flex alignItems="center" className="gap-1">
+                                  <ExclamationTriangleIcon className="h-3 w-3 text-red-500" />
+                                  <Text className="text-xs">Errors</Text>
+                                </Flex>
+                                <Text className="font-medium">{formatNumber(agent.error_count)}</Text>
+                              </div>
+                            </Grid>
+                          </div>
+                        ))}
+                      </div>
+                      
+                      <Flex justifyContent="center" className="mt-4">
+                        <Link href="/agents">
+                          <Button variant="light" color="blue" size="sm" icon={ChevronDoubleRightIcon} iconPosition="right">
+                            View all agents
+                          </Button>
+                        </Link>
+                      </Flex>
+                    </Card>
+                    
+                    {/* Agent Comparison Chart */}
+                    <Card className="md:col-span-8 shadow-sm border border-gray-100">
+                      <Title>Performance Comparison</Title>
+                      
+                      <div className="mt-4">
+                        <BarChart
+                          className="h-80"
+                          data={getAgentComparisonData()}
+                          index="name"
+                          categories={["Requests", "Tokens"]}
+                          colors={["blue", "indigo"]}
+                          valueFormatter={(value) => value.toLocaleString()}
+                          stack={false}
+                          showLegend={true}
+                          showAnimation={true}
+                        />
+                      </div>
+                      
+                      <Divider className="my-4" />
+                      
+                      <Table>
+                        <TableHead>
+                          <TableRow>
+                            <TableHeaderCell>Agent</TableHeaderCell>
+                            <TableHeaderCell>Type</TableHeaderCell>
+                            <TableHeaderCell>Status</TableHeaderCell>
+                            <TableHeaderCell>Metrics</TableHeaderCell>
+                            <TableHeaderCell>Action</TableHeaderCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {topAgents.map((agent) => (
+                            <TableRow key={agent.agent_id} className="hover:bg-gray-50">
+                              <TableCell>
+                                <Text className="font-medium">{agent.name}</Text>
+                              </TableCell>
+                              <TableCell>
+                                <Badge color="slate">{agent.type}</Badge>
+                              </TableCell>
+                              <TableCell>
+                                <StatusBadge status={agent.status} />
+                              </TableCell>
+                              <TableCell>
+                                <Flex alignItems="center" className="gap-2">
+                                  <Flex alignItems="center" className="gap-1">
+                                    <BoltIcon className="h-4 w-4 text-blue-500" />
+                                    <Text className="text-sm">{formatNumber(agent.request_count)}</Text>
+                                  </Flex>
+                                  <div className="h-4 border-r border-gray-200"></div>
+                                  <Flex alignItems="center" className="gap-1">
+                                    <DocumentTextIcon className="h-4 w-4 text-indigo-500" />
+                                    <Text className="text-sm">{formatNumber(agent.token_usage)}</Text>
+                                  </Flex>
+                                  {agent.error_count > 0 && (
+                                    <>
+                                      <div className="h-4 border-r border-gray-200"></div>
+                                      <Flex alignItems="center" className="gap-1">
+                                        <ExclamationTriangleIcon className="h-4 w-4 text-red-500" />
+                                        <Text className="text-sm">{formatNumber(agent.error_count)}</Text>
+                                      </Flex>
+                                    </>
+                                  )}
+                                </Flex>
+                              </TableCell>
+                              <TableCell>
+                                <Link href={`/agents/${agent.agent_id}`}>
+                                  <Button variant="light" color="blue" size="xs">
+                                    Details
+                                  </Button>
+                                </Link>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </Card>
+                  </Grid>
+                )}
+              </div>
+            </TabPanel>
+            
+            {/* Metrics Breakdown Tab */}
+            <TabPanel>
+              <div className="space-y-6">
+                <Flex alignItems="center" className="gap-2">
+                  <div className="bg-blue-100 p-1.5 rounded-full">
+                    <ChartPieIcon className="h-5 w-5 text-blue-600" />
+                  </div>
+                  <Title>Performance Metrics</Title>
+                </Flex>
+                
+                <Grid numItemsMd={2} className="gap-6">
+                  {Object.entries(getMetricsByCategory()).map(([category, categoryMetrics]) => (
+                    <Card key={category} className="shadow-sm border border-gray-100">
+                      <div className="flex items-center gap-2">
+                        {category === 'LLM' && <div className="p-1.5 rounded-full bg-blue-100"><BoltIcon className="h-5 w-5 text-blue-600" /></div>}
+                        {category === 'Tools' && <div className="p-1.5 rounded-full bg-emerald-100"><CpuChipIcon className="h-5 w-5 text-emerald-600" /></div>}
+                        {category === 'Sessions' && <div className="p-1.5 rounded-full bg-green-100"><ChatBubbleLeftRightIcon className="h-5 w-5 text-green-600" /></div>}
+                        {category === 'Performance' && <div className="p-1.5 rounded-full bg-amber-100"><ClockIcon className="h-5 w-5 text-amber-600" /></div>}
+                        {category === 'Errors' && <div className="p-1.5 rounded-full bg-red-100"><ExclamationTriangleIcon className="h-5 w-5 text-red-600" /></div>}
+                        {category === 'Other' && <div className="p-1.5 rounded-full bg-gray-100"><ChartBarIcon className="h-5 w-5 text-gray-600" /></div>}
+                        <Title>{category}</Title>
+                      </div>
+                      
+                      <List className="mt-4 divide-y divide-gray-100">
+                        {categoryMetrics.map((metric) => (
+                          <ListItem key={metric.metric} className="py-4">
+                            <Flex justifyContent="between" alignItems="center">
+                              <Flex alignItems="center" className="gap-2">
+                                <div className={`p-1.5 rounded-full bg-${getMetricColor(metric.metric)}-100`}>
+                                  {getMetricIcon(metric.metric)}
+                                </div>
+                                <div>
+                                  <Text className="font-medium">{formatMetricName(metric.metric)}</Text>
+                                  <Metric className="text-xl">{formatMetricValue(metric.metric, metric.value)}</Metric>
+                                </div>
+                              </Flex>
+                              <Badge 
+                                color={isPositiveTrend(metric.metric, metric.trend) ? 'green' : 'red'}
+                                size="sm"
                               >
-                                {agent.name}
-                              </Link>
-                            </td>
-                            <td className="py-3 px-2 text-gray-500">{agent.type}</td>
-                            <td className="py-3 px-2">
-                              <StatusBadge status={agent.status} />
-                            </td>
-                            <td className="py-3 px-2 text-gray-500">{agent.event_count}</td>
-                            <td className="py-3 px-2 text-gray-500">
-                              {formatDate(agent.last_active)}
-                            </td>
-                          </tr>
+                                {metric.trend === 'up' ? '↑' : '↓'} {Math.abs(metric.change).toFixed(1)}%
+                              </Badge>
+                            </Flex>
+                          </ListItem>
                         ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  <div className="mt-2 text-right">
-                    <Link
-                      href="/agents"
-                      className="text-blue-600 hover:text-blue-800 text-sm flex items-center justify-end"
-                    >
-                      View all agents
-                      <ChevronRightIcon className="h-4 w-4 ml-1" />
-                    </Link>
-                  </div>
-                </Card>
-
-                <Card>
-                  <div className="mb-4">
-                    <Title>Events by Hour</Title>
-                    <Text className="text-gray-500">Last 24 hours activity</Text>
-                  </div>
-
-                  <AreaChart
-                    className="h-72 mt-4"
-                    data={eventsByHour}
-                    index="hour"
-                    categories={['count']}
-                    colors={['blue']}
-                    valueFormatter={(value: number) => `${value} events`}
-                    showLegend={false}
-                    showAnimation={true}
-                  />
-                </Card>
-              </Grid>
-            </TabPanel>
-
-            {/* Events Panel */}
-            <TabPanel>
-              <Grid numItemsMd={1} numItemsLg={1} className="gap-6">
-                <Card>
-                  <div className="flex justify-between items-center mb-4">
-                    <Title>Recent Events</Title>
-                    <Link
-                      href="/events"
-                      className="text-blue-500 text-sm flex items-center hover:underline"
-                    >
-                      View All <ArrowPathIcon className="h-4 w-4 ml-1" />
-                    </Link>
-                  </div>
-
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="border-b border-gray-200">
-                          <th className="py-3 px-2 text-sm font-medium text-gray-500">Time</th>
-                          <th className="py-3 px-2 text-sm font-medium text-gray-500">Agent</th>
-                          <th className="py-3 px-2 text-sm font-medium text-gray-500">Type</th>
-                          <th className="py-3 px-2 text-sm font-medium text-gray-500">
-                            Description
-                          </th>
-                          <th className="py-3 px-2 text-sm font-medium text-gray-500">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {events.slice(0, 10).map(event => (
-                          <tr key={event.id} className="border-b border-gray-100 hover:bg-gray-50">
-                            <td className="py-3 px-2 text-xs text-gray-500 whitespace-nowrap">
-                              {formatDate(event.timestamp)}
-                            </td>
-                            <td className="py-3 px-2">
-                              <div className="font-medium text-gray-900">{event.agent_name}</div>
-                            </td>
-                            <td className="py-3 px-2 text-gray-500">{event.type}</td>
-                            <td className="py-3 px-2 text-gray-500">{event.description}</td>
-                            <td className="py-3 px-2">
-                              <StatusBadge status={event.status} />
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </Card>
-              </Grid>
-            </TabPanel>
-
-            {/* Security Alerts Panel */}
-            <TabPanel>
-              <Grid numItemsMd={1} numItemsLg={2} className="gap-6">
-                <Card>
-                  <div className="flex justify-between items-center mb-4">
-                    <Title>Security Alerts</Title>
-                    <Link
-                      href="/alerts"
-                      className="text-blue-500 text-sm flex items-center hover:underline"
-                    >
-                      View All <ArrowPathIcon className="h-4 w-4 ml-1" />
-                    </Link>
-                  </div>
-
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="border-b border-gray-200">
-                          <th className="py-3 px-2 text-sm font-medium text-gray-500">Time</th>
-                          <th className="py-3 px-2 text-sm font-medium text-gray-500">Agent</th>
-                          <th className="py-3 px-2 text-sm font-medium text-gray-500">Type</th>
-                          <th className="py-3 px-2 text-sm font-medium text-gray-500">Severity</th>
-                          <th className="py-3 px-2 text-sm font-medium text-gray-500">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {alerts.slice(0, 8).map(alert => (
-                          <tr key={alert.id} className="border-b border-gray-100 hover:bg-gray-50">
-                            <td className="py-3 px-2 text-xs text-gray-500 whitespace-nowrap">
-                              {formatDate(alert.timestamp)}
-                            </td>
-                            <td className="py-3 px-2">
-                              <div className="font-medium text-gray-900">{alert.agent_name}</div>
-                            </td>
-                            <td className="py-3 px-2 text-gray-500">{alert.type}</td>
-                            <td className="py-3 px-2">
-                              <SeverityBadge severity={alert.severity} />
-                            </td>
-                            <td className="py-3 px-2 text-gray-500">
-                              {alert.action_taken === 'blocked' ? (
-                                <span className="text-red-500 font-medium">Blocked</span>
-                              ) : (
-                                <span className="text-gray-500">Logged</span>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </Card>
-
-                <Card>
-                  <div className="mb-4">
-                    <Title>Alert Distribution</Title>
-                    <Text className="text-gray-500">By alert type</Text>
-                  </div>
-
-                  {Array.isArray(alertsByType) ? (
-                    <SimpleDonutChart
-                      className="h-72 mt-4"
-                      data={alertsByType.map(item => ({ name: item.type, count: item.count }))}
-                      colors={['blue', 'amber', 'red', 'green', 'indigo']}
-                      valueFormatter={(value: number) => `${value} alerts`}
-                    />
-                  ) : (
-                    <div className="flex items-center justify-center h-72">
-                      <Text>No alert data available</Text>
-                    </div>
-                  )}
-                </Card>
-              </Grid>
+                      </List>
+                    </Card>
+                  ))}
+                </Grid>
+              </div>
             </TabPanel>
           </TabPanels>
-        </TabGroup>
-      </div>
-
-      {/* Navigation Cards to Other Sections */}
-      <Grid numItemsMd={2} numItemsLg={3} className="gap-6 mt-6">
-        <Card className="hover:shadow-md transition-shadow">
-          <Link href="/agents" className="block p-4">
-            <div className="flex items-center space-x-4">
-              <div className="bg-blue-100 p-3 rounded-full">
-                <CpuChipIcon className="h-6 w-6 text-blue-500" />
-              </div>
-              <div>
-                <h3 className="text-lg font-medium text-gray-900">Agents</h3>
-                <p className="text-gray-500 text-sm">Detailed agent monitoring and management</p>
-              </div>
-            </div>
-          </Link>
-        </Card>
-
-        <Card className="hover:shadow-md transition-shadow">
-          <Link href="/events" className="block p-4">
-            <div className="flex items-center space-x-4">
-              <div className="bg-teal-100 p-3 rounded-full">
-                <ChatBubbleLeftRightIcon className="h-6 w-6 text-teal-500" />
-              </div>
-              <div>
-                <h3 className="text-lg font-medium text-gray-900">Events & Logs</h3>
-                <p className="text-gray-500 text-sm">Detailed event history and log analysis</p>
-              </div>
-            </div>
-          </Link>
-        </Card>
-
-        <Card className="hover:shadow-md transition-shadow">
-          <Link href="/alerts" className="block p-4">
-            <div className="flex items-center space-x-4">
-              <div className="bg-red-100 p-3 rounded-full">
-                <ShieldExclamationIcon className="h-6 w-6 text-red-500" />
-              </div>
-              <div>
-                <h3 className="text-lg font-medium text-gray-900">Security Alerts</h3>
-                <p className="text-gray-500 text-sm">Critical security issues and mitigation</p>
-              </div>
-            </div>
-          </Link>
-        </Card>
-      </Grid>
+        </div>
+      </TabGroup>
     </div>
-  )
+  );
 }
