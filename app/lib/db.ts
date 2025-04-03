@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3'
 import path from 'path'
 import fs from 'fs'
+import { getMockMetrics } from './mockData'
 
 // Define types for our database results
 interface RequestCount {
@@ -95,32 +96,36 @@ try {
 
 export async function getTotalRequestCount(): Promise<number> {
   try {
-    if (!db || !totalRequestsStmt) return 1254 // Mock data
+    if (!db || !totalRequestsStmt) {
+      return getMockMetrics().totalRequests;
+    }
 
     const result = totalRequestsStmt.get({})
     return result?.count || 0
   } catch (error) {
     console.error('Error getting total request count:', error)
-    return 1254 // Mock data
+    return getMockMetrics().totalRequests;
   }
 }
 
 export async function getAverageLlmResponseTime(): Promise<number> {
   try {
-    if (!db || !avgResponseTimeStmt) return 320 // Mock data
+    if (!db || !avgResponseTimeStmt) {
+      return getMockMetrics().avgResponseTime;
+    }
 
     const result = avgResponseTimeStmt.get({})
     return Math.round(result?.avg || 0)
   } catch (error) {
     console.error('Error getting average response time:', error)
-    return 320 // Mock data
+    return getMockMetrics().avgResponseTime;
   }
 }
 
 export async function getBlockedAndSuspiciousRequestCounts(): Promise<SecurityCounts> {
   try {
     if (!db || !securityCountsStmt) {
-      return { blocked: 12, suspicious: 48 } // Mock data
+      return getMockMetrics().securityMetrics;
     }
 
     const result = securityCountsStmt.get({})
@@ -130,7 +135,7 @@ export async function getBlockedAndSuspiciousRequestCounts(): Promise<SecurityCo
     }
   } catch (error) {
     console.error('Error getting security counts:', error)
-    return { blocked: 12, suspicious: 48 } // Mock data
+    return getMockMetrics().securityMetrics;
   }
 }
 

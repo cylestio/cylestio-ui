@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { DbConnection } from '../../../../src/lib/db/connection';
 import { DbUtils } from '../../../../src/lib/db/utils';
 import { config } from '../../../lib/config';
+import { getMockMetrics } from '../../../lib/mockData';
 
 export async function GET() {
   try {
@@ -166,7 +167,10 @@ export async function GET() {
       if (config.useMockData) {
         console.log('Using mock security metrics data as fallback due to configuration setting');
         
-        // Use fallback data
+        const mockMetrics = getMockMetrics();
+        const securityData = mockMetrics.securityMetrics;
+        
+        // Generate severity and alert level data
         const severityData = [
           { name: 'LOW', count: Math.floor(Math.random() * 30) + 5 },
           { name: 'MEDIUM', count: Math.floor(Math.random() * 25) + 5 },
@@ -176,30 +180,19 @@ export async function GET() {
         
         const alertLevelData = [
           { name: 'NONE', count: Math.floor(Math.random() * 40) + 10 },
-          { name: 'SUSPICIOUS', count: Math.floor(Math.random() * 20) + 5 },
-          { name: 'DANGEROUS', count: Math.floor(Math.random() * 10) + 1 },
+          { name: 'SUSPICIOUS', count: securityData.suspicious },
+          { name: 'DANGEROUS', count: securityData.blocked },
         ];
         
         const total = severityData.reduce((sum, item) => sum + item.count, 0);
         const critical = severityData.find(item => item.name === 'CRITICAL')?.count || 0;
-        
-        // Generate trend data for the last 7 days
-        const trendData = [];
-        for (let i = 6; i >= 0; i--) {
-          const date = new Date();
-          date.setDate(date.getDate() - i);
-          trendData.push({
-            date: date.toISOString().split('T')[0],
-            count: Math.floor(Math.random() * 10) + 1
-          });
-        }
         
         metrics = {
           total,
           critical,
           bySeverity: severityData,
           byAlertLevel: alertLevelData,
-          trend: trendData
+          trend: securityData.events
         };
       } else {
         // Otherwise, return an error

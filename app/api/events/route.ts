@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DbConnection } from '../../../src/lib/db/connection';
 import { DbUtils } from '../../../src/lib/db/utils';
+import { config } from '../../lib/config';
+import { generateMockEvents } from '../../lib/mockData';
 
 export async function GET(request: NextRequest) {
   try {
@@ -218,79 +220,4 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-// Helper function to generate mock events for testing
-function generateMockEvents(page: number, pageSize: number): any[] {
-  const mockEvents = [];
-  const startId = (page - 1) * pageSize + 1;
-  const types = ['llm_request', 'llm_response', 'tool_call', 'tool_response', 'user_message', 'agent_message', 'api_call', 'security_alert'];
-  const statuses = ['success', 'error', 'warning', 'info'];
-  
-  // Generate events for the current page
-  for (let i = 0; i < pageSize; i++) {
-    const id = startId + i;
-    const date = new Date();
-    date.setMinutes(date.getMinutes() - id); // Each event is 1 minute older
-    
-    const type = types[Math.floor(Math.random() * types.length)];
-    const status = statuses[Math.floor(Math.random() * statuses.length)];
-    const agent_id = Math.floor(Math.random() * 5) + 1;
-    const agent_name = `Agent #${agent_id}`;
-    const duration = Math.floor(Math.random() * 1000) + 50;
-    
-    let details = '';
-    let data = null;
-    
-    // Generate appropriate details and data based on type
-    if (type === 'llm_request') {
-      details = 'Request to OpenAI API';
-      data = {
-        model: 'gpt-4',
-        temperature: 0.7,
-        max_tokens: 1000,
-        messages: [
-          { role: 'system', content: 'You are a helpful assistant.' },
-          { role: 'user', content: 'Tell me about AI safety.' }
-        ]
-      };
-    } else if (type === 'llm_response') {
-      details = 'Response from OpenAI API';
-      data = {
-        content: 'AI safety refers to the research field focused on ensuring that artificial intelligence systems remain safe and aligned with human values...',
-        model: 'gpt-4',
-        usage: { prompt_tokens: 20, completion_tokens: 150, total_tokens: 170 }
-      };
-    } else if (type === 'tool_call') {
-      details = 'Calling external tool';
-      data = {
-        tool_name: 'web_search',
-        input: { query: 'latest AI developments' }
-      };
-    } else if (type === 'api_call') {
-      details = status === 'error' ? 'Failed API call to external service' : 'Successful API call';
-      data = {
-        method: 'GET',
-        url: 'https://api.example.com/data',
-        headers: { 'Content-Type': 'application/json' },
-        status_code: status === 'error' ? 500 : 200
-      };
-    }
-    
-    mockEvents.push({
-      id,
-      timestamp: date.toISOString(),
-      type,
-      status,
-      agent_id,
-      agent_name,
-      session_id: Math.floor(id / 10) + 1,
-      conversation_id: Math.floor(id / 5) + 1,
-      duration,
-      details,
-      data
-    });
-  }
-  
-  return mockEvents;
 } 

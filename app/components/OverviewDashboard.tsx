@@ -31,6 +31,9 @@ import { ConnectionStatus } from './ConnectionStatus'
 import { SimpleDonutChart } from './SimpleDonutChart'
 import Link from 'next/link'
 
+// Define API base URL
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '';
+
 // Define types
 type MetricsData = {
   totalAgents: number
@@ -104,32 +107,32 @@ export default function OverviewDashboard() {
 
     try {
       // Fetch agents
-      const agentsResponse = await fetch('/api/agents')
+      const agentsResponse = await fetch(`${API_BASE_URL}/api/agents`)
       if (!agentsResponse.ok) throw new Error('Failed to fetch agents')
       const agentsData = await agentsResponse.json()
 
       // Fetch events
-      const eventsResponse = await fetch('/api/events')
+      const eventsResponse = await fetch(`${API_BASE_URL}/api/events`)
       if (!eventsResponse.ok) throw new Error('Failed to fetch events')
       const eventsData = await eventsResponse.json()
 
       // Fetch alerts
-      const alertsResponse = await fetch('/api/alerts')
+      const alertsResponse = await fetch(`${API_BASE_URL}/api/alerts`)
       if (!alertsResponse.ok) throw new Error('Failed to fetch alerts')
       const alertsData = await alertsResponse.json()
 
       // Fetch metrics
-      const metricsResponse = await fetch('/api/metrics')
+      const metricsResponse = await fetch(`${API_BASE_URL}/api/metrics`)
       if (!metricsResponse.ok) throw new Error('Failed to fetch metrics')
       const metricsData = await metricsResponse.json()
 
       // Fetch events by hour
-      const hourlyResponse = await fetch('/api/events/hourly')
+      const hourlyResponse = await fetch(`${API_BASE_URL}/api/events/hourly`)
       if (!hourlyResponse.ok) throw new Error('Failed to fetch hourly events')
       const hourlyData = await hourlyResponse.json()
 
       // Fetch alerts by type
-      const typesResponse = await fetch('/api/alerts/types')
+      const typesResponse = await fetch(`${API_BASE_URL}/api/alerts/types`)
       if (!typesResponse.ok) throw new Error('Failed to fetch alert types')
       const typesData = await typesResponse.json()
 

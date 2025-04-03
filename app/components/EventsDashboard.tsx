@@ -193,7 +193,9 @@ export function EventsDashboard() {
   };
 
   // Get friendly name for event types
-  const getEventTypeName = (type: string): string => {
+  const getEventTypeName = (type?: string): string => {
+    if (!type) return 'Unknown';
+    
     const eventTypeMap: Record<string, string> = {
       'llm_request': 'LLM Request',
       'llm_response': 'LLM Response',
@@ -365,8 +367,8 @@ export function EventsDashboard() {
             <TabGroup>
               <TabList>
                 <Tab>Raw Data</Tab>
-                {selectedEvent.type.toLowerCase().includes('llm') && <Tab>LLM Content</Tab>}
-                {selectedEvent.type.toLowerCase().includes('tool') && <Tab>Tool Data</Tab>}
+                {selectedEvent.type && selectedEvent.type.toLowerCase().includes('llm') && <Tab>LLM Content</Tab>}
+                {selectedEvent.type && selectedEvent.type.toLowerCase().includes('tool') && <Tab>Tool Data</Tab>}
               </TabList>
               <TabPanels>
                 <TabPanel>
@@ -374,7 +376,7 @@ export function EventsDashboard() {
                     <JsonViewer data={selectedEvent.data} />
                   </div>
                 </TabPanel>
-                {selectedEvent.type.toLowerCase().includes('llm') && (
+                {selectedEvent.type && selectedEvent.type.toLowerCase().includes('llm') && (
                   <TabPanel>
                     <div className="mt-4 bg-gray-50 p-4 rounded-md">
                       <Text className="whitespace-pre-wrap">
@@ -383,7 +385,7 @@ export function EventsDashboard() {
                     </div>
                   </TabPanel>
                 )}
-                {selectedEvent.type.toLowerCase().includes('tool') && (
+                {selectedEvent.type && selectedEvent.type.toLowerCase().includes('tool') && (
                   <TabPanel>
                     <div className="mt-4">
                       <Text className="font-semibold">Tool Name</Text>
@@ -392,7 +394,7 @@ export function EventsDashboard() {
                         <Text className="font-semibold">Tool Input</Text>
                         <JsonViewer data={selectedEvent.data?.input || {}} />
                       </div>
-                      {selectedEvent.type.toLowerCase() === 'tool_response' && (
+                      {selectedEvent.type && selectedEvent.type.toLowerCase() === 'tool_response' && (
                         <div className="mt-4">
                           <Text className="font-semibold">Tool Output</Text>
                           <JsonViewer data={selectedEvent.data?.output || {}} />
