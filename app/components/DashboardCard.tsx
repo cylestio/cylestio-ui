@@ -1,8 +1,8 @@
 'use client'
 
-import React, { ReactNode } from 'react'
+import React, { ReactNode, useState } from 'react'
 import { Card, Title, Text, Flex } from '@tremor/react'
-import { InformationCircleIcon } from '@heroicons/react/24/outline'
+import { InformationCircleIcon, ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/outline'
 
 export type DashboardCardProps = {
   title?: string
@@ -16,6 +16,9 @@ export type DashboardCardProps = {
   isLoading?: boolean
   showBorder?: boolean
   variant?: 'default' | 'primary' | 'secondary' | 'neutral'
+  collapsible?: boolean
+  defaultCollapsed?: boolean
+  mobileOptimized?: boolean
 }
 
 const getVariantStyles = (variant: DashboardCardProps['variant'] = 'default') => {
@@ -56,9 +59,20 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
   helpText,
   isLoading = false,
   showBorder = true,
-  variant = 'default'
+  variant = 'default',
+  collapsible = false,
+  defaultCollapsed = false,
+  mobileOptimized = true
 }) => {
+  const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed)
   const variantStyles = getVariantStyles(variant)
+  
+  const toggleCollapse = () => {
+    setIsCollapsed(!isCollapsed)
+  }
+
+  // Determine if we should apply mobile styles
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 640
   
   return (
     <Card 
@@ -66,6 +80,7 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
         overflow-hidden
         ${showBorder ? `border ${variantStyles.border}` : 'border-transparent'} 
         transition-all duration-200 hover:shadow-md
+        ${mobileOptimized && isMobile ? 'dashboard-card-mobile' : ''}
         ${className}
       `}
     >
@@ -76,12 +91,14 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
             flex justify-between items-center
             ${description ? 'mb-1' : 'mb-4'}
             ${variantStyles.header && 'px-6 py-3 -mx-6 -mt-6 mb-6 border-b border-neutral-200'}
+            ${collapsible ? 'cursor-pointer' : ''}
           `}
+          onClick={collapsible ? toggleCollapse : undefined}
         >
           <Flex className="items-center space-x-2">
             {icon && <span className="text-neutral-500">{icon}</span>}
             
-            <Title className={`text-lg font-medium ${variantStyles.title}`}>
+            <Title className={`text-lg font-medium ${variantStyles.title} ${mobileOptimized && isMobile ? 'dashboard-card-title-mobile' : ''}`}>
               {title}
             </Title>
             
@@ -94,6 +111,16 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
               </div>
             )}
           </Flex>
+          
+          {collapsible && (
+            <span className="text-neutral-400">
+              {isCollapsed ? (
+                <ChevronDownIcon className="h-5 w-5" />
+              ) : (
+                <ChevronUpIcon className="h-5 w-5" />
+              )}
+            </span>
+          )}
         </div>
       )}
       
@@ -104,8 +131,14 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
         </Text>
       )}
       
-      {/* Card Content */}
-      <div className={`${contentClassName}`}>
+      {/* Card Content - collapsible if specified */}
+      <div 
+        className={`
+          ${contentClassName}
+          ${collapsible ? 'transition-all duration-300 ease-in-out' : ''}
+          ${collapsible && isCollapsed ? 'max-h-0 overflow-hidden opacity-0' : 'max-h-screen opacity-100'}
+        `}
+      >
         {isLoading ? (
           <div className="space-y-3 animate-pulse">
             <div className="h-12 bg-neutral-100 rounded"></div>
@@ -118,7 +151,7 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
       </div>
       
       {/* Card Footer */}
-      {footer && (
+      {footer && !isCollapsed && (
         <div className="mt-4 pt-3 border-t border-neutral-200">
           {footer}
         </div>

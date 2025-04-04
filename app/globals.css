@@ -161,4 +161,103 @@ body {
   .grid-metrics {
     @apply grid gap-4 md:grid-cols-2 lg:grid-cols-4;
   }
+
+  /* Responsive utilities */
+  .content-simplified-mobile {
+    @apply md:content-normal;
+  }
+
+  .content-simplified-mobile > *:not(:first-child):not(:nth-child(2)) {
+    @apply hidden md:block;
+  }
+
+  /* Touch-friendly elements */
+  .touch-target {
+    @apply min-h-11 min-w-11; /* Minimum 44px touch target */
+  }
+
+  /* Enhanced mobile navigation */
+  .mobile-nav-item {
+    @apply flex items-center px-4 py-3 text-base font-medium rounded-md transition-colors duration-150 ease-in-out;
+  }
+
+  .mobile-nav-item.active {
+    @apply bg-primary-50 text-primary-700;
+  }
+
+  .mobile-nav-item:not(.active) {
+    @apply text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900;
+  }
+
+  /* Mobile-specific chart adjustments */
+  .chart-mobile-optimized {
+    @apply h-48 md:h-64 mt-2 md:mt-4;
+  }
+
+  /* Progressive disclosure patterns */
+  .expandable-content {
+    @apply max-h-0 overflow-hidden transition-all duration-300 ease-in-out;
+  }
+
+  .expandable-content.expanded {
+    @apply max-h-screen;
+  }
+
+  /* Mobile-friendly tables */
+  .table-responsive {
+    @apply overflow-x-auto -mx-4 sm:mx-0;
+  }
+
+  .table-responsive table {
+    @apply min-w-full;
+  }
+
+  .table-mobile-row {
+    @apply flex flex-col border-b border-neutral-200 py-2 md:table-row;
+  }
+
+  .table-mobile-cell {
+    @apply flex justify-between items-center py-1 md:table-cell md:py-2;
+  }
+
+  .table-mobile-cell-label {
+    @apply font-medium text-neutral-500 md:hidden;
+  }
+
+  /* Specific mobile styles for dashboard cards */
+  @media (max-width: 640px) {
+    .dashboard-card-mobile {
+      @apply p-3; /* Smaller padding on mobile */
+    }
+    
+    .dashboard-card-title-mobile {
+      @apply text-base; /* Smaller titles on mobile */
+    }
+    
+    .dashboard-metric-mobile {
+      @apply text-2xl; /* Smaller metrics on mobile */
+    }
+  }
+
+  /* Tablet specific adjustments */
+  @media (min-width: 641px) and (max-width: 1024px) {
+    .tablet-layout-adjustment {
+      @apply grid-cols-2;
+    }
+  }
+
+  /* Hide elements on small screens but show on larger ones */
+  .hide-on-mobile {
+    @apply hidden sm:block;
+  }
+
+  /* Show elements on small screens but hide on larger ones */
+  .show-on-mobile {
+    @apply block sm:hidden;
+  }
+
+  /* Adjust line height and font size for better readability on mobile */
+  .mobile-text-adjustments {
+    @apply text-base leading-relaxed sm:text-sm sm:leading-normal;
+  }
 } 

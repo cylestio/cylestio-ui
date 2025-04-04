@@ -74,6 +74,8 @@ import { colors, semanticColors } from './DesignSystem'
 import LoadingState from './LoadingState'
 import EmptyState from './EmptyState'
 import ErrorMessage from './ErrorMessage'
+import MobileNavigation from './MobileNavigation'
+import ResponsiveContainer from './ResponsiveContainer'
 
 // Define types based on the new API
 type DashboardMetric = {
@@ -185,6 +187,9 @@ export default function OverviewDashboard() {
   const [breadcrumbs, setBreadcrumbs] = useState([
     { label: 'Dashboard', href: '/', current: true }
   ])
+
+  // Add state for mobile view
+  const [isMobileView, setIsMobileView] = useState(false)
 
   // Fetch all dashboard data
   const fetchDashboardData = async () => {
@@ -506,6 +511,24 @@ export default function OverviewDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeRange]);
 
+  // Check if we're in mobile view on mount and when window resizes
+  useEffect(() => {
+    const checkIsMobile = () => {
+      setIsMobileView(window.innerWidth < 768) // 768px is the md breakpoint
+    }
+    
+    // Set initial value
+    checkIsMobile()
+    
+    // Add event listener for window resize
+    window.addEventListener('resize', checkIsMobile)
+    
+    // Clean up
+    return () => {
+      window.removeEventListener('resize', checkIsMobile)
+    }
+  }, [])
+
   // Loading state
   if (loading) {
     return <LoadingState variant="skeleton" contentType="metrics" />
@@ -546,40 +569,58 @@ export default function OverviewDashboard() {
   const summaryMetrics = getSummaryMetrics();
   const healthStatus = getHealthStatus(healthScore);
   
+  const dashboardNavItems = defaultSections.map(section => ({
+    name: section.title,
+    href: '#',
+    icon: section.icon,
+    current: defaultSections.indexOf(section) === activeTab
+  }))
+  
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
+      {/* Mobile Navigation */}
+      <MobileNavigation 
+        items={dashboardNavItems}
+        logo={<span className="text-xl font-bold text-primary-600">Cylestio</span>}
+        className="mb-4 md:hidden"
+        onNavigate={() => {}}
+      />
+
       <Breadcrumbs items={breadcrumbs} />
       
       <div className="mt-4">
         <TabGroup index={activeTab} onIndexChange={setActiveTab}>
-          <TabList variant="solid">
-            {defaultSections.map((section, index) => (
-              <Tab key={index} className="px-6 py-2">
-                <div className="flex items-center space-x-2">
-                  {section.icon}
-                  <span>{section.title}</span>
-                </div>
-              </Tab>
-            ))}
-          </TabList>
+          {/* Hide TabList on mobile and show MobileNavigation instead */}
+          <div className="hidden md:block">
+            <TabList variant="solid">
+              {defaultSections.map((section, index) => (
+                <Tab key={index} className="px-4 sm:px-6 py-2">
+                  <div className="flex items-center space-x-2">
+                    {section.icon}
+                    <span className="hidden sm:inline">{section.title}</span>
+                  </div>
+                </Tab>
+              ))}
+            </TabList>
+          </div>
           
           <TabPanels>
             <TabPanel>
-              <div className="mt-6">
+              <div className="mt-4 md:mt-6">
                 <SectionHeader
                   title="Agent Monitoring Dashboard"
                   subtitle="Comprehensive analytics and monitoring for your AI agents"
                   icon={<HomeIcon className="h-6 w-6 text-primary-500" />}
                 />
                 
-                <div className="mt-6 mb-8">
-                  <Flex className="justify-between items-center mb-4">
+                <div className="mt-4 md:mt-6 mb-6 md:mb-8">
+                  <Flex className="justify-between items-center mb-4 flex-col sm:flex-row gap-2 sm:gap-0">
                     <Text>Time Range:</Text>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
                       <Select
                         value={timeRange}
                         onValueChange={setTimeRange}
-                        className="w-40"
+                        className="w-full sm:w-40"
                       >
                         <SelectItem value="1h">Last Hour</SelectItem>
                         <SelectItem value="24h">Last 24 Hours</SelectItem>
@@ -598,14 +639,20 @@ export default function OverviewDashboard() {
                   </Flex>
                 </div>
                 
-                <div className="mb-8">
-        <SectionHeader
-          title="System Overview"
+                <div className="mb-6 md:mb-8">
+                  <SectionHeader
+                    title="System Overview"
                     subtitle="A high-level overview of your system's health and key metrics"
                     size="sm"
                   />
                   
-                  <div className="grid-metrics mt-4">
+                  {/* Use ResponsiveContainer for metric cards */}
+                  <ResponsiveContainer
+                    defaultLayout="grid"
+                    columns={{ default: 2, md: 2, lg: 4 }}
+                    spacing="md"
+                    className="mt-4"
+                  >
                     <MetricCard
                       title="LLM Request Count"
                       value={metrics.find(m => m.metric === 'llm_request_count')?.value || 0}
@@ -653,10 +700,15 @@ export default function OverviewDashboard() {
                         isPositive: false
                       }}
                     />
-                  </div>
+                  </ResponsiveContainer>
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <ResponsiveContainer
+                  defaultLayout="grid"
+                  columns={{ default: 1, md: 3 }}
+                  spacing="md"
+                  className="mb-6 md:mb-8"
+                >
                   <DashboardCard
                     title="System Health"
                     icon={<ServerIcon className="h-5 w-5" />}
@@ -680,10 +732,10 @@ export default function OverviewDashboard() {
                             healthStatus.color === 'green' || healthStatus.color === 'emerald' ? 'status-active' : ''
                           }`}></span>
                           <span className="font-medium">{healthStatus.status} ({healthScore}%)</span>
-              </div>
+                        </div>
                         <Text className="text-sm text-neutral-500 mt-2">
-              The health score is calculated based on error rates, response times, and overall system performance.
-            </Text>
+                          The health score is calculated based on error rates, response times, and overall system performance.
+                        </Text>
                       </div>
                     </div>
                   </DashboardCard>
@@ -699,35 +751,143 @@ export default function OverviewDashboard() {
                       data={prepareChartData(llmRequests)}
                       index="date"
                       categories={["value"]}
-                      colors={["primary"]}
+                      colors={["blue"]}
+                      valueFormatter={(value) => `${formatNumber(value)} requests`}
                       showLegend={false}
-                      valueFormatter={(value) => formatNumber(value)}
-                      showXAxis={true}
-                      showYAxis={true}
-                      showGridLines={true}
-                      showAnimation={true}
-                      startEndOnly={timeRange === '7d' || timeRange === '30d'}
-                      showGradient={true}
-                      autoMinValue={true}
-                      curveType="monotone"
-                      yAxisWidth={45}
+                      showXAxis={!isMobileView} 
+                      showGridLines={!isMobileView}
+                      showYAxis={!isMobileView}
                       showTooltip={true}
+                      autoMinValue={true}
                     />
-                    <div className="text-xs text-neutral-500 mt-2 text-right">
-                      Source: LLM Request API | Updated {lastUpdated ? formatTimestamp(lastUpdated.toISOString()) : 'N/A'}
-                    </div>
                   </DashboardCard>
-      </div>
+                </ResponsiveContainer>
 
-                {/* Rest of the existing code... */}
+                {/* Continue with other sections... */}
                 
+                {/* Use ResponsiveContainer for token usage and tool executions */}
+                <ResponsiveContainer
+                  defaultLayout="grid"
+                  columns={{ default: 1, md: 2 }}
+                  spacing="md"
+                  className="mb-6 md:mb-8"
+                >
+                  <DashboardCard
+                    title="Token Usage"
+                    description="Total tokens used by LLMs"
+                    icon={<DocumentTextIcon className="h-5 w-5" />}
+                  >
+                    <AreaChart
+                      className="h-64 mt-4"
+                      data={prepareChartData(tokenUsage)}
+                      index="date"
+                      categories={["value"]}
+                      colors={["indigo"]}
+                      valueFormatter={(value) => `${formatNumber(value)} tokens`}
+                      showLegend={false}
+                      showXAxis={!isMobileView}
+                      showGridLines={!isMobileView}
+                      showYAxis={!isMobileView}
+                      showTooltip={true}
+                      autoMinValue={true}
+                    />
+                  </DashboardCard>
+                  
+                  <DashboardCard
+                    title="Tool Executions"
+                    description="Count of tool executions by AI agents"
+                    icon={<CpuChipIcon className="h-5 w-5" />}
+                  >
+                    <AreaChart
+                      className="h-64 mt-4"
+                      data={prepareChartData(toolExecutions)}
+                      index="date"
+                      categories={["value"]}
+                      colors={["cyan"]}
+                      valueFormatter={(value) => `${formatNumber(value)} executions`}
+                      showLegend={false}
+                      showXAxis={!isMobileView}
+                      showGridLines={!isMobileView}
+                      showYAxis={!isMobileView}
+                      showTooltip={true}
+                      autoMinValue={true}
+                    />
+                  </DashboardCard>
+                </ResponsiveContainer>
+                
+                {/* Top Agents Section */}
+                <div className="mb-6 md:mb-8">
+                  <ExpandableSection
+                    title="Top Agents"
+                    subtitle="Your most active AI agents by usage"
+                    icon={<UserCircleIcon className="h-5 w-5" />}
+                    defaultExpanded={!isMobileView}
+                  >
+                    <ResponsiveContainer
+                      defaultLayout="grid"
+                      columns={{ default: 1, lg: 2 }}
+                      spacing="md"
+                      className="mt-4"
+                    >
+                      {/* Agent Table */}
+                      <DashboardCard title="Top Agents by Request Count">
+                        <div className={`overflow-x-auto ${isMobileView ? 'max-h-60' : ''}`}>
+                          <Table className="mt-4">
+                            <TableHead>
+                              <TableRow>
+                                <TableHeaderCell>Agent Name</TableHeaderCell>
+                                <TableHeaderCell className={isMobileView ? 'hidden' : ''}>Type</TableHeaderCell>
+                                <TableHeaderCell>Requests</TableHeaderCell>
+                                <TableHeaderCell className={isMobileView ? 'hidden' : ''}>Tokens</TableHeaderCell>
+                                <TableHeaderCell>Errors</TableHeaderCell>
+                              </TableRow>
+                            </TableHead>
+                            <TableBody>
+                              {topAgents.map((agent) => (
+                                <TableRow key={agent.agent_id}>
+                                  <TableCell>{agent.name}</TableCell>
+                                  <TableCell className={isMobileView ? 'hidden' : ''}>{agent.type}</TableCell>
+                                  <TableCell>{agent.request_count}</TableCell>
+                                  <TableCell className={isMobileView ? 'hidden' : ''}>{agent.token_usage}</TableCell>
+                                  <TableCell>{agent.error_count}</TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                        {isMobileView && (
+                          <div className="mt-2 text-center">
+                            <Text className="text-xs text-neutral-500">Swipe to see more data</Text>
+                          </div>
+                        )}
+                      </DashboardCard>
+                      
+                      {/* Agent Chart */}
+                      <DashboardCard title="Agent Comparison">
+                        <BarChart
+                          className="h-64 mt-4"
+                          data={getAgentComparisonData()}
+                          index="name"
+                          categories={["requests"]}
+                          colors={["blue"]}
+                          valueFormatter={(value) => `${value} requests`}
+                          layout={isMobileView ? "vertical" : "horizontal"}
+                          showLegend={false}
+                          showGridLines={!isMobileView}
+                        />
+                      </DashboardCard>
+                    </ResponsiveContainer>
+                  </ExpandableSection>
+                </div>
+                
+                {/* Continue with the rest of the dashboard ... */}
               </div>
             </TabPanel>
-            {/* Other tab panels remain unchanged */}
+            
+            {/* Other Tab Panels... */}
           </TabPanels>
         </TabGroup>
       </div>
-            <ConnectionStatus />
     </div>
   )
 }
