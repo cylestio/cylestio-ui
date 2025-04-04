@@ -71,6 +71,9 @@ import Link from 'next/link'
 import { fetchAPI, buildQueryParams } from '../lib/api'
 import { DASHBOARD, AGENTS, METRICS } from '../lib/api-endpoints'
 import { colors, semanticColors } from './DesignSystem'
+import LoadingState from './LoadingState'
+import EmptyState from './EmptyState'
+import ErrorMessage from './ErrorMessage'
 
 // Define types based on the new API
 type DashboardMetric = {
@@ -505,60 +508,37 @@ export default function OverviewDashboard() {
 
   // Loading state
   if (loading) {
-    return (
-      <div className="animate-pulse space-y-8 w-full">
-        <div className="bg-gray-200 h-12 rounded-lg w-full"></div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="bg-gray-200 h-32 rounded-lg"></div>
-          ))}
-        </div>
-        
-        <div className="bg-gray-200 h-80 rounded-lg w-full"></div>
-        <div className="bg-gray-200 h-80 rounded-lg w-full"></div>
-      </div>
-    )
+    return <LoadingState variant="skeleton" contentType="metrics" />
   }
 
   // Error state
   if (error) {
     return (
-      <Card className="mx-auto my-6 p-6 bg-red-50 border-red-300 max-w-4xl">
-        <Flex justifyContent="center" alignItems="center" className="mb-2">
-          <XCircleIcon className="h-10 w-10 text-red-500" />
-        </Flex>
-        <Title className="text-center mb-2">Error Loading Dashboard</Title>
-        <Text className="text-center">{error}</Text>
-        <Flex justifyContent="center" className="mt-4">
-          <Button onClick={fetchDashboardData} icon={ArrowPathIcon}>
-            Retry
-          </Button>
-        </Flex>
-      </Card>
+      <ErrorMessage 
+        message={error}
+        severity="error"
+        retryText="Retry"
+        onRetry={fetchDashboardData}
+        alternativeActionText="Switch to Default View"
+        onAlternativeAction={() => {
+          setTimeRange('24h');
+          fetchDashboardData();
+        }}
+      />
     )
   }
 
   // Empty state
   if (metrics.length === 0) {
     return (
-      <Card className="mx-auto my-6 p-6 max-w-4xl">
-        <Flex justifyContent="center" alignItems="center" className="mb-2">
-          <InformationCircleIcon className="h-10 w-10 text-blue-500" />
-        </Flex>
-        <Title className="text-center mb-2">No Data Available</Title>
-        <Text className="text-center">
-          There is no metric data available for the selected time period.
-        </Text>
-        <Flex justifyContent="center" className="mt-4">
-          <Select value={timeRange} onValueChange={setTimeRange}>
-            <SelectItem value="24h">Last 24 Hours</SelectItem>
-            <SelectItem value="7d">Last 7 Days</SelectItem>
-            <SelectItem value="30d">Last 30 Days</SelectItem>
-            <SelectItem value="90d">Last 90 Days</SelectItem>
-          </Select>
-        </Flex>
-      </Card>
+      <EmptyState 
+        title="No Dashboard Data Available"
+        description="There is no metrics data collected for the selected time period."
+        actionText="Refresh Data"
+        onAction={fetchDashboardData}
+        secondaryActionText="Change Time Range"
+        onSecondaryAction={() => setTimeRange('24h')}
+      />
     )
   }
 
