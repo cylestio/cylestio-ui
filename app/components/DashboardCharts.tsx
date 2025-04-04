@@ -1,8 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Card, Title, AreaChart, DonutChart, BarChart, Flex } from '@tremor/react'
+import { Card, Title, Flex, Color } from '@tremor/react'
 import { SimpleDonutChart } from './SimpleDonutChart'
+import EnhancedAreaChart from './EnhancedAreaChart'
+import EnhancedBarChart from './EnhancedBarChart'
 
 // Define chart data item type
 export type ChartDataItem = {
@@ -113,13 +115,13 @@ export default function DashboardCharts({
 
   // Custom colors for the charts
   const colors = {
-    area: ['blue'],
+    area: ['blue'] as Color[],
     donut: {
-      Info: 'emerald',
-      Warning: 'amber',
-      Error: 'red',
+      Info: 'emerald' as Color,
+      Warning: 'amber' as Color,
+      Error: 'red' as Color,
     },
-    bar: ['amber'],
+    bar: ['amber'] as Color[],
   }
 
   // Use external loading state if provided
@@ -134,7 +136,7 @@ export default function DashboardCharts({
             <Card key={chart.id} className={`flex-1 min-w-[300px] ${chartClassName}`}>
               <Title>{chart.title}</Title>
               {chart.type === 'bar' && (
-                <BarChart
+                <EnhancedBarChart
                   className="h-72 mt-4"
                   data={chart.data}
                   index={chart.categories?.[0] || 'category'}
@@ -142,10 +144,18 @@ export default function DashboardCharts({
                   colors={chart.colors || colors.bar}
                   showLegend={false}
                   showAnimation={true}
+                  chartHeight="h-72"
+                  subtitle={chart.title}
+                  showTooltip={true}
+                  dateFormatter={date => new Date(date).toLocaleDateString()}
+                  thresholds={[
+                    { value: 5, color: 'amber', label: 'Warning Threshold', dashed: true },
+                    { value: 10, color: 'red', label: 'Critical Threshold', dashed: true }
+                  ]}
                 />
               )}
               {(chart.type === 'line' || chart.type === 'area') && (
-                <AreaChart
+                <EnhancedAreaChart
                   className="h-72 mt-4"
                   data={chart.data}
                   index={chart.categories?.[0] || 'category'}
@@ -153,6 +163,10 @@ export default function DashboardCharts({
                   colors={chart.colors || colors.area}
                   showLegend={false}
                   showAnimation={true}
+                  chartHeight="h-72"
+                  subtitle={chart.title}
+                  showTooltip={true}
+                  dateFormatter={date => date}
                 />
               )}
               {chart.type === 'pie' && (
@@ -164,6 +178,7 @@ export default function DashboardCharts({
                   }))}
                   colors={chart.colors || Object.values(colors.donut)}
                   valueFormatter={(value) => `${value}`}
+                  showLegend={true}
                 />
               )}
             </Card>
@@ -190,15 +205,18 @@ export default function DashboardCharts({
       <Flex className={`gap-6 ${gridClassName}`}>
         <Card className={`flex-1 ${chartClassName}`}>
           <Title>Calls Per Minute</Title>
-          <AreaChart
-            className="h-72 mt-4"
+          <EnhancedAreaChart
             data={chartData.callsPerMinute}
             index="minute"
             categories={['calls']}
             colors={colors.area}
+            valueFormatter={value => `${value} calls`}
             showLegend={false}
             showAnimation={true}
-            valueFormatter={value => `${value} calls`}
+            chartHeight="h-72"
+            subtitle="API requests over time"
+            showTooltip={true}
+            dateFormatter={date => date}
           />
         </Card>
 
@@ -212,21 +230,29 @@ export default function DashboardCharts({
             }))}
             colors={Object.values(colors.donut)}
             valueFormatter={value => `${value} events`}
+            showLegend={true}
           />
         </Card>
       </Flex>
 
       <Card className={chartClassName}>
         <Title>Alerts Over Time</Title>
-        <BarChart
-          className="h-72 mt-4"
+        <EnhancedBarChart
           data={chartData.alertsOverTime}
           index="date"
           categories={['count']}
           colors={colors.bar}
+          valueFormatter={value => `${value} alerts`}
           showLegend={false}
           showAnimation={true}
-          valueFormatter={value => `${value} alerts`}
+          chartHeight="h-72"
+          subtitle="Daily alert frequency"
+          showTooltip={true}
+          dateFormatter={date => new Date(date).toLocaleDateString()}
+          thresholds={[
+            { value: 5, color: 'amber', label: 'Warning Threshold', dashed: true },
+            { value: 10, color: 'red', label: 'Critical Threshold', dashed: true }
+          ]}
         />
       </Card>
     </div>
