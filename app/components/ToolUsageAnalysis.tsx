@@ -80,8 +80,10 @@ type ToolUsageData = {
 
 type TimeSeriesPoint = {
   timestamp: string;
+  date?: string;
   value: number;
   tool_name?: string;
+  [key: string]: any; // Allow dynamic tool name properties
 };
 
 export type ToolUsageAnalysisProps = {
@@ -141,12 +143,65 @@ const trendValueFormatter = (value: number) => Math.round(value).toString();
 // Create a custom number formatter that returns simple integers
 const cleanIntegerFormatter = (value: number) => `${Math.round(value)}`;
 
+// Create a clean number formatter with no text
+const cleanNumberFormatter = (value: number) => `${Math.round(value)}`;
+
 // Define types for the CustomTrendChart component
 type CustomTrendChartProps = {
   data: any[];
   categories: string[];
   colors: Color[];
   isSingleView?: boolean;
+};
+
+// Custom tooltip for the area chart
+const CustomChartTooltip = ({ activePoint, activePayload, active }: any) => {
+  if (!active || !activePoint) return null;
+  
+  const date = new Date(activePoint.x);
+  const formattedDate = date.toLocaleDateString(undefined, { 
+    weekday: 'short', 
+    year: 'numeric', 
+    month: 'short', 
+    day: 'numeric' 
+  });
+  const formattedTime = date.toLocaleTimeString(undefined, { 
+    hour: '2-digit', 
+    minute: '2-digit' 
+  });
+  
+  const isAggregated = activePayload.length === 1 && activePayload[0].name === "Tool Executions";
+  
+  return (
+    <div className="bg-white p-3 rounded-lg shadow-lg border border-gray-200 max-w-xs">
+      <div className="text-sm font-medium text-gray-800 border-b pb-1.5 mb-1.5">
+        {formattedDate}
+      </div>
+      <div className="text-xs text-gray-500 mb-2">
+        {formattedTime}
+      </div>
+      
+      {isAggregated ? (
+        <div className="flex items-center gap-2 py-1">
+          <div className="h-3 w-3 rounded-full bg-indigo-500" />
+          <div className="flex-1 text-sm">Total Executions</div>
+          <div className="font-medium">{activePoint.y.toLocaleString()}</div>
+        </div>
+      ) : (
+        <div className="space-y-1.5 max-h-40 overflow-y-auto">
+          {activePayload
+            .sort((a: any, b: any) => b.value - a.value)
+            .map((entry: any, index: number) => (
+              <div key={index} className="flex items-center gap-2 py-1">
+                <div className="h-3 w-3 rounded-full" style={{ backgroundColor: entry.color }} />
+                <div className="flex-1 text-sm truncate" title={entry.name}>{entry.name}</div>
+                <div className="font-medium">{entry.value.toLocaleString()}</div>
+              </div>
+            ))}
+        </div>
+      )}
+    </div>
+  );
 };
 
 // Updated CustomTrendChart for a cleaner display
@@ -173,7 +228,7 @@ function CustomTrendChart({ data, categories, colors, isSingleView = true }: Cus
         valueFormatter={(value) => `${Math.round(value).toLocaleString()} executions`}
         showLegend={!isSingleView}
         showGradient={true}
-        yAxisWidth={40}
+        yAxisWidth={48}
         minValue={0}
         maxValue={roundedMax}
         autoMinValue={false}
@@ -191,6 +246,8 @@ export default function ToolUsageAnalysis({ className = '', timeRange = '30d' }:
   const [toolInteractions, setToolInteractions] = useState<ToolInteraction[]>([]);
   const [toolUsageData, setToolUsageData] = useState<ToolUsageData[]>([]);
   const [timeSeriesData, setTimeSeriesData] = useState<TimeSeriesPoint[]>([]);
+  const [aggregatedTimeData, setAggregatedTimeData] = useState<any[]>([]);
+  const [toolSpecificTimeData, setToolSpecificTimeData] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState(0);
@@ -241,12 +298,14 @@ export default function ToolUsageAnalysis({ className = '', timeRange = '30d' }:
           const thresholds = {
             'slow': 1000, // tools taking more than 1s
             'medium': 500, // tools taking 500ms-1s
-            'fast': 0 // tools taking less than 500ms
+            'fast': 0, // tools taking less than 500ms
+            'very_slow': 2000 // tools taking more than 2s
           };
           
           const threshold = thresholds[performanceFilter as keyof typeof thresholds];
           const maxThreshold = performanceFilter === 'fast' ? 500 : 
-                              performanceFilter === 'medium' ? 1000 : Number.MAX_SAFE_INTEGER;
+                              performanceFilter === 'medium' ? 1000 : 
+                              performanceFilter === 'slow' ? 2000 : Number.MAX_SAFE_INTEGER;
           
           filteredData = filteredData.filter(tool => 
             tool.avg_duration_ms >= threshold && 
@@ -257,11 +316,15 @@ export default function ToolUsageAnalysis({ className = '', timeRange = '30d' }:
         setToolUsageData(filteredData);
         
         // Process time series data
-        const timeSeriesPoints = processTimeSeriesData(data.interactions);
-        setTimeSeriesData(timeSeriesPoints);
+        const timeSeriesResult = processTimeSeriesData(data.interactions);
+        setTimeSeriesData(timeSeriesResult.aggregated);
+        setAggregatedTimeData(timeSeriesResult.aggregated);
+        setToolSpecificTimeData(timeSeriesResult.toolSpecificTimeData);
       } else {
         setToolUsageData([]);
         setTimeSeriesData([]);
+        setAggregatedTimeData([]);
+        setToolSpecificTimeData([]);
         setError('No tool usage data available for the selected period');
       }
     } catch (error) {
@@ -326,37 +389,126 @@ export default function ToolUsageAnalysis({ className = '', timeRange = '30d' }:
     }).sort((a, b) => b.count - a.count);
   };
 
-  const processTimeSeriesData = (interactions: ToolInteraction[]): TimeSeriesPoint[] => {
-    // Group interactions by hour
-    const timeGroups = new Map<string, Map<string, number>>();
+  const processTimeSeriesData = (interactions: ToolInteraction[]): { 
+    aggregated: any[], 
+    byTool: Record<string, any[]>,
+    toolSpecificTimeData: any[]
+  } => {
+    // Sort interactions by timestamp
+    const sortedInteractions = [...interactions].sort(
+      (a, b) => new Date(a.request_timestamp).getTime() - new Date(b.request_timestamp).getTime()
+    );
     
-    interactions.forEach(interaction => {
-      const date = new Date(interaction.request_timestamp);
-      const hourKey = date.toISOString().substring(0, 13) + ':00:00Z';
+    // Group by date and tool
+    const dateToolMap = new Map<string, Map<string, number>>();
+    
+    sortedInteractions.forEach(interaction => {
+      const date = new Date(interaction.request_timestamp).toISOString().split('T')[0];
       const toolName = interaction.tool_name;
       
-      if (!timeGroups.has(hourKey)) {
-        timeGroups.set(hourKey, new Map<string, number>());
+      if (!dateToolMap.has(date)) {
+        dateToolMap.set(date, new Map<string, number>());
       }
       
-      const toolCounts = timeGroups.get(hourKey)!;
-      toolCounts.set(toolName, (toolCounts.get(toolName) || 0) + 1);
+      const toolMap = dateToolMap.get(date)!;
+      toolMap.set(toolName, (toolMap.get(toolName) || 0) + 1);
     });
     
-    // Convert to time series points
-    const timeSeriesPoints: TimeSeriesPoint[] = [];
+    // Create time series points
+    const aggregatedData: any[] = [];
+    const byToolData: Record<string, any[]> = {};
     
-    timeGroups.forEach((toolCounts, timestamp) => {
-      toolCounts.forEach((count, toolName) => {
-        timeSeriesPoints.push({
-          timestamp,
-          value: count,
-          tool_name: toolName
-        });
+    // Ensure we have all dates in the range
+    const dateRange = getDateRange(
+      sortedInteractions[0]?.request_timestamp || new Date().toISOString(),
+      sortedInteractions[sortedInteractions.length - 1]?.request_timestamp || new Date().toISOString()
+    );
+    
+    dateRange.forEach(date => {
+      const formattedDate = date.toISOString().split('T')[0];
+      const toolMap = dateToolMap.get(formattedDate) || new Map<string, number>();
+      
+      // Calculate total for aggregated view
+      let total = 0;
+      toolMap.forEach(count => total += count);
+      
+      aggregatedData.push({
+        timestamp: formattedDate,
+        date: formattedDate,
+        "Tool Executions": total
+      });
+      
+      // Process by-tool data
+      toolMap.forEach((count, toolName) => {
+        if (!byToolData[toolName]) {
+          byToolData[toolName] = dateRange.map(d => ({
+            timestamp: d.toISOString().split('T')[0],
+            date: d.toISOString().split('T')[0],
+            [toolName]: 0
+          }));
+        }
+        
+        const dataPoint = byToolData[toolName].find(p => p.date === formattedDate);
+        if (dataPoint) {
+          dataPoint[toolName] = count;
+        }
       });
     });
     
-    return timeSeriesPoints.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    // Format data for chart consumption
+    const toolSpecificTimeData = formatToolSpecificData(byToolData, dateRange);
+    
+    return { 
+      aggregated: aggregatedData, 
+      byTool: byToolData,
+      toolSpecificTimeData
+    };
+  };
+
+  // Helper function to get a date range array
+  const getDateRange = (startDateStr: string, endDateStr: string): Date[] => {
+    const startDate = new Date(startDateStr);
+    const endDate = new Date(endDateStr);
+    
+    // Ensure start date is earlier than end date
+    if (startDate > endDate) {
+      return [new Date()]; // Return today if invalid range
+    }
+    
+    const dateRange: Date[] = [];
+    const currentDate = new Date(startDate);
+    
+    // Set to beginning of day
+    currentDate.setHours(0, 0, 0, 0);
+    
+    // Set end date to end of day
+    endDate.setHours(23, 59, 59, 999);
+    
+    while (currentDate <= endDate) {
+      dateRange.push(new Date(currentDate));
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+    
+    return dateRange;
+  };
+
+  // Format tool-specific data for chart consumption
+  const formatToolSpecificData = (byToolData: Record<string, any[]>, dateRange: Date[]): any[] => {
+    const formattedData: any[] = [];
+    
+    dateRange.forEach(date => {
+      const formattedDate = date.toISOString().split('T')[0];
+      const dataPoint: any = { date: formattedDate };
+      
+      Object.entries(byToolData).forEach(([toolName, points]) => {
+        const point = points.find(p => p.date === formattedDate);
+        dataPoint[toolName] = point ? point[toolName] : 0;
+      });
+      
+      formattedData.push(dataPoint);
+    });
+    
+    return formattedData;
   };
 
   const isInternalTool = (toolName: string): boolean => {
@@ -464,16 +616,22 @@ export default function ToolUsageAnalysis({ className = '', timeRange = '30d' }:
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }, [timeSeriesData, selectedView, timeRange]);
   
-  // Format timestamp based on time range
+  // Format timestamp based on time range with improved formatting
   function formatTimestamp(timestamp: string, range: string): string {
     const date = new Date(timestamp);
     
     if (range === '24h') {
       return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     } else if (range === '7d') {
-      return date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit' });
-    } else {
+      return `${date.toLocaleDateString([], { weekday: 'short' })} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    } else if (range === '30d') {
       return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    } else if (range === '90d') {
+      return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    } else if (range === '180d') {
+      return date.toLocaleDateString([], { month: 'short', year: '2-digit' });
+    } else {
+      return date.toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' });
     }
   }
   
@@ -496,6 +654,17 @@ export default function ToolUsageAnalysis({ className = '', timeRange = '30d' }:
         is_internal: tool.is_internal
       }));
   }, [filteredData.toolUsageData]);
+
+  // Function to toggle tool selection
+  const toggleToolSelection = (toolName: string) => {
+    setSelectedTools(prev => {
+      if (prev.includes(toolName)) {
+        return prev.filter(t => t !== toolName);
+      } else {
+        return [...prev, toolName];
+      }
+    });
+  };
 
   if (isLoading) return <LoadingState className={className} />;
   
@@ -701,67 +870,139 @@ export default function ToolUsageAnalysis({ className = '', timeRange = '30d' }:
             
             <TabPanel>
               {/* Execution Trends with improved styling */}
-              <Flex className="justify-between mb-4 items-center flex-col sm:flex-row space-y-2 sm:space-y-0">
-                <Flex className="gap-2">
+              <Flex justifyContent="end" className="mb-4">
+                <div className="space-x-2">
                   <Button
                     variant={selectedView === 'aggregated' ? 'primary' : 'secondary'}
                     icon={ChartBarIcon}
                     onClick={() => setSelectedView('aggregated')}
                     size="xs"
-                    className="w-32"
                   >
                     Aggregated
                   </Button>
                   <Button
                     variant={selectedView === 'byTool' ? 'primary' : 'secondary'}
-                    icon={ClockIcon}
+                    icon={WrenchScrewdriverIcon}
                     onClick={() => setSelectedView('byTool')}
                     size="xs"
-                    className="w-32"
                   >
                     By Tool
                   </Button>
-                </Flex>
-                
-                {selectedView === 'byTool' && (
-                  <Select
-                    placeholder="Select a tool to display"
-                    value={selectedTools.length > 0 ? selectedTools[0] : ''}
-                    onValueChange={(value) => setSelectedTools(value ? [value] : [])}
-                    className="min-w-[200px] sm:w-auto"
-                    enableClear={true}
-                  >
-                    {toolNames.map((tool) => (
-                      <SelectItem key={tool} value={tool}>
-                        {tool}
-                      </SelectItem>
-                    ))}
-                  </Select>
-                )}
+                </div>
               </Flex>
-              
+
               {selectedView === 'aggregated' ? (
-                <CustomTrendChart 
-                  data={aggregatedTrendData} 
-                  categories={["Tool Executions"]} 
-                  colors={["indigo"]} 
-                  isSingleView={true}
-                />
+                <Card className="mt-4">
+                  <Title className="text-center mb-2">Tool Executions Over Time</Title>
+                  <AreaChart
+                    className="h-72"
+                    data={aggregatedTimeData}
+                    index="date"
+                    categories={["Tool Executions"]}
+                    colors={["indigo"]}
+                    valueFormatter={cleanNumberFormatter}
+                    customTooltip={(props) => (
+                      <div className="bg-white p-2 shadow rounded border border-gray-200">
+                        <div className="text-sm font-medium">{props.payload && new Date(props.payload[0]?.payload.date).toLocaleDateString()}</div>
+                        <div className="text-xs text-gray-500 mb-1">{props.payload && new Date(props.payload[0]?.payload.date).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</div>
+                        {props.payload?.map((entry, i) => (
+                          <div key={i} className="flex items-center gap-2">
+                            <div className="h-2 w-2 rounded-full" style={{ backgroundColor: entry.color }}></div>
+                            <span className="text-xs">{entry.value.toLocaleString()} executions</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    showLegend={false}
+                    showGradient={true}
+                    yAxisWidth={40}
+                    minValue={0}
+                    autoMinValue={false}
+                    showYAxis={true}
+                    showXAxis={true}
+                    startEndOnly={false}
+                    showAnimation={true}
+                    curveType="natural"
+                  />
+                </Card>
               ) : (
-                <>
-                  {selectedTools.length === 0 ? (
-                    <div className="h-72 flex items-center justify-center">
-                      <Text className="text-gray-500">Select a tool to display trend</Text>
-                    </div>
+                <div>
+                  {selectedTools.length > 0 ? (
+                    <Card className="mt-4">
+                      <Title className="text-center mb-2">Tool Executions By Tool</Title>
+                      <AreaChart
+                        className="h-72"
+                        data={toolSpecificTimeData}
+                        index="date"
+                        categories={selectedTools}
+                        colors={selectedTools.map((_, i) => colorOptions[i % colorOptions.length])}
+                        valueFormatter={cleanNumberFormatter}
+                        customTooltip={(props) => (
+                          <div className="bg-white p-2 shadow rounded border border-gray-200">
+                            <div className="text-sm font-medium">{props.payload && new Date(props.payload[0]?.payload.date).toLocaleDateString()}</div>
+                            <div className="text-xs text-gray-500 mb-1">{props.payload && new Date(props.payload[0]?.payload.date).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</div>
+                            {props.payload?.map((entry, i) => (
+                              <div key={i} className="flex items-center gap-2">
+                                <div className="h-2 w-2 rounded-full" style={{ backgroundColor: entry.color }}></div>
+                                <span className="text-xs">{entry.name}: {entry.value.toLocaleString()} executions</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        showLegend={true}
+                        showGradient={true}
+                        yAxisWidth={40}
+                        minValue={0}
+                        autoMinValue={false}
+                        showYAxis={true}
+                        showXAxis={true}
+                        startEndOnly={false}
+                        showAnimation={true}
+                        curveType="natural"
+                      />
+                      
+                      <div className="mt-4 flex items-center justify-between">
+                        <Text className="text-sm">Selected tools:</Text>
+                        <Button 
+                          variant="secondary" 
+                          size="xs" 
+                          onClick={() => setSelectedTools([])}
+                        >
+                          Clear Selection
+                        </Button>
+                      </div>
+                      
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {selectedTools.map((tool, index) => (
+                          <Badge
+                            key={tool}
+                            color={colorOptions[index % colorOptions.length] as Color}
+                            className="cursor-pointer"
+                            onClick={() => toggleToolSelection(tool)}
+                          >
+                            {tool} ×
+                          </Badge>
+                        ))}
+                      </div>
+                    </Card>
                   ) : (
-                    <CustomTrendChart 
-                      data={toolTrendData} 
-                      categories={selectedTools} 
-                      colors={selectedTools.map((_, index) => colorOptions[index % colorOptions.length])} 
-                      isSingleView={false}
-                    />
+                    <div className="mt-4">
+                      <Text>Select tools to compare:</Text>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 mt-2">
+                        {toolUsageData.map((tool) => (
+                          <Badge
+                            key={tool.tool_name}
+                            color={selectedTools.includes(tool.tool_name) ? (tool.is_internal ? 'indigo' : 'violet') : 'gray'}
+                            className="cursor-pointer"
+                            onClick={() => toggleToolSelection(tool.tool_name)}
+                          >
+                            {tool.tool_name}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
                   )}
-                </>
+                </div>
               )}
             </TabPanel>
           </TabPanels>
