@@ -125,6 +125,32 @@ type MetricChartData = {
   data: TimeSeriesData[];
 };
 
+// Add ToolInteraction and ToolInteractionsResponse types to match the API response
+type ToolInteraction = {
+  id: number;
+  event_id: number;
+  tool_name: string;
+  interaction_type: string;
+  status: string;
+  status_code: number;
+  parameters: any;
+  result: any;
+  request_timestamp: string;
+  response_timestamp: string;
+  duration_ms: number;
+  framework_name: string;
+  agent_id: string;
+};
+
+type ToolInteractionsResponse = {
+  total: number;
+  page: number;
+  page_size: number;
+  from_time: string;
+  to_time: string;
+  interactions: ToolInteraction[];
+};
+
 // Calculate health score based on metrics
 const calculateHealthScore = (metrics: DashboardMetric[]): number => {
   if (!metrics || metrics.length === 0) return 100;
@@ -261,87 +287,89 @@ export default function OverviewDashboard() {
           startDate.setDate(startDate.getDate() - 7);
       }
 
-      // Fetch LLM requests time series
+      // Fetch chart data for LLM requests
       try {
-        const llmParams = {
-          from_time: startDate.toISOString(),
-          to_time: currentTime.toISOString(),
-          interval: getInterval(timeRange)
-        };
+        const llmRequestsResponse = await fetchAPI<MetricChartData>(
+          `${METRICS.LLM_REQUEST_COUNT}?time_range=${timeRange}`
+        );
         
-        const llmData = await fetchAPI<MetricChartData>(`${METRICS.LLM_REQUEST_COUNT}${buildQueryParams(llmParams)}`);
-        if (llmData && llmData.data && llmData.data.length > 0) {
-          setLlmRequests(llmData.data);
+        if (llmRequestsResponse && llmRequestsResponse.data) {
+          setLlmRequests(llmRequestsResponse.data);
           receivedAnyData = true;
         }
       } catch (error) {
-        console.warn('Failed to fetch LLM requests:', error);
+        console.warn('Failed to fetch LLM requests chart data:', error);
       }
       
-      // Fetch token usage time series
+      // Fetch token usage data
       try {
-        const tokenParams = {
-          from_time: startDate.toISOString(),
-          to_time: currentTime.toISOString(),
-          interval: getInterval(timeRange)
-        };
+        const tokenUsageResponse = await fetchAPI<MetricChartData>(
+          `${METRICS.LLM_TOKEN_USAGE}?time_range=${timeRange}`
+        );
         
-        console.log('Fetching token usage time series with params:', tokenParams);
-        const tokenData = await fetchAPI<MetricChartData>(`${METRICS.LLM_TOKEN_USAGE}${buildQueryParams(tokenParams)}`);
-        console.log('Token usage time series response:', tokenData);
-        
-        if (tokenData && tokenData.data && tokenData.data.length > 0) {
-          setTokenUsage(tokenData.data);
+        if (tokenUsageResponse && tokenUsageResponse.data) {
+          setTokenUsage(tokenUsageResponse.data);
           receivedAnyData = true;
         }
       } catch (error) {
-        console.warn('Failed to fetch token usage:', error);
+        console.warn('Failed to fetch token usage chart data:', error);
       }
       
-      // Fetch tool executions time series
+      // Fetch tool execution data
       try {
-        const toolParams = {
-          from_time: startDate.toISOString(),
-          to_time: currentTime.toISOString(),
-          interval: getInterval(timeRange)
-        };
+        const toolExecutionsResponse = await fetchAPI<ToolInteractionsResponse>(
+          `${METRICS.TOOL_INTERACTIONS}?time_range=${timeRange}&interaction_type=execution`
+        );
         
-        const toolData = await fetchAPI<MetricChartData>(`${METRICS.TOOL_EXECUTION_COUNT}${buildQueryParams(toolParams)}`);
-        if (toolData && toolData.data && toolData.data.length > 0) {
-          setToolExecutions(toolData.data);
+        if (toolExecutionsResponse && toolExecutionsResponse.interactions) {
+          // Process tool executions into time series data
+          const processedData = toolExecutionsResponse.interactions.reduce((acc: TimeSeriesData[], interaction) => {
+            const timestamp = interaction.request_timestamp;
+            const existingPoint = acc.find(point => point.timestamp === timestamp);
+            
+            if (existingPoint) {
+              existingPoint.value += 1;
+            } else {
+              acc.push({
+                timestamp,
+                value: 1
+              });
+            }
+            
+            return acc;
+          }, []);
+          
+          setToolExecutions(processedData);
+          receivedAnyData = true;
+        } else {
+          setToolExecutions([]);
+        }
+      } catch (error) {
+        console.error('Failed to fetch tool executions:', error);
+        setToolExecutions([]);
+      }
+      
+      // Fetch session counts data
+      try {
+        const sessionCountsResponse = await fetchAPI<MetricChartData>(
+          `${METRICS.SESSION_COUNT}?time_range=${timeRange}`
+        );
+        
+        if (sessionCountsResponse && sessionCountsResponse.data) {
+          setSessionCounts(sessionCountsResponse.data);
           receivedAnyData = true;
         }
       } catch (error) {
-        console.warn('Failed to fetch tool executions:', error);
+        console.warn('Failed to fetch session counts chart data:', error);
       }
       
-      // Fetch session counts time series
-      try {
-        const sessionParams = {
-          time_range: timeRange,
-          interval: getInterval(timeRange)
-        };
-        
-        const sessionData = await fetchAPI<MetricChartData>(`${METRICS.SESSION_COUNT}${buildQueryParams(sessionParams)}`);
-        if (sessionData && sessionData.data && sessionData.data.length > 0) {
-          setSessionCounts(sessionData.data);
-          receivedAnyData = true;
-        }
-      } catch (error) {
-        console.warn('Failed to fetch session counts:', error);
-      }
-      
-      // Only show error if we didn't receive any data at all
-      if (!receivedAnyData) {
-        setError('No dashboard data received from any API endpoints. Please check the API server.');
-      }
-      
+      // After all data is fetched
       setLastUpdated(new Date());
       setLoading(false);
     } catch (err) {
-      console.error('Error fetching dashboard data:', err);
-      setError(`${err instanceof Error ? err.message : 'Failed to load dashboard data'}`);
+      setError('Error fetching dashboard data. Please try again.');
       setLoading(false);
+      console.error('Dashboard data fetch error:', err);
     }
   }
 
@@ -858,15 +886,21 @@ export default function OverviewDashboard() {
                   </DashboardCard>
                 </ResponsiveContainer>
                 
-                {/* Token Usage Section - Removed ExpandableSection wrapper */}
-                <div className="mt-8 mb-6 md:mb-8">
-                  <TokenUsageBreakdown timeRange={timeRange} />
+                {/* Token Usage Breakdown Section */}
+                <div className="mt-6">
+                  <TokenUsageBreakdown 
+                    timeRange={timeRange}
+                    className="h-full" 
+                  />
                 </div>
                 
-                {/* Add Tool Usage Analysis section below the Tokens section */}
-                <Grid numItemsMd={1} numItemsLg={1} className="gap-6 mt-6">
-                  <ToolUsageAnalysis timeRange={timeRange} />
-                </Grid>
+                {/* Tool Usage Analysis Section */}
+                <div className="mt-6">
+                  <ToolUsageAnalysis 
+                    timeRange={timeRange}
+                    className="h-full"
+                  />
+                </div>
                 
                 {/* Top Agents Section */}
                 <div className="mb-6 md:mb-8">

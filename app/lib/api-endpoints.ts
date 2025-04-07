@@ -50,7 +50,6 @@ export const METRICS = {
   LLM_REQUESTS: '/v1/metrics/llms/requests',
   
   // Tool metrics
-  TOOL_EXECUTION_COUNT: '/v1/metrics/tool/execution_count',
   TOOL_SUCCESS_RATE: '/v1/metrics/tool/success_rate',
   TOOL_USAGE: '/v1/metrics/tools',
   TOOL_EXECUTIONS: '/v1/metrics/tools/executions',
