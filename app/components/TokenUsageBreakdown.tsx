@@ -104,6 +104,9 @@ export default function TokenUsageBreakdown({ className = '', timeRange = '30d' 
   const [agentModelData, setAgentModelData] = useState<any[]>([]);
   const [hasAgentData, setHasAgentData] = useState(false);
 
+  // Add a ref to handle proper scrolling
+  const containerRef = useRef<HTMLDivElement>(null);
+
   // Trigger immediate data fetch when component mounts or timeRange changes
   useEffect(() => {
     console.log('TokenUsageBreakdown: Fetching data for timeRange:', timeRange);
@@ -316,77 +319,83 @@ export default function TokenUsageBreakdown({ className = '', timeRange = '30d' 
 
   if (isLoading) {
     return (
-      <DashboardCard 
-        title="Token Usage Breakdown" 
-        icon={<ChartPieIcon className="h-5 w-5" />}
-        className={className}
-        isLoading={true}
-      >
-        <div className="flex items-center justify-center p-12">
-          <div className="text-center">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mb-4"></div>
-            <p className="text-gray-500">Loading token usage data...</p>
+      <div ref={containerRef} className="w-full mb-8">
+        <DashboardCard 
+          title="Token Usage Insights"
+          icon={<ChartPieIcon className="h-5 w-5" />}
+          className={`${className}`}
+          isLoading={true}
+        >
+          <div className="flex items-center justify-center p-12">
+            <div className="text-center">
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mb-4"></div>
+              <p className="text-gray-500">Loading token usage data...</p>
+            </div>
           </div>
-        </div>
-      </DashboardCard>
+        </DashboardCard>
+      </div>
     );
   }
 
   if (error) {
     return (
-      <DashboardCard 
-        title="Token Usage Breakdown" 
-        icon={<ChartPieIcon className="h-5 w-5" />}
-        className={className}
-      >
-        <div className="flex flex-col items-center justify-center p-8 text-center space-y-4">
-          <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center">
-            <DocumentTextIcon className="h-8 w-8 text-red-400" />
+      <div ref={containerRef} className="w-full mb-8">
+        <DashboardCard 
+          title="Token Usage Insights"
+          icon={<ChartPieIcon className="h-5 w-5" />}
+          className={`${className}`}
+        >
+          <div className="flex flex-col items-center justify-center p-8 text-center space-y-4">
+            <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center">
+              <DocumentTextIcon className="h-8 w-8 text-red-400" />
+            </div>
+            <h3 className="text-lg font-medium text-gray-800">Token Data Unavailable</h3>
+            <p className="text-gray-500 text-sm max-w-md">
+              We couldn't retrieve token usage data. This might be temporary or because your system doesn't have any token usage recorded yet.
+            </p>
+            <Button 
+              variant="secondary" 
+              color="gray" 
+              icon={ArrowPathIcon} 
+              onClick={fetchTokenData}
+              className="mt-2"
+            >
+              Try Again
+            </Button>
           </div>
-          <h3 className="text-lg font-medium text-gray-800">Token Data Unavailable</h3>
-          <p className="text-gray-500 text-sm max-w-md">
-            We couldn't retrieve token usage data. This might be temporary or because your system doesn't have any token usage recorded yet.
-          </p>
-          <Button 
-            variant="secondary" 
-            color="gray" 
-            icon={ArrowPathIcon} 
-            onClick={fetchTokenData}
-            className="mt-2"
-          >
-            Try Again
-          </Button>
-        </div>
-      </DashboardCard>
+        </DashboardCard>
+      </div>
     );
   }
 
   if (!tokenData) {
     return (
-      <DashboardCard 
-        title="Token Usage Breakdown" 
-        icon={<ChartPieIcon className="h-5 w-5" />}
-        className={className}
-      >
-        <div className="flex flex-col items-center justify-center p-8 text-center space-y-4">
-          <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center">
-            <DocumentTextIcon className="h-8 w-8 text-blue-400" />
+      <div ref={containerRef} className="w-full mb-8">
+        <DashboardCard 
+          title="Token Usage Insights"
+          icon={<ChartPieIcon className="h-5 w-5" />}
+          className={`${className}`}
+        >
+          <div className="flex flex-col items-center justify-center p-8 text-center space-y-4">
+            <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center">
+              <DocumentTextIcon className="h-8 w-8 text-blue-400" />
+            </div>
+            <h3 className="text-lg font-medium text-gray-800">No Token Data Yet</h3>
+            <p className="text-gray-500 text-sm max-w-md">
+              There is no token usage data available for the selected time period. Start using AI agents in your application to see token analytics.
+            </p>
+            <Button 
+              variant="secondary" 
+              color="gray" 
+              icon={ArrowPathIcon} 
+              onClick={fetchTokenData}
+              className="mt-2"
+            >
+              Refresh Data
+            </Button>
           </div>
-          <h3 className="text-lg font-medium text-gray-800">No Token Data Yet</h3>
-          <p className="text-gray-500 text-sm max-w-md">
-            There is no token usage data available for the selected time period. Start using AI agents in your application to see token analytics.
-          </p>
-          <Button 
-            variant="secondary" 
-            color="gray" 
-            icon={ArrowPathIcon} 
-            onClick={fetchTokenData}
-            className="mt-2"
-          >
-            Refresh Data
-          </Button>
-        </div>
-      </DashboardCard>
+        </DashboardCard>
+      </div>
     );
   }
 
@@ -397,19 +406,20 @@ export default function TokenUsageBreakdown({ className = '', timeRange = '30d' 
   const timeSeriesStackedData = prepareStackedTimeSeriesData();
 
   return (
-    <DashboardCard
-      title="Model Usage Analytics"
-      icon={<ChartPieIcon className="h-5 w-5" />}
-      className={className}
-      collapsible={isExpanded}
-      defaultCollapsed={false}
-    >
-      <div className="space-y-6">
-        {/* Summary Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card decoration="top" decorationColor="blue" className="shadow-sm">
+    <div ref={containerRef} className="w-full">
+      <DashboardCard
+        title="Token Usage Insights"
+        icon={<ChartPieIcon className="h-5 w-5" />}
+        className={`${className}`}
+        contentClassName="pb-2"
+        collapsible={isExpanded}
+        defaultCollapsed={false}
+      >
+        {/* Summary Grid - Always visible */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <Card decoration="top" decorationColor="blue" className="shadow-sm" style={{ borderTopColor: "rgba(129, 140, 248, 0.5)" }}>
             <Flex justifyContent="start" className="space-x-4">
-              <DocumentTextIcon className="h-8 w-8 text-blue-500" />
+              <DocumentTextIcon className="h-8 w-8" style={{ color: "rgba(129, 140, 248, 0.8)" }} />
               <div>
                 <Text>Total Tokens</Text>
                 <Metric>{formatNumber(tokenData.total_tokens)}</Metric>
@@ -418,9 +428,9 @@ export default function TokenUsageBreakdown({ className = '', timeRange = '30d' 
             </Flex>
           </Card>
           
-          <Card decoration="top" decorationColor="indigo" className="shadow-sm">
+          <Card decoration="top" decorationColor="violet" className="shadow-sm" style={{ borderTopColor: "rgba(251, 113, 133, 0.5)" }}>
             <Flex justifyContent="start" className="space-x-4">
-              <CurrencyDollarIcon className="h-8 w-8 text-indigo-500" />
+              <CurrencyDollarIcon className="h-8 w-8" style={{ color: "rgba(251, 113, 133, 0.8)" }} />
               <div>
                 <Text>Estimated Cost</Text>
                 <Metric>${totalCost.toFixed(2)}</Metric>
@@ -429,9 +439,9 @@ export default function TokenUsageBreakdown({ className = '', timeRange = '30d' 
             </Flex>
           </Card>
           
-          <Card decoration="top" decorationColor="emerald" className="shadow-sm">
+          <Card decoration="top" decorationColor="sky" className="shadow-sm" style={{ borderTopColor: "rgba(45, 212, 191, 0.5)" }}>
             <Flex justifyContent="start" className="space-x-4">
-              <ArrowTrendingUpIcon className="h-8 w-8 text-emerald-500" />
+              <ArrowTrendingUpIcon className="h-8 w-8" style={{ color: "rgba(45, 212, 191, 0.8)" }} />
               <div>
                 <Text>Models Used</Text>
                 <Metric>{tokenData.models.filter(model => model.total_tokens > 0).length}</Metric>
@@ -441,181 +451,200 @@ export default function TokenUsageBreakdown({ className = '', timeRange = '30d' 
           </Card>
         </div>
         
-        {/* Input vs Output Distribution */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Card className="p-4 shadow-sm">
-            <Title>Input vs Output Tokens</Title>
-            <Text className="text-sm text-gray-500">Distribution of tokens by type</Text>
-            <div className="h-72 mt-4 relative flex justify-center items-center">
-              <SimpleDonutChart 
-                data={inputOutputData}
-                colors={["rgba(59, 130, 246, 0.4)", "rgba(139, 92, 246, 0.4)"]}
-                valueFormatter={formatNumber}
-                showLegend
-                className="h-full w-full"
-              />
-            </div>
-          </Card>
+        {/* Tab interface for different views */}
+        <TabGroup>
+          <TabList className="mb-6">
+            <Tab>Charts</Tab>
+            <Tab>Cost Breakdown</Tab>
+            {hasAgentData && <Tab>Agent Usage</Tab>}
+          </TabList>
           
-          <Card className="p-4 shadow-sm">
-            <Title>Token Usage by Model</Title>
-            <Text className="text-sm text-gray-500">Breakdown across different models</Text>
-            <div className="h-72 mt-4">
-              <TokenUsageByModelChart 
-                data={modelData}
-                formatValue={formatNumber}
-                colors={["rgba(59, 130, 246, 0.4)", "rgba(139, 92, 246, 0.4)"]}
-              />
-            </div>
-          </Card>
-        </div>
-        
-        {/* Token Usage Trend - Stacked Area Chart */}
-        <Card className="p-4 shadow-sm">
-          <Title>Token Usage Trend</Title>
-          <Text className="text-sm text-gray-500">Token usage over time in the selected period</Text>
-          
-          <div className="h-72 mt-4">
-            {timeSeriesData.length > 0 ? (
-              <AreaChart
-                data={timeSeriesStackedData.data}
-                index="date"
-                categories={["Input Tokens", "Output Tokens"]}
-                colors={["blue", "purple"]}
-                valueFormatter={(value) => `${formatNumber(value)} tokens`}
-                showLegend={true}
-                showGridLines={false}
-                curveType="natural"
-                yAxisWidth={65}
-                stack={true}
-                connectNulls={true}
-                showAnimation={true}
-                showXAxis={true}
-                showYAxis={true}
-                showTooltip={true}
-                className="h-full"
-              />
-            ) : (
-              <div className="h-full flex items-center justify-center text-gray-500">
-                No token usage data available
-              </div>
-            )}
-          </div>
-        </Card>
-        
-        {/* Model Usage by Agent */}
-        {hasAgentData && (
-          <Card className="p-4 shadow-sm">
-            <Title>Model Usage by Agent</Title>
-            <Text className="text-sm text-gray-500">Distribution of model usage across different agents</Text>
-            <div className="h-72 mt-4">
-              {agentData.length > 0 ? (
-                <BarChart
-                  data={agentData}
-                  index="name"
-                  categories={Array.from(new Set(
-                    tokenData.agents?.flatMap(agent => 
-                      agent.model_usage.map(usage => 
-                        MODEL_DISPLAY_NAMES[usage.model_name.toLowerCase()] || usage.model_name
-                      )
-                    ) || []
-                  ))}
-                  colors={["#3730A3", "#8B5CF6", "#4F46E5", "#7C3AED"]}
-                  valueFormatter={formatNumber}
-                  stack={true}
-                  showLegend={true}
-                  yAxisWidth={65}
-                  showAnimation={true}
-                  showGridLines={true}
-                  showXAxis={true}
-                  showYAxis={true}
-                  showTooltip={true}
-                  className="h-full w-full"
-                />
-              ) : (
-                <div className="h-full flex items-center justify-center text-gray-500">
-                  No agent model usage data available
+          <TabPanels>
+            {/* Charts Panel */}
+            <TabPanel>
+              <div className="space-y-6">
+                {/* Input vs Output Distribution */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <Card className="p-4 shadow-sm">
+                    <Title>Input vs Output Tokens</Title>
+                    <Text className="text-sm text-gray-500">Distribution of tokens by type</Text>
+                    <div className="h-72 mt-4 relative flex justify-center items-center">
+                      <SimpleDonutChart 
+                        data={inputOutputData}
+                        colors={["rgba(59, 130, 246, 0.4)", "rgba(139, 92, 246, 0.4)"]}
+                        valueFormatter={formatNumber}
+                        showLegend
+                        className="h-full w-full"
+                      />
+                    </div>
+                  </Card>
+                  
+                  <Card className="p-4 shadow-sm">
+                    <Title>Token Usage by Model</Title>
+                    <Text className="text-sm text-gray-500">Breakdown across different models</Text>
+                    <div className="h-72 mt-4">
+                      <TokenUsageByModelChart 
+                        data={modelData}
+                        formatValue={formatNumber}
+                        colors={["rgba(59, 130, 246, 0.4)", "rgba(139, 92, 246, 0.4)"]}
+                      />
+                    </div>
+                  </Card>
                 </div>
-              )}
-            </div>
-          </Card>
-        )}
-        
-        {/* Cost Breakdown Section */}
-        <Card className="p-4 shadow-sm">
-          <Title>Cost Breakdown</Title>
-          <Text className="text-sm text-gray-500 mb-4">Detailed cost analysis by model</Text>
-          <div className="mt-4 space-y-4">
-            <div className="overflow-x-auto max-h-80">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50 sticky top-0 z-10">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Model</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Input Tokens</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Input Cost</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Output Tokens</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Output Cost</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Cost</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {tokenData.models.map((model, index) => {
-                    const modelName = model.name.toLowerCase();
-                    const costKey = Object.keys(MODEL_COSTS).find(key => modelName.includes(key.toLowerCase())) || 'default';
-                    const costInfo = MODEL_COSTS[costKey as keyof typeof MODEL_COSTS];
-                    const displayName = MODEL_DISPLAY_NAMES[modelName] || model.name;
-                    
-                    const inputCost = (model.input_tokens / 1000) * costInfo.input;
-                    const outputCost = (model.output_tokens / 1000) * costInfo.output;
-                    const totalModelCost = inputCost + outputCost;
-
-                    return (
-                      <tr key={index} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{displayName}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatNumber(model.input_tokens)}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${inputCost.toFixed(2)}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatNumber(model.output_tokens)}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${outputCost.toFixed(2)}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">${totalModelCost.toFixed(2)}</td>
-                      </tr>
-                    );
-                  })}
-                  <tr className="bg-gray-50 sticky bottom-0 z-10">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">Total</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{formatNumber(tokenData.input_tokens)}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      ${tokenData.models.reduce((sum, model) => {
-                        const modelName = model.name.toLowerCase();
-                        const costKey = Object.keys(MODEL_COSTS).find(key => modelName.includes(key.toLowerCase())) || 'default';
-                        const costInfo = MODEL_COSTS[costKey as keyof typeof MODEL_COSTS];
-                        return sum + (model.input_tokens / 1000) * costInfo.input;
-                      }, 0).toFixed(2)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{formatNumber(tokenData.output_tokens)}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      ${tokenData.models.reduce((sum, model) => {
-                        const modelName = model.name.toLowerCase();
-                        const costKey = Object.keys(MODEL_COSTS).find(key => modelName.includes(key.toLowerCase())) || 'default';
-                        const costInfo = MODEL_COSTS[costKey as keyof typeof MODEL_COSTS];
-                        return sum + (model.output_tokens / 1000) * costInfo.output;
-                      }, 0).toFixed(2)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">${totalCost.toFixed(2)}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+                
+                {/* Token Usage Trend - Stacked Area Chart */}
+                <Card className="p-4 shadow-sm">
+                  <Title>Token Usage Trend</Title>
+                  <Text className="text-sm text-gray-500">Token usage over time in the selected period</Text>
+                  
+                  <div className="h-72 mt-4">
+                    {timeSeriesData.length > 0 ? (
+                      <AreaChart
+                        data={timeSeriesStackedData.data}
+                        index="date"
+                        categories={["Input Tokens", "Output Tokens"]}
+                        colors={["blue", "purple"]}
+                        valueFormatter={(value) => `${formatNumber(value)} tokens`}
+                        showLegend={true}
+                        showGridLines={false}
+                        curveType="natural"
+                        yAxisWidth={65}
+                        stack={true}
+                        connectNulls={true}
+                        showAnimation={true}
+                        showXAxis={true}
+                        showYAxis={true}
+                        showTooltip={true}
+                        className="h-full"
+                      />
+                    ) : (
+                      <div className="h-full flex items-center justify-center text-gray-500">
+                        No token usage data available
+                      </div>
+                    )}
+                  </div>
+                </Card>
+              </div>
+            </TabPanel>
             
-            <div className="text-xs text-gray-500 p-4 bg-gray-50 rounded-lg">
-              <p className="font-medium mb-2">About Cost Calculations</p>
-              <p>Costs are calculated based on standard OpenAI and Anthropic pricing. Actual costs may vary based on your specific contract pricing.</p>
-            </div>
-          </div>
-        </Card>
-        
-        {/* Add extra padding at the bottom */}
-        <div className="h-8"></div>
-      </div>
-    </DashboardCard>
+            {/* Cost Breakdown Panel */}
+            <TabPanel>
+              {/* Cost Breakdown Section with full height */}
+              <div>
+                <Title>Cost Breakdown</Title>
+                <Text className="text-sm text-gray-500 mb-4">Detailed cost analysis by model</Text>
+                
+                <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                  <table className="w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50 sticky top-0 z-10">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Model</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Input Tokens</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Input Cost</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Output Tokens</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Output Cost</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Cost</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {tokenData.models
+                        .filter(model => model.total_tokens > 0) // Filter out unused models
+                        .map((model, index) => {
+                        const modelName = model.name.toLowerCase();
+                        const costKey = Object.keys(MODEL_COSTS).find(key => modelName.includes(key.toLowerCase())) || 'default';
+                        const costInfo = MODEL_COSTS[costKey as keyof typeof MODEL_COSTS];
+                        const displayName = MODEL_DISPLAY_NAMES[modelName] || model.name;
+                        
+                        const inputCost = (model.input_tokens / 1000) * costInfo.input;
+                        const outputCost = (model.output_tokens / 1000) * costInfo.output;
+                        const totalModelCost = inputCost + outputCost;
+
+                        return (
+                          <tr key={index} className="hover:bg-gray-50">
+                            <td className="px-6 py-4 text-sm font-medium text-gray-900">{displayName}</td>
+                            <td className="px-6 py-4 text-sm text-gray-500">{formatNumber(model.input_tokens)}</td>
+                            <td className="px-6 py-4 text-sm text-gray-500">${inputCost.toFixed(2)}</td>
+                            <td className="px-6 py-4 text-sm text-gray-500">{formatNumber(model.output_tokens)}</td>
+                            <td className="px-6 py-4 text-sm text-gray-500">${outputCost.toFixed(2)}</td>
+                            <td className="px-6 py-4 text-sm text-gray-900 font-medium">${totalModelCost.toFixed(2)}</td>
+                          </tr>
+                        );
+                      })}
+                      <tr className="bg-gray-50 sticky bottom-0 z-10">
+                        <td className="px-6 py-4 text-sm font-bold text-gray-900">Total</td>
+                        <td className="px-6 py-4 text-sm font-medium text-gray-900">{formatNumber(tokenData.input_tokens)}</td>
+                        <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                          ${tokenData.models.reduce((sum, model) => {
+                            const modelName = model.name.toLowerCase();
+                            const costKey = Object.keys(MODEL_COSTS).find(key => modelName.includes(key.toLowerCase())) || 'default';
+                            const costInfo = MODEL_COSTS[costKey as keyof typeof MODEL_COSTS];
+                            return sum + (model.input_tokens / 1000) * costInfo.input;
+                          }, 0).toFixed(2)}
+                        </td>
+                        <td className="px-6 py-4 text-sm font-medium text-gray-900">{formatNumber(tokenData.output_tokens)}</td>
+                        <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                          ${tokenData.models.reduce((sum, model) => {
+                            const modelName = model.name.toLowerCase();
+                            const costKey = Object.keys(MODEL_COSTS).find(key => modelName.includes(key.toLowerCase())) || 'default';
+                            const costInfo = MODEL_COSTS[costKey as keyof typeof MODEL_COSTS];
+                            return sum + (model.output_tokens / 1000) * costInfo.output;
+                          }, 0).toFixed(2)}
+                        </td>
+                        <td className="px-6 py-4 text-sm font-bold text-gray-900">${totalCost.toFixed(2)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                
+                <div className="text-xs text-gray-500 p-4 bg-gray-50 rounded-lg mt-4">
+                  <p className="font-medium mb-2">About Cost Calculations</p>
+                  <p>Costs are calculated based on standard OpenAI and Anthropic pricing. Actual costs may vary based on your specific contract pricing.</p>
+                </div>
+              </div>
+            </TabPanel>
+            
+            {/* Agent Usage Panel - Only shown if agents data exists */}
+            {hasAgentData && (
+              <TabPanel>
+                <Card className="p-4 shadow-sm">
+                  <Title>Model Usage by Agent</Title>
+                  <Text className="text-sm text-gray-500">Distribution of model usage across different agents</Text>
+                  <div className="h-72 mt-4">
+                    {agentData.length > 0 ? (
+                      <BarChart
+                        data={agentData}
+                        index="name"
+                        categories={Array.from(new Set(
+                          tokenData.agents?.flatMap(agent => 
+                            agent.model_usage.map(usage => 
+                              MODEL_DISPLAY_NAMES[usage.model_name.toLowerCase()] || usage.model_name
+                            )
+                          ) || []
+                        ))}
+                        colors={["#3730A3", "#8B5CF6", "#4F46E5", "#7C3AED"]}
+                        valueFormatter={formatNumber}
+                        stack={true}
+                        showLegend={true}
+                        yAxisWidth={65}
+                        showAnimation={true}
+                        showGridLines={true}
+                        showXAxis={true}
+                        showYAxis={true}
+                        showTooltip={true}
+                        className="h-full w-full"
+                      />
+                    ) : (
+                      <div className="h-full flex items-center justify-center text-gray-500">
+                        No agent model usage data available
+                      </div>
+                    )}
+                  </div>
+                </Card>
+              </TabPanel>
+            )}
+          </TabPanels>
+        </TabGroup>
+      </DashboardCard>
+    </div>
   );
 } 

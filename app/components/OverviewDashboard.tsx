@@ -841,15 +841,10 @@ export default function OverviewDashboard() {
                   </DashboardCard>
                 </ResponsiveContainer>
                 
-                {/* Token Usage Section - Always show even if other metrics are missing */}
-                <ExpandableSection
-                  title="Token Usage Insights"
-                  description="Detailed breakdown of token usage across models"
-                  defaultExpanded={true}
-                  className="mt-8"
-                >
+                {/* Token Usage Section - Removed ExpandableSection wrapper */}
+                <div className="mt-8 mb-6 md:mb-8">
                   <TokenUsageBreakdown timeRange={timeRange} />
-                </ExpandableSection>
+                </div>
                 
                 {/* Top Agents Section */}
                 <div className="mb-6 md:mb-8">
