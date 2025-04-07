@@ -70,13 +70,15 @@ import DashboardCard from './DashboardCard'
 import Link from 'next/link'
 import { fetchAPI, buildQueryParams } from '../lib/api'
 import { DASHBOARD, AGENTS, METRICS } from '../lib/api-endpoints'
-import { colors, semanticColors } from './DesignSystem'
+import { colors } from './DesignSystem'
 import LoadingState from './LoadingState'
 import EmptyState from './EmptyState'
 import ErrorMessage from './ErrorMessage'
 import MobileNavigation from './MobileNavigation'
 import ResponsiveContainer from './ResponsiveContainer'
 import TokenUsageBreakdown from './TokenUsageBreakdown'
+import ToolUsageAnalysis from './ToolUsageAnalysis'
+import { formatISOToLocalDisplay, formatChartDate as formatChartTimestamp } from '../lib/dateUtils'
 
 // Define types based on the new API
 type DashboardMetric = {
@@ -241,10 +243,29 @@ export default function OverviewDashboard() {
         console.warn('Failed to fetch top agents:', error);
       }
       
+      // Calculate date range for API requests
+      const currentTime = new Date();
+      let startDate = new Date();
+      
+      switch (timeRange) {
+        case '24h':
+          startDate.setHours(startDate.getHours() - 24);
+          break;
+        case '7d':
+          startDate.setDate(startDate.getDate() - 7);
+          break;
+        case '30d':
+          startDate.setDate(startDate.getDate() - 30);
+          break;
+        default:
+          startDate.setDate(startDate.getDate() - 7);
+      }
+
       // Fetch LLM requests time series
       try {
         const llmParams = {
-          time_range: timeRange,
+          from_time: startDate.toISOString(),
+          to_time: currentTime.toISOString(),
           interval: getInterval(timeRange)
         };
         
@@ -260,7 +281,8 @@ export default function OverviewDashboard() {
       // Fetch token usage time series
       try {
         const tokenParams = {
-          time_range: timeRange,
+          from_time: startDate.toISOString(),
+          to_time: currentTime.toISOString(),
           interval: getInterval(timeRange)
         };
         
@@ -279,7 +301,8 @@ export default function OverviewDashboard() {
       // Fetch tool executions time series
       try {
         const toolParams = {
-          time_range: timeRange,
+          from_time: startDate.toISOString(),
+          to_time: currentTime.toISOString(),
           interval: getInterval(timeRange)
         };
         
@@ -355,17 +378,11 @@ export default function OverviewDashboard() {
   }
 
   const formatChartDate = (timestamp: string, range: string) => {
-    const date = new Date(timestamp);
-    if (range === '24h') {
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } else {
-      return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-    }
+    return formatChartTimestamp(timestamp, range);
   }
 
   const formatTimestamp = (timestamp: string) => {
-    const date = new Date(timestamp);
-    return date.toLocaleString([], {
+    return formatISOToLocalDisplay(timestamp, {
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
@@ -845,6 +862,11 @@ export default function OverviewDashboard() {
                 <div className="mt-8 mb-6 md:mb-8">
                   <TokenUsageBreakdown timeRange={timeRange} />
                 </div>
+                
+                {/* Add Tool Usage Analysis section below the Tokens section */}
+                <Grid numItemsMd={1} numItemsLg={1} className="gap-6 mt-6">
+                  <ToolUsageAnalysis timeRange={timeRange} />
+                </Grid>
                 
                 {/* Top Agents Section */}
                 <div className="mb-6 md:mb-8">

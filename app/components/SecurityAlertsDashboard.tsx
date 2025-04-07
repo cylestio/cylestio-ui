@@ -36,6 +36,7 @@ import {
 import Link from 'next/link';
 import { fetchAPI, buildQueryParams, PaginationParams, TimeRangeParams, SearchParams } from '../lib/api';
 import { SECURITY } from '../lib/api-endpoints';
+import { formatISOToLocalDisplay, formatChartDate as formatChartTimestamp } from '../lib/dateUtils';
 
 // Define types based on new API
 type Alert = {
@@ -124,11 +125,33 @@ export function SecurityAlertsDashboard() {
     try {
       setLoading(true);
       
+      // Calculate date range for API requests
+      const currentTime = new Date();
+      let startDate = new Date();
+      
+      switch (timeRange) {
+        case '1h':
+          startDate.setHours(startDate.getHours() - 1);
+          break;
+        case '1d':
+          startDate.setDate(startDate.getDate() - 1);
+          break;
+        case '7d':
+          startDate.setDate(startDate.getDate() - 7);
+          break;
+        case '30d':
+          startDate.setDate(startDate.getDate() - 30);
+          break;
+        default:
+          startDate.setDate(startDate.getDate() - 7);
+      }
+      
       // Build query parameters
       const params: AlertFilters = {
         page: pagination.page,
         page_size: pagination.page_size,
-        time_range: timeRange,
+        from_time: startDate.toISOString(),
+        to_time: currentTime.toISOString()
       };
 
       if (severityFilter !== 'all') {
@@ -153,9 +176,10 @@ export function SecurityAlertsDashboard() {
       setAlerts(data.items);
       setPagination(data.pagination);
       
-      // Fetch alert trend data
+      // Fetch alert trend data with ISO 8601 timestamps
       const trendParams = {
-        time_range: timeRange,
+        from_time: startDate.toISOString(),
+        to_time: currentTime.toISOString(),
         interval: getInterval(timeRange)
       };
       
@@ -164,9 +188,10 @@ export function SecurityAlertsDashboard() {
       );
       setAlertTrend(trendData.data || []);
       
-      // Fetch alerts by severity
+      // Fetch alerts by severity with ISO 8601 timestamps
       const severityParams = {
-        time_range: timeRange,
+        from_time: startDate.toISOString(),
+        to_time: currentTime.toISOString(),
         dimensions: 'severity'
       };
       
@@ -185,9 +210,10 @@ export function SecurityAlertsDashboard() {
       
       setAlertsBySeverity(severityMetrics);
       
-      // Fetch alerts by type
+      // Fetch alerts by type with ISO 8601 timestamps
       const typeParams = {
-        time_range: timeRange,
+        from_time: startDate.toISOString(),
+        to_time: currentTime.toISOString(),
         dimensions: 'type'
       };
       
@@ -242,12 +268,7 @@ export function SecurityAlertsDashboard() {
 
   // Format the timestamp
   const formatTimestamp = (timestamp: string) => {
-    try {
-      const date = new Date(timestamp);
-      return date.toLocaleString();
-    } catch (e) {
-      return 'Invalid date';
-    }
+    return formatISOToLocalDisplay(timestamp);
   };
 
   // Get severity badge color
@@ -268,16 +289,7 @@ export function SecurityAlertsDashboard() {
 
   // Format date for charts
   const formatChartDate = (timestamp: string, range: string) => {
-    const date = new Date(timestamp);
-    
-    switch (range) {
-      case '1h':
-        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      case '1d':
-        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      default:
-        return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-    }
+    return formatChartTimestamp(timestamp, range);
   };
 
   // Transform time series data for charts

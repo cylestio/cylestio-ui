@@ -54,6 +54,7 @@ export const METRICS = {
   TOOL_SUCCESS_RATE: '/v1/metrics/tool/success_rate',
   TOOL_USAGE: '/v1/metrics/tools',
   TOOL_EXECUTIONS: '/v1/metrics/tools/executions',
+  TOOL_INTERACTIONS: '/v1/metrics/tool_interactions',
   
   // Session metrics
   SESSION_COUNT: '/v1/metrics/session/count',
