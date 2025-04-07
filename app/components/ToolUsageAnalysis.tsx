@@ -39,6 +39,7 @@ import LoadingState from './LoadingState'
 import EmptyState from './EmptyState'
 import ErrorMessage from './ErrorMessage'
 import { colors } from './DesignSystem'
+import SlowToolsTable from './SlowToolsTable'
 
 // Types
 type ToolInteraction = {
@@ -675,108 +676,27 @@ export default function ToolUsageAnalysis({ className = '', timeRange = '30d' }:
             
             <TabPanel>
               {/* Slow Tools Table */}
-              {filteredData.slowTools.length > 0 ? (
-                <Table>
-                  <TableHead>
-                    <TableRow>
-                      <TableHeaderCell>Tool Name</TableHeaderCell>
-                      <TableHeaderCell>Type</TableHeaderCell>
-                      <TableHeaderCell>Performance</TableHeaderCell>
-                      <TableHeaderCell>Avg Duration</TableHeaderCell>
-                      <TableHeaderCell>Max Duration</TableHeaderCell>
-                      <TableHeaderCell>Success Rate</TableHeaderCell>
-                      <TableHeaderCell>Executions</TableHeaderCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {filteredData.slowTools.map((tool) => {
-                      const successRate = tool.count > 0 
-                        ? Math.round((tool.success_count / tool.count) * 100) 
-                        : 0;
-                      
-                      // Get color based on performance category
-                      const performanceColor = 
-                        tool.performance_category === 'very_slow' ? 'red' :
-                        tool.performance_category === 'slow' ? 'amber' :
-                        tool.performance_category === 'medium' ? 'yellow' : 'emerald';
-                      
-                      // Get badge text for performance category
-                      const performanceText = 
-                        tool.performance_category === 'very_slow' ? 'Very Slow' :
-                        tool.performance_category === 'slow' ? 'Slow' :
-                        tool.performance_category === 'medium' ? 'Medium' : 'Fast';
-                      
-                      return (
-                        <TableRow key={tool.tool_name}>
-                          <TableCell>{tool.tool_name}</TableCell>
-                          <TableCell>
-                            <Badge color={tool.is_internal ? 'indigo' : 'violet'} size="xs">
-                              {tool.is_internal ? 'Internal' : 'External'}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Badge color={performanceColor} size="xs">
-                              {performanceText}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Text color={performanceColor}>
-                              {formatDuration(tool.avg_duration_ms)}
-                            </Text>
-                          </TableCell>
-                          <TableCell>
-                            <Text color={tool.max_duration_ms > 5000 ? 'red' : tool.max_duration_ms > 2000 ? 'amber' : 'emerald'}>
-                              {formatDuration(tool.max_duration_ms)}
-                            </Text>
-                          </TableCell>
-                          <TableCell>
-                            <Flex alignItems="center" justifyContent="start">
-                              <div 
-                                className="h-2 rounded-full bg-neutral-200 w-24 mr-2"
-                                role="progressbar"
-                                aria-valuenow={successRate}
-                                aria-valuemin={0}
-                                aria-valuemax={100}
-                              >
-                                <div
-                                  className={`h-2 rounded-full ${
-                                    successRate < 70 
-                                      ? 'bg-red-500' 
-                                      : successRate < 90 
-                                        ? 'bg-amber-500' 
-                                        : 'bg-emerald-500'
-                                  }`}
-                                  style={{ width: `${successRate}%` }}
-                                />
-                              </div>
-                              <Text>{successRate}%</Text>
-                            </Flex>
-                          </TableCell>
-                          <TableCell>{tool.count.toLocaleString()}</TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              ) : (
-                <div className="py-8 text-center">
-                  <Text>No slow tools detected</Text>
-                  {(toolType !== 'all' || performanceFilter !== 'all' || statusFilter !== 'all') && (
-                    <Button 
-                      className="mt-4" 
-                      variant="secondary" 
-                      size="xs"
-                      onClick={() => {
-                        setToolType('all');
-                        setPerformanceFilter('all');
-                        setStatusFilter('all');
-                      }}
-                    >
-                      Reset Filters
-                    </Button>
-                  )}
-                </div>
-              )}
+              <div className="mt-4">
+                <Text>Tools with execution times above thresholds</Text>
+                <SlowToolsTable 
+                  toolsData={toolUsageData.map(tool => ({
+                    ...tool,
+                    failure_rate: tool.count > 0 ? tool.error_count / tool.count : 0
+                  }))}
+                  thresholds={{ slow: 1000, medium: 500 }}
+                  className="mt-4"
+                  onRowClick={(tool) => {
+                    // Handle row click if needed, e.g., show details
+                    console.log('Tool clicked:', tool);
+                  }}
+                  filtersActive={toolType !== 'all' || performanceFilter !== 'all' || statusFilter !== 'all'}
+                  onResetFilters={() => {
+                    setToolType('all');
+                    setPerformanceFilter('all');
+                    setStatusFilter('all');
+                  }}
+                />
+              </div>
             </TabPanel>
             
             <TabPanel>
