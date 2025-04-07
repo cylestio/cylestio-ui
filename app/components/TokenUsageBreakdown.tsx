@@ -233,58 +233,58 @@ export default function TokenUsageBreakdown({ className = '', timeRange = '30d' 
       });
   };
 
-  const prepareTimeSeriesData = () => {
-    if (!timeSeriesData || timeSeriesData.length === 0) return [];
-
-    const formattedData = timeSeriesData.map(item => {
-      const date = new Date(item.timestamp);
-      const formattedDate = date.toLocaleDateString();
-      
-      const type = item.dimensions?.type || 'total';
-      
-      return {
-        date: formattedDate,
-        type,
-        value: item.value
-      };
-    });
-
-    return formattedData;
-  };
-
-  // Split time series data by input/output type
-  const prepareTypeSplitTimeSeriesData = () => {
-    const inputData: any[] = [];
-    const outputData: any[] = [];
+  // Update the chart data preparation function to return data for stacked chart
+  const prepareStackedTimeSeriesData = () => {
+    if (!timeSeriesData || timeSeriesData.length === 0) return { data: [], maxValue: 0 };
+    
+    // Process time series data to extract dates and prepare data by type
+    const processedData = new Map();
+    const dateFormatOptions: Intl.DateTimeFormatOptions = { 
+      month: 'short', 
+      day: 'numeric'
+    };
     
     timeSeriesData.forEach(item => {
-      const type = item.dimensions?.type || 'total';
-      const date = new Date(item.timestamp).toLocaleDateString();
+      const date = new Date(item.timestamp);
+      const formattedDate = date.toLocaleDateString('en-US', dateFormatOptions);
+      const itemType = item.dimensions?.type || 'total';
+      const value = item.value || 0;
       
-      if (type === 'input') {
-        // Check if we already have an entry for this date
-        const existingEntry = inputData.find(d => d.date === date);
-        if (existingEntry) {
-          existingEntry.value += item.value;
-        } else {
-          inputData.push({ date, value: item.value });
-        }
-      } else if (type === 'output') {
-        // Check if we already have an entry for this date
-        const existingEntry = outputData.find(d => d.date === date);
-        if (existingEntry) {
-          existingEntry.value += item.value;
-        } else {
-          outputData.push({ date, value: item.value });
-        }
+      // Initialize entry if it doesn't exist
+      if (!processedData.has(formattedDate)) {
+        processedData.set(formattedDate, { 
+          date: formattedDate, 
+          timestamp: date.getTime(),
+          "Input Tokens": 0, 
+          "Output Tokens": 0
+        });
+      }
+      
+      // Update values
+      const entry = processedData.get(formattedDate);
+      if (itemType === 'input') {
+        entry["Input Tokens"] += value;
+      } else if (itemType === 'output') {
+        entry["Output Tokens"] += value;
       }
     });
     
-    // Sort by date
-    inputData.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    outputData.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    // Find the max stacked value for y-axis scale
+    let maxStackedValue = 0;
+    processedData.forEach(entry => {
+      const stackedTotal = entry["Input Tokens"] + entry["Output Tokens"];
+      maxStackedValue = Math.max(maxStackedValue, stackedTotal);
+    });
     
-    return { inputData, outputData };
+    // Convert to array and sort chronologically
+    const sortedData = Array.from(processedData.values())
+      .sort((a, b) => a.timestamp - b.timestamp)
+      .map(({ timestamp, ...rest }) => rest); // Remove timestamp from final data
+      
+    return { 
+      data: sortedData,
+      maxValue: maxStackedValue
+    };
   };
 
   // Add a function to prepare agent model data
@@ -393,9 +393,8 @@ export default function TokenUsageBreakdown({ className = '', timeRange = '30d' 
   const totalCost = calculateTotalCost();
   const inputOutputData = prepareInputOutputData();
   const modelData = prepareModelData();
-  const timeSeriesChartData = prepareTimeSeriesData();
-  const { inputData, outputData } = prepareTypeSplitTimeSeriesData();
   const agentData = prepareAgentModelData();
+  const timeSeriesStackedData = prepareStackedTimeSeriesData();
 
   return (
     <DashboardCard
@@ -435,7 +434,7 @@ export default function TokenUsageBreakdown({ className = '', timeRange = '30d' 
               <ArrowTrendingUpIcon className="h-8 w-8 text-emerald-500" />
               <div>
                 <Text>Models Used</Text>
-                <Metric>{tokenData.models.length}</Metric>
+                <Metric>{tokenData.models.filter(model => model.total_tokens > 0).length}</Metric>
                 <Text className="text-xs text-gray-500">Active in this period</Text>
               </div>
             </Flex>
@@ -450,7 +449,7 @@ export default function TokenUsageBreakdown({ className = '', timeRange = '30d' 
             <div className="h-72 mt-4 relative flex justify-center items-center">
               <SimpleDonutChart 
                 data={inputOutputData}
-                colors={["#3730A3", "#8B5CF6"]} 
+                colors={["rgba(59, 130, 246, 0.4)", "rgba(139, 92, 246, 0.4)"]}
                 valueFormatter={formatNumber}
                 showLegend
                 className="h-full w-full"
@@ -465,99 +464,43 @@ export default function TokenUsageBreakdown({ className = '', timeRange = '30d' 
               <TokenUsageByModelChart 
                 data={modelData}
                 formatValue={formatNumber}
+                colors={["rgba(59, 130, 246, 0.4)", "rgba(139, 92, 246, 0.4)"]}
               />
             </div>
           </Card>
         </div>
         
-        {/* Token Usage Trend */}
+        {/* Token Usage Trend - Stacked Area Chart */}
         <Card className="p-4 shadow-sm">
           <Title>Token Usage Trend</Title>
           <Text className="text-sm text-gray-500">Token usage over time in the selected period</Text>
-          <TabGroup>
-            <TabList className="mt-2">
-              <Tab>Combined</Tab>
-              <Tab>Input</Tab>
-              <Tab>Output</Tab>
-            </TabList>
-            <TabPanels>
-              <TabPanel>
-                <div className="h-72 mt-4">
-                  {timeSeriesChartData.length > 0 ? (
-                    <AreaChart
-                      data={timeSeriesChartData}
-                      index="date"
-                      categories={["value"]}
-                      colors={["#4F46E5"]}
-                      valueFormatter={(value) => `${formatNumber(value)} tokens`}
-                      showLegend={false}
-                      showGridLines
-                      curveType="monotone"
-                      yAxisWidth={65}
-                      showAnimation
-                      showXAxis
-                      showTooltip
-                      className="h-full"
-                    />
-                  ) : (
-                    <div className="h-full flex items-center justify-center text-gray-500">
-                      No time series data available
-                    </div>
-                  )}
-                </div>
-              </TabPanel>
-              <TabPanel>
-                <div className="h-72 mt-4">
-                  {inputData.length > 0 ? (
-                    <AreaChart
-                      data={inputData}
-                      index="date"
-                      categories={["value"]}
-                      colors={["#4F46E5"]}
-                      valueFormatter={(value) => `${formatNumber(value)} input tokens`}
-                      showLegend={false}
-                      showGridLines
-                      curveType="monotone"
-                      yAxisWidth={65}
-                      showAnimation
-                      showXAxis
-                      showTooltip
-                      className="h-full"
-                    />
-                  ) : (
-                    <div className="h-full flex items-center justify-center text-gray-500">
-                      No input token data available
-                    </div>
-                  )}
-                </div>
-              </TabPanel>
-              <TabPanel>
-                <div className="h-72 mt-4">
-                  {outputData.length > 0 ? (
-                    <AreaChart
-                      data={outputData}
-                      index="date"
-                      categories={["value"]}
-                      colors={["#9333EA"]}
-                      valueFormatter={(value) => `${formatNumber(value)} output tokens`}
-                      showLegend={false}
-                      showGridLines
-                      curveType="monotone"
-                      yAxisWidth={65}
-                      showAnimation
-                      showXAxis
-                      showTooltip
-                      className="h-full"
-                    />
-                  ) : (
-                    <div className="h-full flex items-center justify-center text-gray-500">
-                      No output token data available
-                    </div>
-                  )}
-                </div>
-              </TabPanel>
-            </TabPanels>
-          </TabGroup>
+          
+          <div className="h-72 mt-4">
+            {timeSeriesData.length > 0 ? (
+              <AreaChart
+                data={timeSeriesStackedData.data}
+                index="date"
+                categories={["Input Tokens", "Output Tokens"]}
+                colors={["blue", "purple"]}
+                valueFormatter={(value) => `${formatNumber(value)} tokens`}
+                showLegend={true}
+                showGridLines={false}
+                curveType="natural"
+                yAxisWidth={65}
+                stack={true}
+                connectNulls={true}
+                showAnimation={true}
+                showXAxis={true}
+                showYAxis={true}
+                showTooltip={true}
+                className="h-full"
+              />
+            ) : (
+              <div className="h-full flex items-center justify-center text-gray-500">
+                No token usage data available
+              </div>
+            )}
+          </div>
         </Card>
         
         {/* Model Usage by Agent */}

@@ -9,15 +9,16 @@ interface TokenUsageByModelChartProps {
     'Output Tokens': number;
   }[];
   formatValue: (value: number) => string;
+  colors?: string[];
 }
 
-export function TokenUsageByModelChart({ data, formatValue }: TokenUsageByModelChartProps) {
+export function TokenUsageByModelChart({ data, formatValue, colors }: TokenUsageByModelChartProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   
-  // Define colors for input and output tokens
-  const INPUT_COLOR = '#3730A3'; // Dark purple
-  const OUTPUT_COLOR = '#8B5CF6'; // Light purple
+  // Define colors for input and output tokens using RGBA for transparency
+  const INPUT_COLOR = colors?.[0] || "rgba(59, 130, 246, 0.4)"; // Transparent light blue
+  const OUTPUT_COLOR = colors?.[1] || "rgba(139, 92, 246, 0.4)"; // Transparent light purple
   
   useEffect(() => {
     if (!data || data.length === 0) return;
@@ -97,9 +98,8 @@ export function TokenUsageByModelChart({ data, formatValue }: TokenUsageByModelC
         const inputHeight = (model['Input Tokens'] * yScale) || 0;
         const outputHeight = (model['Output Tokens'] * yScale) || 0;
         
-        // Draw input tokens bar (bottom part)
+        // Draw input tokens bar (bottom part) - No border
         ctx.fillStyle = INPUT_COLOR;
-        ctx.strokeStyle = '#2E258B'; // Darker outline for input
         ctx.beginPath();
         ctx.rect(
           x,
@@ -108,11 +108,9 @@ export function TokenUsageByModelChart({ data, formatValue }: TokenUsageByModelC
           inputHeight
         );
         ctx.fill();
-        ctx.stroke();
         
-        // Draw output tokens bar (top part)
+        // Draw output tokens bar (top part) - No border
         ctx.fillStyle = OUTPUT_COLOR;
-        ctx.strokeStyle = '#7C3AED'; // Darker outline for output
         ctx.beginPath();
         ctx.rect(
           x,
@@ -121,7 +119,6 @@ export function TokenUsageByModelChart({ data, formatValue }: TokenUsageByModelC
           outputHeight
         );
         ctx.fill();
-        ctx.stroke();
         
         // Draw model name (x-axis label)
         ctx.fillStyle = '#374151'; // Darker text for model names
@@ -140,7 +137,7 @@ export function TokenUsageByModelChart({ data, formatValue }: TokenUsageByModelC
       
       // Draw legend at the top right with better styling
       const legendY = 10; // Fixed position from top
-      const legendX = width - 240; // Fixed position from right
+      const legendX = width - 270; // Fixed position from right
       
       // Draw legend background with better styling
       ctx.fillStyle = 'rgba(255, 255, 255, 0.98)';
@@ -153,11 +150,9 @@ export function TokenUsageByModelChart({ data, formatValue }: TokenUsageByModelC
       
       // Input tokens legend item with better spacing
       ctx.fillStyle = INPUT_COLOR;
-      ctx.strokeStyle = '#2E258B';
       ctx.beginPath();
       ctx.rect(legendX + 8, legendY + 4, 12, 12);
       ctx.fill();
-      ctx.stroke();
       
       ctx.fillStyle = '#374151';
       ctx.font = '13px Inter, system-ui, sans-serif';
@@ -166,12 +161,13 @@ export function TokenUsageByModelChart({ data, formatValue }: TokenUsageByModelC
       
       // Output tokens legend item with better spacing
       ctx.fillStyle = OUTPUT_COLOR;
-      ctx.strokeStyle = '#7C3AED';
       ctx.beginPath();
       ctx.rect(legendX + 120, legendY + 4, 12, 12);
       ctx.fill();
-      ctx.stroke();
       
+      ctx.fillStyle = '#374151';
+      ctx.font = '13px Inter, system-ui, sans-serif';
+      ctx.textAlign = 'left';
       ctx.fillText('Output Tokens', legendX + 140, legendY + 14);
     };
     
@@ -273,7 +269,7 @@ export function TokenUsageByModelChart({ data, formatValue }: TokenUsageByModelC
         ctx.font = '12px Inter, system-ui, sans-serif';
         ctx.fillStyle = '#374151';
         
-        // Input tokens
+        // Input tokens in tooltip
         ctx.fillStyle = INPUT_COLOR;
         ctx.fillRect(tooltipX + 15, tooltipY + 48, 12, 12);
         ctx.fillStyle = '#374151';
@@ -281,7 +277,7 @@ export function TokenUsageByModelChart({ data, formatValue }: TokenUsageByModelC
         ctx.font = 'bold 12px Inter, system-ui, sans-serif';
         ctx.fillText(`${formatValue(model['Input Tokens'])}`, tooltipX + 130, tooltipY + 58);
         
-        // Output tokens
+        // Output tokens in tooltip
         ctx.fillStyle = OUTPUT_COLOR;
         ctx.fillRect(tooltipX + 15, tooltipY + 70, 12, 12);
         ctx.fillStyle = '#374151';
@@ -311,7 +307,7 @@ export function TokenUsageByModelChart({ data, formatValue }: TokenUsageByModelC
       canvas.removeEventListener('mouseleave', drawChart);
       window.removeEventListener('resize', handleResize);
     };
-  }, [data, formatValue]);
+  }, [data, formatValue, colors]);
   
   // Return with a container for when no data is available
   if (!data || data.length === 0) {
