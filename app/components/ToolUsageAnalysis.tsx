@@ -30,7 +30,8 @@ import {
   WrenchScrewdriverIcon, 
   ClockIcon, 
   ChartBarIcon,
-  ArrowPathIcon
+  ArrowPathIcon,
+  XMarkIcon
 } from '@heroicons/react/24/outline'
 import { fetchAPI, buildQueryParams } from '../lib/api'
 import { METRICS } from '../lib/api-endpoints'
@@ -252,18 +253,38 @@ export default function ToolUsageAnalysis({ className = '', timeRange = '30d' }:
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState(0);
   
-  // Filters
+  // Enhanced filter state variables
   const [toolType, setToolType] = useState<string>('all');
   const [performanceFilter, setPerformanceFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [specificToolFilter, setSpecificToolFilter] = useState<string>('');
   
   // For tool trends
   const [selectedView, setSelectedView] = useState<'aggregated' | 'byTool'>('aggregated');
   const [selectedTools, setSelectedTools] = useState<string[]>([]);
 
+  // Get unique tool names for the specific tool filter dropdown
+  const uniqueToolNames = useMemo(() => {
+    return Array.from(new Set(toolInteractions.map(interaction => interaction.tool_name)));
+  }, [toolInteractions]);
+
+  // Check if any filters are active
+  const hasActiveFilters = toolType !== 'all' || 
+                          performanceFilter !== 'all' || 
+                          statusFilter !== 'all' || 
+                          specificToolFilter !== '';
+
+  // Clear all filters function
+  const clearAllFilters = () => {
+    setToolType('all');
+    setPerformanceFilter('all');
+    setStatusFilter('all');
+    setSpecificToolFilter('');
+  };
+
   useEffect(() => {
     fetchToolData();
-  }, [timeRange, toolType, performanceFilter, statusFilter]);
+  }, [timeRange, toolType, performanceFilter, statusFilter, specificToolFilter]);
 
   const fetchToolData = async () => {
     setIsLoading(true);
@@ -275,7 +296,8 @@ export default function ToolUsageAnalysis({ className = '', timeRange = '30d' }:
         time_range: timeRange,
         interaction_type: 'execution',
         page_size: 100,
-        ...(statusFilter !== 'all' && { tool_status: statusFilter })
+        ...(statusFilter !== 'all' && { tool_status: statusFilter }),
+        ...(specificToolFilter !== '' && { tool_name: specificToolFilter })
       });
       
       const data = await fetchAPI<ToolInteractionsResponse>(`${METRICS.TOOL_INTERACTIONS}${params}`);
@@ -666,27 +688,417 @@ export default function ToolUsageAnalysis({ className = '', timeRange = '30d' }:
     });
   };
 
-  if (isLoading) return <LoadingState className={className} />;
-  
-  if (error) return <ErrorMessage message={error} className={className} />;
-  
-  if (toolUsageData.length === 0) {
+  // Compact Filter UI Component
+  const CompactFilterUI = () => (
+    <div className="mb-4 flex flex-wrap gap-2">
+      <div className="flex-1 min-w-[200px]">
+        <Select
+          value={toolType}
+          onValueChange={setToolType}
+          placeholder="Tool type"
+        >
+          <SelectItem value="all">All Tools</SelectItem>
+          <SelectItem value="internal">
+            <Badge color="indigo" className="mr-1.5" /> Internal
+          </SelectItem>
+          <SelectItem value="external">
+            <Badge color="violet" className="mr-1.5" /> External
+          </SelectItem>
+        </Select>
+      </div>
+      
+      <div className="flex-1 min-w-[200px]">
+        <Select
+          value={performanceFilter}
+          onValueChange={setPerformanceFilter}
+          placeholder="Performance"
+        >
+          <SelectItem value="all">All Performance</SelectItem>
+          <SelectItem value="fast"><Badge color="green" className="mr-1.5" /> Fast (&lt;500ms)</SelectItem>
+          <SelectItem value="medium"><Badge color="amber" className="mr-1.5" /> Medium (500-1000ms)</SelectItem>
+          <SelectItem value="slow"><Badge color="red" className="mr-1.5" /> Slow (&gt;1000ms)</SelectItem>
+          <SelectItem value="very_slow"><Badge color="rose" className="mr-1.5" /> Very Slow (&gt;2s)</SelectItem>
+        </Select>
+      </div>
+      
+      <div className="flex-1 min-w-[200px]">
+        <Select
+          value={statusFilter}
+          onValueChange={setStatusFilter}
+          placeholder="Status"
+        >
+          <SelectItem value="all">All Status</SelectItem>
+          <SelectItem value="success"><Badge color="green" className="mr-1.5" /> Success</SelectItem>
+          <SelectItem value="error"><Badge color="red" className="mr-1.5" /> Error</SelectItem>
+          <SelectItem value="pending"><Badge color="blue" className="mr-1.5" /> Pending</SelectItem>
+        </Select>
+      </div>
+      
+      <div className="flex-1 min-w-[200px]">
+        <Select
+          value={specificToolFilter}
+          onValueChange={setSpecificToolFilter}
+          placeholder="Select specific tool"
+        >
+          <SelectItem value="">All Tools</SelectItem>
+          {uniqueToolNames.map(tool => (
+            <SelectItem key={tool} value={tool}>
+              {tool}
+            </SelectItem>
+          ))}
+        </Select>
+      </div>
+      
+      {hasActiveFilters && (
+        <Button 
+          variant="secondary" 
+          color="gray" 
+          onClick={clearAllFilters}
+          size="xs"
+          icon={ArrowPathIcon}
+          className="h-9 whitespace-nowrap"
+        >
+          Clear
+        </Button>
+      )}
+    </div>
+  );
+
+  // Active Filters Display Component
+  const ActiveFiltersDisplay = () => {
+    if (!hasActiveFilters) return null;
+    
     return (
-      <EmptyState 
-        title="No tool usage data available" 
-        description="There is no tool usage data for the selected filters or time period."
-        icon={<WrenchScrewdriverIcon className="h-10 w-10 text-gray-400" />}
-        className={className}
-        actionText="Reset Filters"
-        onAction={() => {
-          setToolType('all');
-          setPerformanceFilter('all');
-          setStatusFilter('all');
-        }}
-      />
+      <div className="flex flex-wrap gap-1.5 mb-4">
+        {toolType !== 'all' && (
+          <div className="flex h-6 items-center bg-indigo-100 text-indigo-800 rounded-full px-2 space-x-1 text-xs font-medium">
+            <span>{toolType === 'internal' ? 'Internal' : 'External'}</span>
+            <XMarkIcon className="h-3 w-3 cursor-pointer" onClick={() => setToolType('all')} />
+          </div>
+        )}
+        
+        {performanceFilter !== 'all' && (
+          <div className={`flex h-6 items-center px-2 space-x-1 text-xs font-medium rounded-full
+            ${performanceFilter === 'fast' ? 'bg-green-100 text-green-800' : 
+            performanceFilter === 'medium' ? 'bg-amber-100 text-amber-800' : 
+            performanceFilter === 'slow' ? 'bg-red-100 text-red-800' : 
+            'bg-rose-100 text-rose-800'}`}
+          >
+            <span>{performanceFilter.charAt(0).toUpperCase() + performanceFilter.slice(1).replace('_', ' ')}</span>
+            <XMarkIcon className="h-3 w-3 cursor-pointer" onClick={() => setPerformanceFilter('all')} />
+          </div>
+        )}
+        
+        {statusFilter !== 'all' && (
+          <div className={`flex h-6 items-center px-2 space-x-1 text-xs font-medium rounded-full
+            ${statusFilter === 'success' ? 'bg-green-100 text-green-800' : 
+            statusFilter === 'error' ? 'bg-red-100 text-red-800' : 
+            'bg-blue-100 text-blue-800'}`}
+          >
+            <span>{statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1)}</span>
+            <XMarkIcon className="h-3 w-3 cursor-pointer" onClick={() => setStatusFilter('all')} />
+          </div>
+        )}
+        
+        {specificToolFilter && (
+          <div className="flex h-6 items-center bg-purple-100 text-purple-800 rounded-full px-2 space-x-1 text-xs font-medium">
+            <span>{specificToolFilter}</span>
+            <XMarkIcon className="h-3 w-3 cursor-pointer" onClick={() => setSpecificToolFilter('')} />
+          </div>
+        )}
+      </div>
     );
-  }
-  
+  };
+
+  // Content display based on loading/error state
+  const renderContent = () => {
+    if (isLoading) return <LoadingState />;
+    
+    if (error || toolUsageData.length === 0) {
+      return (
+        <div className="mt-4 flex justify-center">
+          <div className="text-center p-6 max-w-md">
+            <WrenchScrewdriverIcon className="h-10 w-10 text-gray-400 mx-auto mb-2" />
+            <Text className="font-medium text-gray-700">No tool usage data available</Text>
+            <Text className="text-gray-500 text-sm mt-1">There is no tool usage data for the selected filters or time period.</Text>
+            {hasActiveFilters && (
+              <Button
+                variant="light"
+                color="gray"
+                className="mt-4"
+                size="xs"
+                onClick={clearAllFilters}
+              >
+                Reset Filters
+              </Button>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // Display appropriate content based on active tab
+    switch (activeTab) {
+      case 0: // Tool Usage Tab
+        return (
+          <div>
+            <Flex className="mb-4 items-center justify-between">
+              <Text>Tool execution frequency by tool name</Text>
+              <Legend
+                categories={['Internal Tools', 'External Tools']}
+                colors={['indigo', 'violet']}
+              />
+            </Flex>
+            
+            {histogramData.length > 0 ? (
+              <div className="mt-4 px-1">
+                {/* Chart heading */}
+                <div className="flex items-center space-x-3 font-medium text-sm text-gray-700 mb-6">
+                  <div className="w-40">Tool Name</div>
+                  <div className="flex-1">Executions</div>
+                  <div className="w-24 text-right">Count</div>
+                </div>
+
+                {/* X-axis guides with light grid lines */}
+                <div className="relative mb-2">
+                  <div className="absolute bottom-0 left-40 right-24 h-10 flex justify-between">
+                    {(() => {
+                      const maxCount = Math.max(...histogramData.map(t => t.count));
+                      const steps = [0, Math.ceil(maxCount / 4), Math.ceil(maxCount / 2), Math.ceil(3 * maxCount / 4), maxCount];
+                      return steps.map((count, i) => {
+                        const position = i / (steps.length - 1) * 100;
+                        return (
+                          <div key={i} className="absolute h-full bottom-0 flex flex-col" style={{ left: `${position}%`, transform: 'translateX(-50%)' }}>
+                            <div className="flex-1 border-l border-gray-200 w-0"></div>
+                            <div className="text-xs text-gray-500 mt-1">
+                              {count.toLocaleString()}
+                            </div>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                </div>
+                
+                {/* Bars */}
+                <div className="space-y-4 relative">
+                  {histogramData.map((tool, index) => {
+                    const maxCount = Math.max(...histogramData.map(t => t.count));
+                    const percentage = (tool.count / maxCount) * 100;
+                    
+                    return (
+                      <div key={tool.tool_name} className="group relative flex items-center space-x-3">
+                        <div className="w-40 text-sm truncate font-medium" title={tool.tool_name}>
+                          {tool.tool_name}
+                        </div>
+                        <div className="flex-1 h-10 bg-gray-100 rounded-lg overflow-hidden relative">
+                          {/* Grid lines (vertical) */}
+                          {[0.25, 0.5, 0.75].map((pos) => (
+                            <div 
+                              key={pos} 
+                              className="absolute top-0 h-full border-l border-gray-200" 
+                              style={{ left: `${pos * 100}%` }}
+                            ></div>
+                          ))}
+                          <div 
+                            className={`h-full rounded-lg transition-all duration-500 ease-out ${tool.is_internal ? 'bg-indigo-500' : 'bg-violet-500'}`}
+                            style={{ width: `${Math.max(1, percentage)}%` }} // Ensure even small values are visible
+                          />
+                          <div className="absolute top-0 left-0 w-full h-full opacity-0 group-hover:opacity-10 bg-white transition-opacity duration-200" />
+                        </div>
+                        <div className="w-24 text-sm text-right font-medium">
+                          {tool.count.toLocaleString()}
+                        </div>
+                        
+                        {/* Tooltip positioned above the bar */}
+                        <div className="absolute top-0 left-0 right-0 -translate-y-14 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10 flex justify-center">
+                          <div className="bg-gray-900 text-white p-2 rounded-lg shadow-lg text-xs whitespace-nowrap">
+                            <div className="font-medium">{tool.tool_name}</div>
+                            <div className="mt-1">{tool.count.toLocaleString()} executions</div>
+                            <div className="mt-0.5">Type: {tool.is_internal ? 'Internal' : 'External'}</div>
+                            {/* Arrow */}
+                            <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-gray-900"></div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="h-64 flex items-center justify-center">
+                <p className="text-gray-500">No tool usage data available</p>
+              </div>
+            )}
+          </div>
+        );
+        
+      case 1: // Slow Tools Tab
+        return (
+          <div className="mt-4">
+            <Text>Tools with execution times above thresholds</Text>
+            <SlowToolsTable 
+              toolsData={toolUsageData.map(tool => ({
+                ...tool,
+                failure_rate: tool.count > 0 ? tool.error_count / tool.count : 0
+              }))}
+              thresholds={{ slow: 1000, medium: 500 }}
+              className="mt-4"
+              onRowClick={(tool) => {
+                // Handle row click if needed, e.g., show details
+                console.log('Tool clicked:', tool);
+              }}
+              filtersActive={hasActiveFilters}
+              onResetFilters={clearAllFilters}
+            />
+          </div>
+        );
+        
+      case 2: // Execution Trends Tab
+        return (
+          <div>
+            <Flex justifyContent="end" className="mb-4">
+              <div className="space-x-2">
+                <Button
+                  variant={selectedView === 'aggregated' ? 'primary' : 'secondary'}
+                  icon={ChartBarIcon}
+                  onClick={() => setSelectedView('aggregated')}
+                  size="xs"
+                >
+                  Aggregated
+                </Button>
+                <Button
+                  variant={selectedView === 'byTool' ? 'primary' : 'secondary'}
+                  icon={WrenchScrewdriverIcon}
+                  onClick={() => setSelectedView('byTool')}
+                  size="xs"
+                >
+                  By Tool
+                </Button>
+              </div>
+            </Flex>
+
+            {selectedView === 'aggregated' ? (
+              <Card className="mt-4">
+                <Title className="text-center mb-2">Tool Executions Over Time</Title>
+                <AreaChart
+                  className="h-72"
+                  data={aggregatedTrendData}
+                  index="date"
+                  categories={["Tool Executions"]}
+                  colors={["indigo"]}
+                  valueFormatter={cleanNumberFormatter}
+                  customTooltip={(props) => (
+                    <div className="bg-white p-2 shadow rounded border border-gray-200">
+                      <div className="text-sm font-medium">{props.payload && new Date(props.payload[0]?.payload.date).toLocaleDateString()}</div>
+                      <div className="text-xs text-gray-500 mb-1">{props.payload && new Date(props.payload[0]?.payload.date).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</div>
+                      {props.payload?.map((entry, i) => (
+                        <div key={i} className="flex items-center gap-2">
+                          <div className="h-2 w-2 rounded-full" style={{ backgroundColor: entry.color }}></div>
+                          <span className="text-xs">{entry.value.toLocaleString()} executions</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  showLegend={false}
+                  showGradient={true}
+                  yAxisWidth={40}
+                  minValue={0}
+                  autoMinValue={false}
+                  showYAxis={true}
+                  showXAxis={true}
+                  startEndOnly={false}
+                  showAnimation={true}
+                  curveType="natural"
+                />
+              </Card>
+            ) : (
+              <div>
+                {selectedTools.length > 0 ? (
+                  <Card className="mt-4">
+                    <Title className="text-center mb-2">Tool Executions By Tool</Title>
+                    <AreaChart
+                      className="h-72"
+                      data={toolTrendData}
+                      index="date"
+                      categories={selectedTools}
+                      colors={selectedTools.map((_, i) => colorOptions[i % colorOptions.length])}
+                      valueFormatter={cleanNumberFormatter}
+                      customTooltip={(props) => (
+                        <div className="bg-white p-2 shadow rounded border border-gray-200">
+                          <div className="text-sm font-medium">{props.payload && new Date(props.payload[0]?.payload.date).toLocaleDateString()}</div>
+                          <div className="text-xs text-gray-500 mb-1">{props.payload && new Date(props.payload[0]?.payload.date).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</div>
+                          {props.payload?.map((entry, i) => (
+                            <div key={i} className="flex items-center gap-2">
+                              <div className="h-2 w-2 rounded-full" style={{ backgroundColor: entry.color }}></div>
+                              <span className="text-xs">{entry.name}: {entry.value.toLocaleString()} executions</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      showLegend={true}
+                      showGradient={true}
+                      yAxisWidth={40}
+                      minValue={0}
+                      autoMinValue={false}
+                      showYAxis={true}
+                      showXAxis={true}
+                      startEndOnly={false}
+                      showAnimation={true}
+                      curveType="natural"
+                    />
+                    
+                    <div className="mt-4 flex items-center justify-between">
+                      <Text className="text-sm">Selected tools:</Text>
+                      <Button 
+                        variant="secondary" 
+                        size="xs" 
+                        onClick={() => setSelectedTools([])}
+                      >
+                        Clear Selection
+                      </Button>
+                    </div>
+                    
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {selectedTools.map((tool, index) => (
+                        <Badge
+                          key={tool}
+                          color={colorOptions[index % colorOptions.length] as Color}
+                          className="cursor-pointer"
+                          onClick={() => toggleToolSelection(tool)}
+                        >
+                          {tool} ×
+                        </Badge>
+                      ))}
+                    </div>
+                  </Card>
+                ) : (
+                  <div className="mt-4">
+                    <Text>Select tools to compare:</Text>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 mt-2">
+                      {toolUsageData.map((tool) => (
+                        <Badge
+                          key={tool.tool_name}
+                          color={selectedTools.includes(tool.tool_name) ? (tool.is_internal ? 'indigo' : 'violet') : 'gray'}
+                          className="cursor-pointer"
+                          onClick={() => toggleToolSelection(tool.tool_name)}
+                        >
+                          {tool.tool_name}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+        
+      default:
+        return null;
+    }
+  };
+
   return (
     <div className={className}>
       <DashboardCard
@@ -694,54 +1106,11 @@ export default function ToolUsageAnalysis({ className = '', timeRange = '30d' }:
         description="Monitor and analyze tool usage patterns and performance"
         icon={<WrenchScrewdriverIcon className="h-5 w-5" />}
       >
-        <Flex className="mb-4 flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">
-          <Select
-            placeholder="Filter by tool type"
-            value={toolType}
-            onValueChange={setToolType}
-          >
-            <SelectItem value="all">All Tools</SelectItem>
-            <SelectItem value="internal">Internal Tools</SelectItem>
-            <SelectItem value="external">External Tools</SelectItem>
-          </Select>
-          
-          <Select
-            placeholder="Filter by performance"
-            value={performanceFilter}
-            onValueChange={setPerformanceFilter}
-          >
-            <SelectItem value="all">All Performance</SelectItem>
-            <SelectItem value="fast">Fast (&lt; 500ms)</SelectItem>
-            <SelectItem value="medium">Medium (500ms-1s)</SelectItem>
-            <SelectItem value="slow">Slow (&gt;1s)</SelectItem>
-            <SelectItem value="very_slow">Very Slow (&gt;2s)</SelectItem>
-          </Select>
-          
-          <Select
-            placeholder="Filter by status"
-            value={statusFilter}
-            onValueChange={setStatusFilter}
-          >
-            <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="success">Success</SelectItem>
-            <SelectItem value="error">Error</SelectItem>
-          </Select>
-          
-          {(toolType !== 'all' || performanceFilter !== 'all' || statusFilter !== 'all') && (
-            <Button 
-              variant="secondary" 
-              size="xs"
-              icon={ArrowPathIcon}
-              onClick={() => {
-                setToolType('all');
-                setPerformanceFilter('all');
-                setStatusFilter('all');
-              }}
-            >
-              Reset Filters
-            </Button>
-          )}
-        </Flex>
+        {/* Compact Filter UI */}
+        <CompactFilterUI />
+        
+        {/* Active Filters Display */}
+        <ActiveFiltersDisplay />
 
         <TabGroup index={activeTab} onIndexChange={setActiveTab}>
           <TabList className="mb-4">
@@ -751,260 +1120,9 @@ export default function ToolUsageAnalysis({ className = '', timeRange = '30d' }:
           </TabList>
           
           <TabPanels>
-            <TabPanel>
-              {/* Tool Usage Histogram */}
-              <Flex className="mb-4 items-center justify-between">
-                <Text>Tool execution frequency by tool name</Text>
-                <Legend
-                  categories={['Internal Tools', 'External Tools']}
-                  colors={['indigo', 'violet']}
-                />
-              </Flex>
-              
-              {histogramData.length > 0 ? (
-                <div className="mt-8 px-1">
-                  {/* Chart heading */}
-                  <div className="flex items-center space-x-3 font-medium text-sm text-gray-700 mb-6">
-                    <div className="w-40">Tool Name</div>
-                    <div className="flex-1">Executions</div>
-                    <div className="w-24 text-right">Count</div>
-                  </div>
-
-                  {/* X-axis guides with light grid lines */}
-                  <div className="relative mb-2">
-                    <div className="absolute bottom-0 left-40 right-24 h-10 flex justify-between">
-                      {(() => {
-                        const maxCount = Math.max(...histogramData.map(t => t.count));
-                        const steps = [0, Math.ceil(maxCount / 4), Math.ceil(maxCount / 2), Math.ceil(3 * maxCount / 4), maxCount];
-                        return steps.map((count, i) => {
-                          const position = i / (steps.length - 1) * 100;
-                          return (
-                            <div key={i} className="absolute h-full bottom-0 flex flex-col" style={{ left: `${position}%`, transform: 'translateX(-50%)' }}>
-                              <div className="flex-1 border-l border-gray-200 w-0"></div>
-                              <div className="text-xs text-gray-500 mt-1">
-                                {count.toLocaleString()}
-                              </div>
-                            </div>
-                          );
-                        });
-                      })()}
-                    </div>
-                  </div>
-                  
-                  {/* Bars */}
-                  <div className="space-y-4 relative">
-                    {histogramData.map((tool, index) => {
-                      const maxCount = Math.max(...histogramData.map(t => t.count));
-                      const percentage = (tool.count / maxCount) * 100;
-                      
-                      return (
-                        <div key={tool.tool_name} className="group relative flex items-center space-x-3">
-                          <div className="w-40 text-sm truncate font-medium" title={tool.tool_name}>
-                            {tool.tool_name}
-                          </div>
-                          <div className="flex-1 h-10 bg-gray-100 rounded-lg overflow-hidden relative">
-                            {/* Grid lines (vertical) */}
-                            {[0.25, 0.5, 0.75].map((pos) => (
-                              <div 
-                                key={pos} 
-                                className="absolute top-0 h-full border-l border-gray-200" 
-                                style={{ left: `${pos * 100}%` }}
-                              ></div>
-                            ))}
-                            <div 
-                              className={`h-full rounded-lg transition-all duration-500 ease-out ${tool.is_internal ? 'bg-indigo-500' : 'bg-violet-500'}`}
-                              style={{ width: `${Math.max(1, percentage)}%` }} // Ensure even small values are visible
-                            />
-                            <div className="absolute top-0 left-0 w-full h-full opacity-0 group-hover:opacity-10 bg-white transition-opacity duration-200" />
-                          </div>
-                          <div className="w-24 text-sm text-right font-medium">
-                            {tool.count.toLocaleString()}
-                          </div>
-                          
-                          {/* Tooltip positioned above the bar */}
-                          <div className="absolute top-0 left-0 right-0 -translate-y-14 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10 flex justify-center">
-                            <div className="bg-gray-900 text-white p-2 rounded-lg shadow-lg text-xs whitespace-nowrap">
-                              <div className="font-medium">{tool.tool_name}</div>
-                              <div className="mt-1">{tool.count.toLocaleString()} executions</div>
-                              <div className="mt-0.5">Type: {tool.is_internal ? 'Internal' : 'External'}</div>
-                              {/* Arrow */}
-                              <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-gray-900"></div>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ) : (
-                <div className="h-64 flex items-center justify-center">
-                  <p className="text-gray-500">No tool usage data available</p>
-                </div>
-              )}
-            </TabPanel>
-            
-            <TabPanel>
-              {/* Slow Tools Table */}
-              <div className="mt-4">
-                <Text>Tools with execution times above thresholds</Text>
-                <SlowToolsTable 
-                  toolsData={toolUsageData.map(tool => ({
-                    ...tool,
-                    failure_rate: tool.count > 0 ? tool.error_count / tool.count : 0
-                  }))}
-                  thresholds={{ slow: 1000, medium: 500 }}
-                  className="mt-4"
-                  onRowClick={(tool) => {
-                    // Handle row click if needed, e.g., show details
-                    console.log('Tool clicked:', tool);
-                  }}
-                  filtersActive={toolType !== 'all' || performanceFilter !== 'all' || statusFilter !== 'all'}
-                  onResetFilters={() => {
-                    setToolType('all');
-                    setPerformanceFilter('all');
-                    setStatusFilter('all');
-                  }}
-                />
-              </div>
-            </TabPanel>
-            
-            <TabPanel>
-              {/* Execution Trends with improved styling */}
-              <Flex justifyContent="end" className="mb-4">
-                <div className="space-x-2">
-                  <Button
-                    variant={selectedView === 'aggregated' ? 'primary' : 'secondary'}
-                    icon={ChartBarIcon}
-                    onClick={() => setSelectedView('aggregated')}
-                    size="xs"
-                  >
-                    Aggregated
-                  </Button>
-                  <Button
-                    variant={selectedView === 'byTool' ? 'primary' : 'secondary'}
-                    icon={WrenchScrewdriverIcon}
-                    onClick={() => setSelectedView('byTool')}
-                    size="xs"
-                  >
-                    By Tool
-                  </Button>
-                </div>
-              </Flex>
-
-              {selectedView === 'aggregated' ? (
-                <Card className="mt-4">
-                  <Title className="text-center mb-2">Tool Executions Over Time</Title>
-                  <AreaChart
-                    className="h-72"
-                    data={aggregatedTimeData}
-                    index="date"
-                    categories={["Tool Executions"]}
-                    colors={["indigo"]}
-                    valueFormatter={cleanNumberFormatter}
-                    customTooltip={(props) => (
-                      <div className="bg-white p-2 shadow rounded border border-gray-200">
-                        <div className="text-sm font-medium">{props.payload && new Date(props.payload[0]?.payload.date).toLocaleDateString()}</div>
-                        <div className="text-xs text-gray-500 mb-1">{props.payload && new Date(props.payload[0]?.payload.date).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</div>
-                        {props.payload?.map((entry, i) => (
-                          <div key={i} className="flex items-center gap-2">
-                            <div className="h-2 w-2 rounded-full" style={{ backgroundColor: entry.color }}></div>
-                            <span className="text-xs">{entry.value.toLocaleString()} executions</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    showLegend={false}
-                    showGradient={true}
-                    yAxisWidth={40}
-                    minValue={0}
-                    autoMinValue={false}
-                    showYAxis={true}
-                    showXAxis={true}
-                    startEndOnly={false}
-                    showAnimation={true}
-                    curveType="natural"
-                  />
-                </Card>
-              ) : (
-                <div>
-                  {selectedTools.length > 0 ? (
-                    <Card className="mt-4">
-                      <Title className="text-center mb-2">Tool Executions By Tool</Title>
-                      <AreaChart
-                        className="h-72"
-                        data={toolSpecificTimeData}
-                        index="date"
-                        categories={selectedTools}
-                        colors={selectedTools.map((_, i) => colorOptions[i % colorOptions.length])}
-                        valueFormatter={cleanNumberFormatter}
-                        customTooltip={(props) => (
-                          <div className="bg-white p-2 shadow rounded border border-gray-200">
-                            <div className="text-sm font-medium">{props.payload && new Date(props.payload[0]?.payload.date).toLocaleDateString()}</div>
-                            <div className="text-xs text-gray-500 mb-1">{props.payload && new Date(props.payload[0]?.payload.date).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</div>
-                            {props.payload?.map((entry, i) => (
-                              <div key={i} className="flex items-center gap-2">
-                                <div className="h-2 w-2 rounded-full" style={{ backgroundColor: entry.color }}></div>
-                                <span className="text-xs">{entry.name}: {entry.value.toLocaleString()} executions</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        showLegend={true}
-                        showGradient={true}
-                        yAxisWidth={40}
-                        minValue={0}
-                        autoMinValue={false}
-                        showYAxis={true}
-                        showXAxis={true}
-                        startEndOnly={false}
-                        showAnimation={true}
-                        curveType="natural"
-                      />
-                      
-                      <div className="mt-4 flex items-center justify-between">
-                        <Text className="text-sm">Selected tools:</Text>
-                        <Button 
-                          variant="secondary" 
-                          size="xs" 
-                          onClick={() => setSelectedTools([])}
-                        >
-                          Clear Selection
-                        </Button>
-                      </div>
-                      
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {selectedTools.map((tool, index) => (
-                          <Badge
-                            key={tool}
-                            color={colorOptions[index % colorOptions.length] as Color}
-                            className="cursor-pointer"
-                            onClick={() => toggleToolSelection(tool)}
-                          >
-                            {tool} ×
-                          </Badge>
-                        ))}
-                      </div>
-                    </Card>
-                  ) : (
-                    <div className="mt-4">
-                      <Text>Select tools to compare:</Text>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 mt-2">
-                        {toolUsageData.map((tool) => (
-                          <Badge
-                            key={tool.tool_name}
-                            color={selectedTools.includes(tool.tool_name) ? (tool.is_internal ? 'indigo' : 'violet') : 'gray'}
-                            className="cursor-pointer"
-                            onClick={() => toggleToolSelection(tool.tool_name)}
-                          >
-                            {tool.tool_name}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </TabPanel>
+            <TabPanel>{renderContent()}</TabPanel>
+            <TabPanel>{renderContent()}</TabPanel>
+            <TabPanel>{renderContent()}</TabPanel>
           </TabPanels>
         </TabGroup>
       </DashboardCard>
