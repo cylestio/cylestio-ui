@@ -27,7 +27,7 @@ export function SimpleDonutChart({
   maxValue = 100,
   label,
   color = 'primary',
-  colors = ["emerald", "amber", "rose", "red", "blue", "indigo", "violet", "green"],
+  colors = ["#3730A3", "#7C3AED", "#4F46E5", "#6366F1", "#10b981", "#ef4444"],
   className = '',
   valueFormatter = (value: number) => `${value}`,
   showLegend = false
@@ -77,11 +77,12 @@ export function SimpleDonutChart({
   // Calculate the percentage for each item
   const chartData = data.map((item, index) => {
     const percentage = (item.count / total) * 100;
+    // Use hex colors directly
+    const hexColor = typeof colors[index] === 'string' ? colors[index] : getColorHex(colors[index] as string);
     return {
       ...item,
       percentage,
-      color: getColorClass(colors[index % colors.length]),
-      hexColor: getColorHex(colors[index % colors.length])
+      hexColor
     };
   });
   
@@ -102,24 +103,25 @@ export function SimpleDonutChart({
   return (
     <div className={`flex flex-col items-center justify-center ${className}`}>
       <div className="relative w-40 h-40">
-        {/* Legend items */}
+        {/* Legend items positioned to the right */}
         {showLegend && (
-          <div className="absolute -right-32 top-0 space-y-2">
+          <div className="absolute left-full ml-4 top-1/2 -translate-y-1/2 space-y-3 bg-white p-3 rounded-md shadow border border-gray-100 min-w-[180px]">
             {chartData.map((item, index) => (
-              <div key={index} className="flex items-center space-x-2">
-                <div className={`w-3 h-3 ${item.color}`} />
-                <span className="text-sm">{item.name}: {valueFormatter(item.count)} ({item.percentage.toFixed(1)}%)</span>
+              <div key={index} className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.hexColor }} />
+                <span className="text-sm font-medium whitespace-nowrap">{item.name}</span>
+                <span className="text-sm ml-auto">{valueFormatter(item.count)}</span>
               </div>
             ))}
           </div>
         )}
         
         {/* Simplified donut chart using div elements */}
-        <div className="w-full h-full rounded-full flex items-center justify-center shadow-inner" 
+        <div className="w-full h-full rounded-full flex items-center justify-center shadow-sm" 
           style={{ background: `conic-gradient(${gradientString})` }}
         >
-          <div className="w-28 h-28 bg-white rounded-full flex flex-col items-center justify-center">
-            <Text className="text-neutral-500 text-sm">Total</Text>
+          <div className="w-28 h-28 bg-white rounded-full flex flex-col items-center justify-center shadow-sm border border-gray-50">
+            <Text className="text-neutral-500 text-xs">Total</Text>
             <div className="text-2xl font-bold">{valueFormatter(total)}</div>
           </div>
         </div>

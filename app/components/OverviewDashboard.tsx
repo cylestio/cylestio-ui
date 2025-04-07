@@ -76,6 +76,7 @@ import EmptyState from './EmptyState'
 import ErrorMessage from './ErrorMessage'
 import MobileNavigation from './MobileNavigation'
 import ResponsiveContainer from './ResponsiveContainer'
+import TokenUsageBreakdown from './TokenUsageBreakdown'
 
 // Define types based on the new API
 type DashboardMetric = {
@@ -197,17 +198,28 @@ export default function OverviewDashboard() {
       setLoading(true);
       setError(null);
 
+      // Track if we received any data at all
+      let receivedAnyData = false;
+
       // Fetch top-level metrics
       try {
         const params = { time_range: timeRange };
+        console.log(`Fetching dashboard metrics from: ${DASHBOARD.METRICS}${buildQueryParams(params)}`);
+        
         const metricsData = await fetchAPI<MetricsResponse>(`${DASHBOARD.METRICS}${buildQueryParams(params)}`);
-        if (metricsData && metricsData.metrics) {
+        if (metricsData && metricsData.metrics && metricsData.metrics.length > 0) {
           setMetrics(metricsData.metrics);
           // Calculate health score
           setHealthScore(calculateHealthScore(metricsData.metrics));
+          receivedAnyData = true;
+        } else {
+          console.log('No metrics data received from API');
+          // If we don't have metrics data, set empty array rather than leaving previous data
+          setMetrics([]);
         }
       } catch (error) {
         console.warn('Failed to fetch metrics data:', error);
+        // Don't set empty metrics on error to avoid hiding entire dashboard
       }
       
       // Fetch top agents
@@ -221,8 +233,9 @@ export default function OverviewDashboard() {
         };
         
         const agentsData = await fetchAPI<TopAgentsResponse>(`${AGENTS.LIST}${buildQueryParams(agentsParams)}`);
-        if (agentsData && agentsData.items) {
+        if (agentsData && agentsData.items && agentsData.items.length > 0) {
           setTopAgents(agentsData.items);
+          receivedAnyData = true;
         }
       } catch (error) {
         console.warn('Failed to fetch top agents:', error);
@@ -236,8 +249,9 @@ export default function OverviewDashboard() {
         };
         
         const llmData = await fetchAPI<MetricChartData>(`${METRICS.LLM_REQUEST_COUNT}${buildQueryParams(llmParams)}`);
-        if (llmData && llmData.data) {
+        if (llmData && llmData.data && llmData.data.length > 0) {
           setLlmRequests(llmData.data);
+          receivedAnyData = true;
         }
       } catch (error) {
         console.warn('Failed to fetch LLM requests:', error);
@@ -250,9 +264,13 @@ export default function OverviewDashboard() {
           interval: getInterval(timeRange)
         };
         
+        console.log('Fetching token usage time series with params:', tokenParams);
         const tokenData = await fetchAPI<MetricChartData>(`${METRICS.LLM_TOKEN_USAGE}${buildQueryParams(tokenParams)}`);
-        if (tokenData && tokenData.data) {
+        console.log('Token usage time series response:', tokenData);
+        
+        if (tokenData && tokenData.data && tokenData.data.length > 0) {
           setTokenUsage(tokenData.data);
+          receivedAnyData = true;
         }
       } catch (error) {
         console.warn('Failed to fetch token usage:', error);
@@ -266,8 +284,9 @@ export default function OverviewDashboard() {
         };
         
         const toolData = await fetchAPI<MetricChartData>(`${METRICS.TOOL_EXECUTION_COUNT}${buildQueryParams(toolParams)}`);
-        if (toolData && toolData.data) {
+        if (toolData && toolData.data && toolData.data.length > 0) {
           setToolExecutions(toolData.data);
+          receivedAnyData = true;
         }
       } catch (error) {
         console.warn('Failed to fetch tool executions:', error);
@@ -281,11 +300,17 @@ export default function OverviewDashboard() {
         };
         
         const sessionData = await fetchAPI<MetricChartData>(`${METRICS.SESSION_COUNT}${buildQueryParams(sessionParams)}`);
-        if (sessionData && sessionData.data) {
+        if (sessionData && sessionData.data && sessionData.data.length > 0) {
           setSessionCounts(sessionData.data);
+          receivedAnyData = true;
         }
       } catch (error) {
         console.warn('Failed to fetch session counts:', error);
+      }
+      
+      // Only show error if we didn't receive any data at all
+      if (!receivedAnyData) {
+        setError('No dashboard data received from any API endpoints. Please check the API server.');
       }
       
       setLastUpdated(new Date());
@@ -552,7 +577,7 @@ export default function OverviewDashboard() {
   }
 
   // Empty state
-  if (metrics.length === 0) {
+  if (metrics.length === 0 && error) {
     return (
       <EmptyState 
         title="No Dashboard Data Available"
@@ -565,6 +590,7 @@ export default function OverviewDashboard() {
     )
   }
 
+  // Even if metrics are empty, we'll show the dashboard if other data is available
   const metricCategories = getMetricsByCategory();
   const summaryMetrics = getSummaryMetrics();
   const healthStatus = getHealthStatus(healthScore);
@@ -814,6 +840,16 @@ export default function OverviewDashboard() {
                     />
                   </DashboardCard>
                 </ResponsiveContainer>
+                
+                {/* Token Usage Section - Always show even if other metrics are missing */}
+                <ExpandableSection
+                  title="Token Usage Insights"
+                  description="Detailed breakdown of token usage across models"
+                  defaultExpanded={true}
+                  className="mt-8"
+                >
+                  <TokenUsageBreakdown timeRange={timeRange} />
+                </ExpandableSection>
                 
                 {/* Top Agents Section */}
                 <div className="mb-6 md:mb-8">
