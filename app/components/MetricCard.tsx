@@ -25,34 +25,34 @@ export type MetricCardProps = {
 const getVariantStyles = (variant: MetricCardProps['variant'] = 'primary') => {
   const variants = {
     primary: {
-      icon: 'bg-primary-100 text-primary-700',
-      card: 'border-primary-100',
-      value: 'text-primary-700'
+      icon: 'bg-blue-50 text-blue-600',
+      card: 'border-blue-100',
+      value: 'text-blue-700'
     },
     secondary: {
-      icon: 'bg-secondary-100 text-secondary-700',
-      card: 'border-secondary-100',
-      value: 'text-secondary-700'
+      icon: 'bg-indigo-50 text-indigo-600',
+      card: 'border-indigo-100',
+      value: 'text-indigo-700'
     },
     success: {
-      icon: 'bg-success-100 text-success-700',
-      card: 'border-success-100',
-      value: 'text-success-700'
+      icon: 'bg-emerald-50 text-emerald-600',
+      card: 'border-emerald-100',
+      value: 'text-emerald-700'
     },
     warning: {
-      icon: 'bg-warning-100 text-warning-700',
-      card: 'border-warning-100',
-      value: 'text-warning-700'
+      icon: 'bg-amber-50 text-amber-600',
+      card: 'border-amber-100',
+      value: 'text-amber-700'
     },
     error: {
-      icon: 'bg-error-100 text-error-700',
-      card: 'border-error-100',
-      value: 'text-error-700'
+      icon: 'bg-red-50 text-red-600',
+      card: 'border-red-100',
+      value: 'text-red-700'
     },
     neutral: {
-      icon: 'bg-neutral-100 text-neutral-700',
-      card: 'border-neutral-100',
-      value: 'text-neutral-700'
+      icon: 'bg-gray-50 text-gray-600',
+      card: 'border-gray-100',
+      value: 'text-gray-700'
     }
   }
   
@@ -63,20 +63,20 @@ const getSizeStyles = (size: MetricCardProps['size'] = 'md') => {
   const sizes = {
     sm: {
       card: 'p-4',
-      title: 'text-sm',
+      title: 'text-sm font-medium',
       value: 'text-xl font-semibold',
       trend: 'text-xs'
     },
     md: {
       card: 'p-5',
-      title: 'text-sm',
+      title: 'text-base font-medium',
       value: 'text-2xl font-semibold',
       trend: 'text-sm'
     },
     lg: {
       card: 'p-6',
-      title: 'text-base',
-      value: 'text-3xl font-bold',
+      title: 'text-lg font-medium',
+      value: 'text-3xl font-semibold',
       trend: 'text-sm'
     }
   }
@@ -114,17 +114,17 @@ const MetricCard: React.FC<MetricCardProps> = ({
   
   return (
     <Card 
-      className={`border ${variantStyles.card} ${sizeStyles.card} transition-all duration-200 hover:shadow-md ${className}`}
+      className={`border border-t-0 border-r-0 border-b-2 border-l-0 shadow-sm ${variantStyles.card} ${sizeStyles.card} transition-all duration-200 hover:shadow-md ${className}`}
     >
       <Flex className="justify-between items-start">
         {icon && (
-          <div className={`rounded-md p-2 ${variantStyles.icon}`}>
+          <div className={`rounded-full p-3 ${variantStyles.icon}`}>
             {icon}
           </div>
         )}
         
-        <div className={`flex flex-col ${icon ? 'ml-3' : ''} flex-grow`}>
-          <Text className={`${sizeStyles.title} text-neutral-600 mb-1`}>{title}</Text>
+        <div className={`flex flex-col ${icon ? 'ml-4' : ''} flex-grow`}>
+          <Text className={`${sizeStyles.title} text-gray-600`}>{title}</Text>
           
           {loading ? (
             <div className="animate-pulse h-8 bg-neutral-100 rounded w-2/3 mt-1"></div>
@@ -149,4 +149,4 @@ const MetricCard: React.FC<MetricCardProps> = ({
   )
 }
 
-export default MetricCard 
+export default MetricCard
