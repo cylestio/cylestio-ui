@@ -10,11 +10,6 @@ import {
   AreaChart,
   Flex,
   Badge,
-  TabGroup,
-  TabList,
-  Tab,
-  TabPanels,
-  TabPanel,
   Select,
   SelectItem,
   Button,
@@ -61,7 +56,6 @@ import {
 } from '@heroicons/react/24/outline'
 import { ConnectionStatus } from './ConnectionStatus'
 import { SimpleDonutChart } from './SimpleDonutChart'
-import DashboardNavigation, { defaultSections } from './DashboardNavigation'
 import SectionHeader from './SectionHeader'
 import ExpandableSection from './ExpandableSection'
 import Breadcrumbs from './Breadcrumbs'
@@ -74,7 +68,6 @@ import { colors } from './DesignSystem'
 import LoadingState from './LoadingState'
 import EmptyState from './EmptyState'
 import ErrorMessage from './ErrorMessage'
-import MobileNavigation from './MobileNavigation'
 import ResponsiveContainer from './ResponsiveContainer'
 import TokenUsageBreakdown from './TokenUsageBreakdown'
 import ToolUsageAnalysis from './ToolUsageAnalysis'
@@ -196,7 +189,11 @@ const mapTrendDirection = (apiTrend: 'up' | 'down' | 'stable'): 'up' | 'down' | 
   return apiTrend;
 };
 
-export default function OverviewDashboard() {
+type OverviewDashboardProps = {
+  timeRange: string;
+};
+
+export default function OverviewDashboard({ timeRange }: OverviewDashboardProps) {
   const [metrics, setMetrics] = useState<DashboardMetric[]>([])
   const [topAgents, setTopAgents] = useState<Agent[]>([])
   const [llmRequests, setLlmRequests] = useState<TimeSeriesData[]>([])
@@ -204,20 +201,12 @@ export default function OverviewDashboard() {
   const [toolExecutions, setToolExecutions] = useState<TimeSeriesData[]>([])
   const [sessionCounts, setSessionCounts] = useState<TimeSeriesData[]>([])
   
-  const [timeRange, setTimeRange] = useState<string>('30d')
-  const [loading, setLoading] = useState(true)
+  // Using timeRange from props instead of state
+  const [loading, setLoading] = useState<boolean>(true)
   const [error, setError] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
-  const [activeTab, setActiveTab] = useState(0)
   const [healthScore, setHealthScore] = useState(100)
   const [selectedMetric, setSelectedMetric] = useState<string | null>(null)
-  
-  // State for breadcrumbs navigation
-  const [breadcrumbs, setBreadcrumbs] = useState([
-    { label: 'Dashboard', href: '/', current: true }
-  ])
-
-  // Add state for mobile view
   const [isMobileView, setIsMobileView] = useState(false)
 
   // Fetch all dashboard data
@@ -613,10 +602,7 @@ export default function OverviewDashboard() {
         retryText="Retry"
         onRetry={fetchDashboardData}
         alternativeActionText="Switch to Default View"
-        onAlternativeAction={() => {
-          setTimeRange('24h');
-          fetchDashboardData();
-        }}
+        onAlternativeAction={fetchDashboardData}
       />
     )
   }
@@ -629,8 +615,8 @@ export default function OverviewDashboard() {
         description="There is no metrics data collected for the selected time period."
         actionText="Refresh Data"
         onAction={fetchDashboardData}
-        secondaryActionText="Change Time Range"
-        onSecondaryAction={() => setTimeRange('24h')}
+        secondaryActionText="Reload"
+        onSecondaryAction={fetchDashboardData}
       />
     )
   }
@@ -640,340 +626,254 @@ export default function OverviewDashboard() {
   const summaryMetrics = getSummaryMetrics();
   const healthStatus = getHealthStatus(healthScore);
   
-  const dashboardNavItems = defaultSections.map(section => ({
-    name: section.title,
-    href: '#',
-    icon: section.icon,
-    current: defaultSections.indexOf(section) === activeTab
-  }))
-  
   return (
-    <div className="p-4 sm:p-6">
-      {/* Mobile Navigation */}
-      <MobileNavigation 
-        items={dashboardNavItems}
-        logo={<span className="text-xl font-bold text-primary-600">Cylestio</span>}
-        className="mb-4 md:hidden"
-        onNavigate={() => {}}
-      />
-
-      <Breadcrumbs items={breadcrumbs} />
-      
-      <div className="mt-4">
-        <TabGroup index={activeTab} onIndexChange={setActiveTab}>
-          {/* Hide TabList on mobile and show MobileNavigation instead */}
-          <div className="hidden md:block">
-            <TabList variant="solid">
-              {defaultSections.map((section, index) => (
-                <Tab key={index} className="px-4 sm:px-6 py-2">
-                  <div className="flex items-center space-x-2">
-                    {section.icon}
-                    <span className="hidden sm:inline">{section.title}</span>
-                  </div>
-                </Tab>
-              ))}
-            </TabList>
-          </div>
-          
-          <TabPanels>
-            <TabPanel>
-              <div className="mt-4 md:mt-6">
-                <SectionHeader
-                  title="Agent Monitoring Dashboard"
-                  subtitle="Comprehensive analytics and monitoring for your AI agents"
-                  icon={<HomeIcon className="h-6 w-6 text-primary-500" />}
-                />
-                
-                <div className="mt-4 md:mt-6 mb-6 md:mb-8">
-                  <Flex className="justify-between items-center mb-4 flex-col sm:flex-row gap-2 sm:gap-0">
-                    <Text>Time Range:</Text>
-                    <div className="flex items-center gap-2 w-full sm:w-auto">
-                      <Select
-                        value={timeRange}
-                        onValueChange={setTimeRange}
-                        className="w-full sm:w-40"
-                      >
-                        <SelectItem value="1h">Last Hour</SelectItem>
-                        <SelectItem value="24h">Last 24 Hours</SelectItem>
-                        <SelectItem value="7d">Last 7 Days</SelectItem>
-                        <SelectItem value="30d">Last 30 Days</SelectItem>
-                      </Select>
-                      <Button
-                        variant="light"
-                        icon={ArrowPathIcon}
-                        tooltip="Refresh data"
-                        onClick={fetchDashboardData}
-                      >
-                        <span className="sr-only">Refresh</span>
-                      </Button>
-                    </div>
-                  </Flex>
-                </div>
-                
-                <div className="mb-6 md:mb-8">
-                  <SectionHeader
-                    title="System Overview"
-                    subtitle="A high-level overview of your system's health and key metrics"
-                    size="sm"
-                  />
-                  
-                  {/* Use ResponsiveContainer for metric cards */}
-                  <ResponsiveContainer
-                    defaultLayout="grid"
-                    columns={{ default: 2, md: 2, lg: 4 }}
-                    spacing="md"
-                    className="mt-4"
-                  >
-                    <MetricCard
-                      title="LLM Request Count"
-                      value={metrics.find(m => m.metric === 'llm_request_count')?.value || 0}
-                      icon={<BoltIcon className="w-5 h-5" />}
-                      variant="primary"
-                      trend={{
-                        value: metrics.find(m => m.metric === 'llm_request_count')?.change || 0,
-                        direction: mapTrendDirection(metrics.find(m => m.metric === 'llm_request_count')?.trend || 'stable'),
-                        isPositive: true
-                      }}
-                    />
-                    
-                    <MetricCard
-                      title="LLM Token Usage"
-                      value={metrics.find(m => m.metric === 'token_usage')?.value || 0}
-                      icon={<DocumentTextIcon className="w-5 h-5" />}
-                      variant="secondary"
-                      trend={{
-                        value: metrics.find(m => m.metric === 'token_usage')?.change || 0,
-                        direction: mapTrendDirection(metrics.find(m => m.metric === 'token_usage')?.trend || 'stable'),
-                        isPositive: true
-                      }}
-                    />
-                    
-                    <MetricCard
-                      title="LLM Avg Response Time"
-                      value={`${formatMetricValue('response_time_ms', metrics.find(m => m.metric === 'response_time_ms')?.value || 0)}`}
-                      icon={<ClockIcon className="w-5 h-5" />}
-                      variant="success"
-                      trend={{
-                        value: metrics.find(m => m.metric === 'response_time_ms')?.change || 0,
-                        direction: mapTrendDirection(metrics.find(m => m.metric === 'response_time_ms')?.trend || 'stable'),
-                        isPositive: false
-                      }}
-                    />
-                    
-                    <MetricCard
-                      title="Error Count"
-                      value={metrics.find(m => m.metric === 'error_count')?.value || 0}
-                      icon={<ExclamationTriangleIcon className="w-5 h-5" />}
-                      variant="error"
-                      trend={{
-                        value: metrics.find(m => m.metric === 'error_count')?.change || 0,
-                        direction: mapTrendDirection(metrics.find(m => m.metric === 'error_count')?.trend || 'stable'),
-                        isPositive: false
-                      }}
-                    />
-                  </ResponsiveContainer>
-                </div>
-                
-                <ResponsiveContainer
-                  defaultLayout="grid"
-                  columns={{ default: 1, md: 3 }}
-                  spacing="md"
-                  className="mb-6 md:mb-8"
-                >
-                  <DashboardCard
-                    title="System Health"
-                    icon={<ServerIcon className="h-5 w-5" />}
-                    variant="primary"
-                    className="md:col-span-1"
-                  >
-                    <div className="flex flex-col items-center justify-center p-4">
-                      <SimpleDonutChart
-                        value={healthScore}
-                        label="Health Score"
-                        color={healthStatus.color === 'red' ? 'error' : 
-                               healthStatus.color === 'amber' ? 'warning' : 
-                               healthStatus.color === 'green' ? 'success' : 
-                               healthStatus.color === 'emerald' ? 'success' : 'primary'}
-                      />
-                      <div className="mt-2 text-center">
-                        <div className="flex items-center justify-center">
-                          <span className={`status-indicator ${
-                            healthStatus.color === 'red' ? 'status-error' : 
-                            healthStatus.color === 'amber' ? 'status-warning' : 
-                            healthStatus.color === 'green' || healthStatus.color === 'emerald' ? 'status-active' : ''
-                          }`}></span>
-                          <span className="font-medium">{healthStatus.status} ({healthScore}%)</span>
-                        </div>
-                        <Text className="text-sm text-neutral-500 mt-2">
-                          The health score is calculated based on error rates, response times, and overall system performance.
-                        </Text>
-                      </div>
-                    </div>
-                  </DashboardCard>
-                  
-                  <DashboardCard
-                    title="LLM Requests Over Time"
-                    description="Number of LLM requests processed"
-                    icon={<ChartBarIcon className="h-5 w-5" />}
-                    className="md:col-span-2"
-                  >
-                    <AreaChart
-                      className="h-64 mt-4"
-                      data={prepareChartData(llmRequests)}
-                      index="date"
-                      categories={["value"]}
-                      colors={["blue"]}
-                      valueFormatter={(value) => `${formatNumber(value)} requests`}
-                      showLegend={false}
-                      showXAxis={!isMobileView} 
-                      showGridLines={!isMobileView}
-                      showYAxis={!isMobileView}
-                      showTooltip={true}
-                      autoMinValue={true}
-                    />
-                  </DashboardCard>
-                </ResponsiveContainer>
-
-                {/* Continue with other sections... */}
-                
-                {/* Use ResponsiveContainer for token usage and tool executions */}
-                <ResponsiveContainer
-                  defaultLayout="grid"
-                  columns={{ default: 1, md: 2 }}
-                  spacing="md"
-                  className="mb-6 md:mb-8"
-                >
-                  <DashboardCard
-                    title="Token Usage"
-                    description="Total tokens used by LLMs"
-                    icon={<DocumentTextIcon className="h-5 w-5" />}
-                  >
-                    <AreaChart
-                      className="h-64 mt-4"
-                      data={prepareChartData(tokenUsage)}
-                      index="date"
-                      categories={["value"]}
-                      colors={["indigo"]}
-                      valueFormatter={(value) => `${formatNumber(value)} tokens`}
-                      showLegend={false}
-                      showXAxis={!isMobileView}
-                      showGridLines={!isMobileView}
-                      showYAxis={!isMobileView}
-                      showTooltip={true}
-                      autoMinValue={true}
-                    />
-                  </DashboardCard>
-                  
-                  <DashboardCard
-                    title="Tool Executions"
-                    description="Count of tool executions by AI agents"
-                    icon={<CpuChipIcon className="h-5 w-5" />}
-                  >
-                    <AreaChart
-                      className="h-64 mt-4"
-                      data={prepareChartData(toolExecutions)}
-                      index="date"
-                      categories={["value"]}
-                      colors={["cyan"]}
-                      valueFormatter={(value) => `${formatNumber(value)} executions`}
-                      showLegend={false}
-                      showXAxis={!isMobileView}
-                      showGridLines={!isMobileView}
-                      showYAxis={!isMobileView}
-                      showTooltip={true}
-                      autoMinValue={true}
-                    />
-                  </DashboardCard>
-                </ResponsiveContainer>
-                
-                {/* Token Usage Breakdown Section */}
-                <div className="mt-6">
-                  <TokenUsageBreakdown 
-                    timeRange={timeRange}
-                    className="h-full" 
-                  />
-                </div>
-                
-                {/* Tool Usage Analysis Section */}
-                <div className="mt-6">
-                  <ToolUsageAnalysis 
-                    timeRange={timeRange}
-                    className="h-full"
-                  />
-                </div>
-                
-                {/* Top Agents Section */}
-                <div className="mb-6 md:mb-8">
-                  <ExpandableSection
-                    title="Top Agents"
-                    subtitle="Your most active AI agents by usage"
-                    icon={<UserCircleIcon className="h-5 w-5" />}
-                    defaultExpanded={!isMobileView}
-                  >
-                    <ResponsiveContainer
-                      defaultLayout="grid"
-                      columns={{ default: 1, lg: 2 }}
-                      spacing="md"
-                      className="mt-4"
-                    >
-                      {/* Agent Table */}
-                      <DashboardCard title="Top Agents by Request Count">
-                        <div className={`overflow-x-auto ${isMobileView ? 'max-h-60' : ''}`}>
-                          <Table className="mt-4">
-                            <TableHead>
-                              <TableRow>
-                                <TableHeaderCell>Agent Name</TableHeaderCell>
-                                <TableHeaderCell className={isMobileView ? 'hidden' : ''}>Type</TableHeaderCell>
-                                <TableHeaderCell>Requests</TableHeaderCell>
-                                <TableHeaderCell className={isMobileView ? 'hidden' : ''}>Tokens</TableHeaderCell>
-                                <TableHeaderCell>Errors</TableHeaderCell>
-                              </TableRow>
-                            </TableHead>
-                            <TableBody>
-                              {topAgents.map((agent) => (
-                                <TableRow key={agent.agent_id}>
-                                  <TableCell>{agent.name}</TableCell>
-                                  <TableCell className={isMobileView ? 'hidden' : ''}>{agent.type}</TableCell>
-                                  <TableCell>{agent.request_count}</TableCell>
-                                  <TableCell className={isMobileView ? 'hidden' : ''}>{agent.token_usage}</TableCell>
-                                  <TableCell>{agent.error_count}</TableCell>
-                                </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
-                        </div>
-                        {isMobileView && (
-                          <div className="mt-2 text-center">
-                            <Text className="text-xs text-neutral-500">Swipe to see more data</Text>
-                          </div>
-                        )}
-                      </DashboardCard>
-                      
-                      {/* Agent Chart */}
-                      <DashboardCard title="Agent Comparison">
-                        <BarChart
-                          className="h-64 mt-4"
-                          data={getAgentComparisonData()}
-                          index="name"
-                          categories={["requests"]}
-                          colors={["blue"]}
-                          valueFormatter={(value) => `${value} requests`}
-                          layout={isMobileView ? "vertical" : "horizontal"}
-                          showLegend={false}
-                          showGridLines={!isMobileView}
-                        />
-                      </DashboardCard>
-                    </ResponsiveContainer>
-                  </ExpandableSection>
-                </div>
-                
-                {/* Continue with the rest of the dashboard ... */}
-              </div>
-            </TabPanel>
+    <div className="p-4 sm:p-6 pt-0">
+      <div>
+        {/* Time range filter moved to page.tsx for better layout */}
+        
+        <div className="mb-4 md:mb-6">
+          {/* System Overview metric cards */}
+          <ResponsiveContainer
+            defaultLayout="grid"
+            columns={{ default: 2, md: 2, lg: 4 }}
+            spacing="md"
+          >
+            <MetricCard
+              title="LLM Request Count"
+              value={metrics.find(m => m.metric === 'llm_request_count')?.value || 0}
+              icon={<BoltIcon className="w-5 h-5" />}
+              variant="primary"
+              trend={{
+                value: metrics.find(m => m.metric === 'llm_request_count')?.change || 0,
+                direction: mapTrendDirection(metrics.find(m => m.metric === 'llm_request_count')?.trend || 'stable'),
+                isPositive: true
+              }}
+            />
             
-            {/* Other Tab Panels... */}
-          </TabPanels>
-        </TabGroup>
+            <MetricCard
+              title="LLM Token Usage"
+              value={metrics.find(m => m.metric === 'token_usage')?.value || 0}
+              icon={<DocumentTextIcon className="w-5 h-5" />}
+              variant="secondary"
+              trend={{
+                value: metrics.find(m => m.metric === 'token_usage')?.change || 0,
+                direction: mapTrendDirection(metrics.find(m => m.metric === 'token_usage')?.trend || 'stable'),
+                isPositive: true
+              }}
+            />
+            
+            <MetricCard
+              title="LLM Avg Response Time"
+              value={`${formatMetricValue('response_time_ms', metrics.find(m => m.metric === 'response_time_ms')?.value || 0)}`}
+              icon={<ClockIcon className="w-5 h-5" />}
+              variant="success"
+              trend={{
+                value: metrics.find(m => m.metric === 'response_time_ms')?.change || 0,
+                direction: mapTrendDirection(metrics.find(m => m.metric === 'response_time_ms')?.trend || 'stable'),
+                isPositive: false
+              }}
+            />
+            
+            <MetricCard
+              title="Error Count"
+              value={metrics.find(m => m.metric === 'error_count')?.value || 0}
+              icon={<ExclamationTriangleIcon className="w-5 h-5" />}
+              variant="error"
+              trend={{
+                value: metrics.find(m => m.metric === 'error_count')?.change || 0,
+                direction: mapTrendDirection(metrics.find(m => m.metric === 'error_count')?.trend || 'stable'),
+                isPositive: false
+              }}
+            />
+          </ResponsiveContainer>
+        </div>
+        
+        <ResponsiveContainer
+          defaultLayout="grid"
+          columns={{ default: 1, md: 3 }}
+          spacing="md"
+          className="mb-6 md:mb-8"
+        >
+          <DashboardCard
+            title="System Health"
+            icon={<ServerIcon className="h-5 w-5" />}
+            variant="primary"
+            className="md:col-span-1"
+          >
+            <div className="flex flex-col items-center justify-center p-4">
+              <SimpleDonutChart
+                value={healthScore}
+                label="Health Score"
+                color={healthStatus.color === 'red' ? 'error' : 
+                       healthStatus.color === 'amber' ? 'warning' : 
+                       healthStatus.color === 'green' ? 'success' : 
+                       healthStatus.color === 'emerald' ? 'success' : 'primary'}
+              />
+              <div className="mt-2 text-center">
+                <div className="flex items-center justify-center">
+                  <span className={`status-indicator ${
+                    healthStatus.color === 'red' ? 'status-error' : 
+                    healthStatus.color === 'amber' ? 'status-warning' : 
+                    healthStatus.color === 'green' || healthStatus.color === 'emerald' ? 'status-active' : ''
+                  }`}></span>
+                  <span className="font-medium">{healthStatus.status} ({healthScore}%)</span>
+                </div>
+                <Text className="text-sm text-neutral-500 mt-2">
+                  The health score is calculated based on error rates, response times, and overall system performance.
+                </Text>
+              </div>
+            </div>
+          </DashboardCard>
+          
+          <DashboardCard
+            title="LLM Requests Over Time"
+            description="Number of LLM requests processed"
+            icon={<ChartBarIcon className="h-5 w-5" />}
+            className="md:col-span-2"
+          >
+            <AreaChart
+              className="h-64 mt-4"
+              data={prepareChartData(llmRequests)}
+              index="date"
+              categories={["value"]}
+              colors={["blue"]}
+              valueFormatter={(value) => `${formatNumber(value)} requests`}
+              showLegend={false}
+              showXAxis={!isMobileView} 
+              showGridLines={!isMobileView}
+              showYAxis={!isMobileView}
+              showTooltip={true}
+              autoMinValue={true}
+            />
+          </DashboardCard>
+        </ResponsiveContainer>
+
+        {/* Continue with other sections... */}
+        
+        {/* Use ResponsiveContainer for token usage and tool executions */}
+        <ResponsiveContainer
+          defaultLayout="grid"
+          columns={{ default: 1, md: 2 }}
+          spacing="md"
+          className="mb-6 md:mb-8"
+        >
+          <DashboardCard
+            title="Token Usage"
+            description="Total tokens used by LLMs"
+            icon={<DocumentTextIcon className="h-5 w-5" />}
+          >
+            <AreaChart
+              className="h-64 mt-4"
+              data={prepareChartData(tokenUsage)}
+              index="date"
+              categories={["value"]}
+              colors={["indigo"]}
+              valueFormatter={(value) => `${formatNumber(value)} tokens`}
+              showLegend={false}
+              showXAxis={!isMobileView}
+              showGridLines={!isMobileView}
+              showYAxis={!isMobileView}
+              showTooltip={true}
+              autoMinValue={true}
+            />
+          </DashboardCard>
+          
+          <DashboardCard
+            title="Tool Executions"
+            description="Count of tool executions by AI agents"
+            icon={<CpuChipIcon className="h-5 w-5" />}
+          >
+            <AreaChart
+              className="h-64 mt-4"
+              data={prepareChartData(toolExecutions)}
+              index="date"
+              categories={["value"]}
+              colors={["cyan"]}
+              valueFormatter={(value) => `${formatNumber(value)} executions`}
+              showLegend={false}
+              showXAxis={!isMobileView}
+              showGridLines={!isMobileView}
+              showYAxis={!isMobileView}
+              showTooltip={true}
+              autoMinValue={true}
+            />
+          </DashboardCard>
+        </ResponsiveContainer>
+        
+        {/* Token Usage Breakdown Section */}
+        <div className="mt-6">
+          <TokenUsageBreakdown 
+            timeRange={timeRange}
+            className="h-full" 
+          />
+        </div>
+        
+        {/* Tool Usage Analysis Section */}
+        <div className="mt-6">
+          <ToolUsageAnalysis 
+            timeRange={timeRange}
+            className="h-full"
+          />
+        </div>
+        
+        {/* Top Agents Section */}
+        <div className="mb-6 md:mb-8">
+          <ResponsiveContainer
+            defaultLayout="grid"
+            columns={{ default: 1, lg: 2 }}
+            spacing="md"
+          >
+            {/* Agent Table */}
+            <DashboardCard title="Top Agents by Request Count">
+              <div className={`overflow-x-auto ${isMobileView ? 'max-h-60' : ''}`}>
+                <Table className="mt-4">
+                  <TableHead>
+                    <TableRow>
+                      <TableHeaderCell>Agent Name</TableHeaderCell>
+                      <TableHeaderCell className={isMobileView ? 'hidden' : ''}>Type</TableHeaderCell>
+                      <TableHeaderCell>Requests</TableHeaderCell>
+                      <TableHeaderCell className={isMobileView ? 'hidden' : ''}>Tokens</TableHeaderCell>
+                      <TableHeaderCell>Errors</TableHeaderCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {topAgents.map((agent) => (
+                      <TableRow key={agent.agent_id}>
+                        <TableCell>{agent.name}</TableCell>
+                        <TableCell className={isMobileView ? 'hidden' : ''}>{agent.type}</TableCell>
+                        <TableCell>{agent.request_count}</TableCell>
+                        <TableCell className={isMobileView ? 'hidden' : ''}>{agent.token_usage}</TableCell>
+                        <TableCell>{agent.error_count}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              {isMobileView && (
+                <div className="mt-2 text-center">
+                  <Text className="text-xs text-neutral-500">Swipe to see more data</Text>
+                </div>
+              )}
+            </DashboardCard>
+            
+            {/* Agent Chart */}
+            <DashboardCard title="Agent Comparison">
+              <BarChart
+                className="h-64 mt-4"
+                data={getAgentComparisonData()}
+                index="name"
+                categories={["requests"]}
+                colors={["blue"]}
+                valueFormatter={(value) => `${value} requests`}
+                layout={isMobileView ? "vertical" : "horizontal"}
+                showLegend={false}
+                showGridLines={!isMobileView}
+              />
+            </DashboardCard>
+          </ResponsiveContainer>
+        </div>
+        
+        {/* Continue with the rest of the dashboard ... */}
       </div>
     </div>
   )
