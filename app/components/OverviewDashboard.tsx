@@ -71,6 +71,7 @@ import ErrorMessage from './ErrorMessage'
 import ResponsiveContainer from './ResponsiveContainer'
 import TokenUsageBreakdown from './TokenUsageBreakdown'
 import ToolUsageAnalysis from './ToolUsageAnalysis'
+import ModelUsageAnalytics from './ModelUsageAnalytics'
 import { formatISOToLocalDisplay, formatChartDate as formatChartTimestamp } from '../lib/dateUtils'
 
 // Define types based on the new API
@@ -697,6 +698,14 @@ export default function OverviewDashboard({ timeRange }: OverviewDashboardProps)
           <TokenUsageBreakdown 
             timeRange={timeRange}
             className="h-full" 
+          />
+        </div>
+        
+        {/* Model Usage Analytics Section */}
+        <div className="mt-6 mb-8">
+          <ModelUsageAnalytics 
+            timeRange={timeRange}
+            className="h-full"
           />
         </div>
         

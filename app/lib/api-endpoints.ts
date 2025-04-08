@@ -49,6 +49,13 @@ export const METRICS = {
   LLM_USAGE: '/v1/metrics/llms',
   LLM_REQUESTS: '/v1/metrics/llms/requests',
   
+  // New LLM metrics
+  LLM_ANALYTICS: '/v1/metrics/llm/analytics',
+  LLM_MODELS: '/v1/metrics/llm/models',
+  LLM_USAGE_TRENDS: '/v1/metrics/llm/usage_trends',
+  LLM_AGENT_USAGE: '/v1/metrics/llm/agent_usage',
+  LLM_AGENT_MODEL_RELATIONSHIPS: '/v1/metrics/llm/agent_model_relationships',
+  
   // Tool metrics
   TOOL_SUCCESS_RATE: '/v1/metrics/tool/success_rate',
   TOOL_USAGE: '/v1/metrics/tools',
