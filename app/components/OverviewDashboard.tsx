@@ -688,65 +688,7 @@ export default function OverviewDashboard({ timeRange }: OverviewDashboardProps)
           </ResponsiveContainer>
         </div>
         
-        <ResponsiveContainer
-          defaultLayout="grid"
-          columns={{ default: 1, md: 3 }}
-          spacing="md"
-          className="mb-6 md:mb-8"
-        >
-          <DashboardCard
-            title="System Health"
-            icon={<ServerIcon className="h-5 w-5" />}
-            variant="primary"
-            className="md:col-span-1"
-          >
-            <div className="flex flex-col items-center justify-center p-4">
-              <SimpleDonutChart
-                value={healthScore}
-                label="Health Score"
-                color={healthStatus.color === 'red' ? 'error' : 
-                       healthStatus.color === 'amber' ? 'warning' : 
-                       healthStatus.color === 'green' ? 'success' : 
-                       healthStatus.color === 'emerald' ? 'success' : 'primary'}
-              />
-              <div className="mt-2 text-center">
-                <div className="flex items-center justify-center">
-                  <span className={`status-indicator ${
-                    healthStatus.color === 'red' ? 'status-error' : 
-                    healthStatus.color === 'amber' ? 'status-warning' : 
-                    healthStatus.color === 'green' || healthStatus.color === 'emerald' ? 'status-active' : ''
-                  }`}></span>
-                  <span className="font-medium">{healthStatus.status} ({healthScore}%)</span>
-                </div>
-                <Text className="text-sm text-neutral-500 mt-2">
-                  The health score is calculated based on error rates, response times, and overall system performance.
-                </Text>
-              </div>
-            </div>
-          </DashboardCard>
-          
-          <DashboardCard
-            title="LLM Requests Over Time"
-            description="Number of LLM requests processed"
-            icon={<ChartBarIcon className="h-5 w-5" />}
-            className="md:col-span-2"
-          >
-            <AreaChart
-              className="h-64 mt-4"
-              data={prepareChartData(llmRequests)}
-              index="date"
-              categories={["value"]}
-              colors={["blue"]}
-              valueFormatter={(value) => `${formatNumber(value)} requests`}
-              showLegend={false}
-              showXAxis={!isMobileView} 
-              showGridLines={!isMobileView}
-              showYAxis={!isMobileView}
-              showTooltip={true}
-              autoMinValue={true}
-            />
-          </DashboardCard>
-        </ResponsiveContainer>
+        {/* ResponsiveContainer removed along with System Health and LLM Requests components */}
 
         {/* Continue with other sections... */}
         
