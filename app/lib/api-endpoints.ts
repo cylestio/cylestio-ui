@@ -64,6 +64,7 @@ export const METRICS = {
   
   // Token metrics
   TOKEN_USAGE: '/v1/metrics/tokens',
+  TOKEN_USAGE_COST: '/v1/metrics/pricing/token_usage_cost',
   
   // Performance metrics
   PERFORMANCE: '/v1/metrics/performance',

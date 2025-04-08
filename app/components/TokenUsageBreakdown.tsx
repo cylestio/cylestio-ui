@@ -48,6 +48,33 @@ type TokenBreakdownData = {
   }[];
 };
 
+type TokenUsageCostData = {
+  token_usage_cost: {
+    breakdown: {
+      model: string;
+      vendor: string;
+      input_tokens: number;
+      output_tokens: number;
+      total_tokens: number;
+      input_price_per_1k: number;
+      output_price_per_1k: number;
+      input_cost: number;
+      output_cost: number;
+      total_cost: number;
+    }[];
+    totals: {
+      input_tokens: number;
+      output_tokens: number;
+      total_tokens: number;
+      input_cost: number;
+      output_cost: number;
+      total_cost: number;
+    };
+  };
+  pricing_note: string;
+  update_date: string;
+};
+
 type TimeSeries = {
   timestamp: string;
   value: number;
@@ -70,19 +97,6 @@ type TokenUsageBreakdownProps = {
   timeRange?: string;
 };
 
-// Define a mapping of model names to costs per 1K tokens
-const MODEL_COSTS = {
-  // Input token pricing (per 1K tokens)
-  'gpt-4-turbo': { input: 0.01, output: 0.03 },
-  'gpt-4': { input: 0.03, output: 0.06 },
-  'gpt-3.5-turbo': { input: 0.0015, output: 0.002 },
-  'claude-3-opus': { input: 0.015, output: 0.075 },
-  'claude-3-sonnet': { input: 0.003, output: 0.015 },
-  'claude-3-haiku': { input: 0.00025, output: 0.00125 },
-  // Default fallback for unknown models
-  'default': { input: 0.01, output: 0.03 }
-};
-
 // Friendly model name mapping
 const MODEL_DISPLAY_NAMES: Record<string, string> = {
   'gpt-4': 'GPT-4',
@@ -96,6 +110,7 @@ const MODEL_DISPLAY_NAMES: Record<string, string> = {
 export default function TokenUsageBreakdown({ className = '', timeRange = '30d' }: TokenUsageBreakdownProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [tokenData, setTokenData] = useState<TokenBreakdownData | null>(null);
+  const [costData, setCostData] = useState<TokenUsageCostData | null>(null);
   const [timeSeriesData, setTimeSeriesData] = useState<TimeSeries[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -136,6 +151,20 @@ export default function TokenUsageBreakdown({ className = '', timeRange = '30d' 
         console.error('Error fetching token usage data:', error);
         setError('Failed to fetch token data');
         return;
+      }
+
+      // Fetch pricing data from the new API endpoint
+      try {
+        console.log(`Fetching token pricing data from: ${METRICS.TOKEN_USAGE_COST}${params}`);
+        const pricingData = await fetchAPI<TokenUsageCostData>(`${METRICS.TOKEN_USAGE_COST}${params}`);
+        console.log('Token pricing data received:', pricingData);
+        
+        if (pricingData && pricingData.token_usage_cost) {
+          setCostData(pricingData);
+        }
+      } catch (pricingError) {
+        console.error('Error fetching token pricing data:', pricingError);
+        // Continue even if pricing data fails
       }
 
       // Fetch time series data for tokens
@@ -180,28 +209,12 @@ export default function TokenUsageBreakdown({ className = '', timeRange = '30d' 
     return num.toString();
   };
 
-  const calculateCost = (tokens: number, type: 'input' | 'output', modelName: string = 'default'): number => {
-    const model = MODEL_COSTS[modelName as keyof typeof MODEL_COSTS] || MODEL_COSTS.default;
-    return (tokens / 1000) * model[type];
-  };
-
-  const calculateTotalCost = (): number => {
-    if (!tokenData) return 0;
-    
-    let totalCost = 0;
-    
-    // Calculate cost for each model
-    tokenData.models.forEach(model => {
-      const modelName = model.name.toLowerCase();
-      const costKey = Object.keys(MODEL_COSTS).find(key => modelName.includes(key.toLowerCase())) || 'default';
-      
-      const inputCost = calculateCost(model.input_tokens, 'input', costKey);
-      const outputCost = calculateCost(model.output_tokens, 'output', costKey);
-      
-      totalCost += inputCost + outputCost;
-    });
-    
-    return totalCost;
+  // Get the total cost from the cost data
+  const getTotalCost = (): number => {
+    if (costData?.token_usage_cost?.totals) {
+      return costData.token_usage_cost.totals.total_cost;
+    }
+    return 0;
   };
 
   // Prepare data for charts
@@ -399,7 +412,10 @@ export default function TokenUsageBreakdown({ className = '', timeRange = '30d' 
     );
   }
 
-  const totalCost = calculateTotalCost();
+  const totalCost = getTotalCost();
+  const totalTokens = costData?.token_usage_cost?.totals?.total_tokens || tokenData?.total_tokens || 0;
+  const modelsUsed = costData?.token_usage_cost?.breakdown?.filter(model => model.total_tokens > 0).length || 
+                   tokenData?.models.filter(m => m.total_tokens > 0).length || 0;
   const inputOutputData = prepareInputOutputData();
   const modelData = prepareModelData();
   const agentData = prepareAgentModelData();
@@ -422,7 +438,7 @@ export default function TokenUsageBreakdown({ className = '', timeRange = '30d' 
               <DocumentTextIcon className="h-8 w-8" style={{ color: "rgba(129, 140, 248, 0.8)" }} />
               <div>
                 <Text>Total Tokens</Text>
-                <Metric>{formatNumber(tokenData.total_tokens)}</Metric>
+                <Metric>{formatNumber(totalTokens)}</Metric>
                 <Text className="text-xs text-gray-500">Across all models</Text>
               </div>
             </Flex>
@@ -444,7 +460,7 @@ export default function TokenUsageBreakdown({ className = '', timeRange = '30d' 
               <ArrowTrendingUpIcon className="h-8 w-8" style={{ color: "rgba(45, 212, 191, 0.8)" }} />
               <div>
                 <Text>Models Used</Text>
-                <Metric>{tokenData.models.filter(model => model.total_tokens > 0).length}</Metric>
+                <Metric>{modelsUsed}</Metric>
                 <Text className="text-xs text-gray-500">Active in this period</Text>
               </div>
             </Flex>
@@ -540,57 +556,56 @@ export default function TokenUsageBreakdown({ className = '', timeRange = '30d' 
                       <tr>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Model</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Input Tokens</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Input Price/1K</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Input Cost</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Output Tokens</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Output Price/1K</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Output Cost</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Cost</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {tokenData.models
-                        .filter(model => model.total_tokens > 0) // Filter out unused models
-                        .map((model, index) => {
-                        const modelName = model.name.toLowerCase();
-                        const costKey = Object.keys(MODEL_COSTS).find(key => modelName.includes(key.toLowerCase())) || 'default';
-                        const costInfo = MODEL_COSTS[costKey as keyof typeof MODEL_COSTS];
-                        const displayName = MODEL_DISPLAY_NAMES[modelName] || model.name;
-                        
-                        const inputCost = (model.input_tokens / 1000) * costInfo.input;
-                        const outputCost = (model.output_tokens / 1000) * costInfo.output;
-                        const totalModelCost = inputCost + outputCost;
-
-                        return (
-                          <tr key={index} className="hover:bg-gray-50">
-                            <td className="px-6 py-4 text-sm font-medium text-gray-900">{displayName}</td>
-                            <td className="px-6 py-4 text-sm text-gray-500">{formatNumber(model.input_tokens)}</td>
-                            <td className="px-6 py-4 text-sm text-gray-500">${inputCost.toFixed(2)}</td>
-                            <td className="px-6 py-4 text-sm text-gray-500">{formatNumber(model.output_tokens)}</td>
-                            <td className="px-6 py-4 text-sm text-gray-500">${outputCost.toFixed(2)}</td>
-                            <td className="px-6 py-4 text-sm text-gray-900 font-medium">${totalModelCost.toFixed(2)}</td>
-                          </tr>
-                        );
-                      })}
+                      {costData?.token_usage_cost?.breakdown
+                        .filter(item => item.total_tokens > 0) // Filter out models with zero tokens
+                        .map((item, index) => {
+                          const displayName = MODEL_DISPLAY_NAMES[item.model.toLowerCase()] || item.model;
+                          
+                          return (
+                            <tr key={index} className="hover:bg-gray-50">
+                              <td className="px-6 py-4 text-sm font-medium text-gray-900">{displayName}</td>
+                              <td className="px-6 py-4 text-sm text-gray-500">{formatNumber(item.input_tokens)}</td>
+                              <td className="px-6 py-4 text-sm text-gray-500">${item.input_price_per_1k.toFixed(5)}</td>
+                              <td className="px-6 py-4 text-sm text-gray-500">${item.input_cost.toFixed(4)}</td>
+                              <td className="px-6 py-4 text-sm text-gray-500">{formatNumber(item.output_tokens)}</td>
+                              <td className="px-6 py-4 text-sm text-gray-500">${item.output_price_per_1k.toFixed(5)}</td>
+                              <td className="px-6 py-4 text-sm text-gray-500">${item.output_cost.toFixed(4)}</td>
+                              <td className="px-6 py-4 text-sm text-gray-900 font-medium">${item.total_cost.toFixed(4)}</td>
+                            </tr>
+                          );
+                        })}
                       <tr className="bg-gray-50 sticky bottom-0 z-10">
                         <td className="px-6 py-4 text-sm font-bold text-gray-900">Total</td>
-                        <td className="px-6 py-4 text-sm font-medium text-gray-900">{formatNumber(tokenData.input_tokens)}</td>
                         <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                          ${tokenData.models.reduce((sum, model) => {
-                            const modelName = model.name.toLowerCase();
-                            const costKey = Object.keys(MODEL_COSTS).find(key => modelName.includes(key.toLowerCase())) || 'default';
-                            const costInfo = MODEL_COSTS[costKey as keyof typeof MODEL_COSTS];
-                            return sum + (model.input_tokens / 1000) * costInfo.input;
-                          }, 0).toFixed(2)}
+                          {formatNumber(costData?.token_usage_cost?.totals?.input_tokens || 0)}
                         </td>
-                        <td className="px-6 py-4 text-sm font-medium text-gray-900">{formatNumber(tokenData.output_tokens)}</td>
                         <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                          ${tokenData.models.reduce((sum, model) => {
-                            const modelName = model.name.toLowerCase();
-                            const costKey = Object.keys(MODEL_COSTS).find(key => modelName.includes(key.toLowerCase())) || 'default';
-                            const costInfo = MODEL_COSTS[costKey as keyof typeof MODEL_COSTS];
-                            return sum + (model.output_tokens / 1000) * costInfo.output;
-                          }, 0).toFixed(2)}
+                          -
                         </td>
-                        <td className="px-6 py-4 text-sm font-bold text-gray-900">${totalCost.toFixed(2)}</td>
+                        <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                          ${(costData?.token_usage_cost?.totals?.input_cost || 0).toFixed(4)}
+                        </td>
+                        <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                          {formatNumber(costData?.token_usage_cost?.totals?.output_tokens || 0)}
+                        </td>
+                        <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                          -
+                        </td>
+                        <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                          ${(costData?.token_usage_cost?.totals?.output_cost || 0).toFixed(4)}
+                        </td>
+                        <td className="px-6 py-4 text-sm font-bold text-gray-900">
+                          ${(costData?.token_usage_cost?.totals?.total_cost || 0).toFixed(4)}
+                        </td>
                       </tr>
                     </tbody>
                   </table>
@@ -598,7 +613,12 @@ export default function TokenUsageBreakdown({ className = '', timeRange = '30d' 
                 
                 <div className="text-xs text-gray-500 p-4 bg-gray-50 rounded-lg mt-4">
                   <p className="font-medium mb-2">About Cost Calculations</p>
-                  <p>Costs are calculated based on standard OpenAI and Anthropic pricing. Actual costs may vary based on your specific contract pricing.</p>
+                  <p>{costData?.pricing_note || "Costs are calculated based on standard OpenAI and Anthropic pricing. Actual costs may vary based on your specific contract pricing."}</p>
+                  {costData?.update_date && (
+                    <p className="mt-2">
+                      <span className="font-medium">Pricing last updated:</span> {costData.update_date}
+                    </p>
+                  )}
                 </div>
               </div>
             </TabPanel>
