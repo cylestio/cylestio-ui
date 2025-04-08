@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Button, Card, Text, Title, Badge, Flex, Grid } from '@tremor/react';
-import { SECURITY, EVENTS, SESSIONS, AGENTS } from '../../lib/api-endpoints';
+import { SECURITY, SESSIONS, AGENTS, TELEMETRY } from '../../lib/api-endpoints';
 
 type EndpointTest = {
   name: string;
@@ -15,12 +15,10 @@ export default function VerifyEndpointsPage() {
   const [results, setResults] = useState<EndpointTest[]>([
     { name: 'Alerts', endpoint: SECURITY.ALERTS, status: 'pending', message: 'Not tested yet' },
     { name: 'Alert Metrics', endpoint: SECURITY.ALERT_METRICS, status: 'pending', message: 'Not tested yet' },
-    { name: 'Events', endpoint: EVENTS.LIST, status: 'pending', message: 'Not tested yet' },
-    { name: 'Event Metrics', endpoint: EVENTS.EVENT_METRICS, status: 'pending', message: 'Not tested yet' },
+    { name: 'Telemetry Events', endpoint: TELEMETRY.EVENTS, status: 'pending', message: 'Not tested yet' },
     { name: 'Sessions', endpoint: SESSIONS.LIST, status: 'pending', message: 'Not tested yet' },
-    { name: 'Session Metrics', endpoint: SESSIONS.SESSION_METRICS, status: 'pending', message: 'Not tested yet' },
+    { name: 'Session Metrics', endpoint: SESSIONS.METRICS, status: 'pending', message: 'Not tested yet' },
     { name: 'Agents', endpoint: AGENTS.LIST, status: 'pending', message: 'Not tested yet' },
-    { name: 'Agent Metrics', endpoint: AGENTS.AGENT_METRICS, status: 'pending', message: 'Not tested yet' },
   ]);
   
   const [loading, setLoading] = useState<boolean>(false);

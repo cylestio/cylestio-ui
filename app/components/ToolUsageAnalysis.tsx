@@ -276,34 +276,22 @@ export default function ToolUsageAnalysis({
   const [dataFetched, setDataFetched] = useState(false);
   const requestInProgress = React.useRef(false);
   
-  // Enhanced filter state variables
-  const [toolType, setToolType] = useState<string>('all');
-  const [performanceFilter, setPerformanceFilter] = useState<string>('all');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [specificToolFilter, setSpecificToolFilter] = useState<string>('');
-  
   // For tool trends
   const [selectedView, setSelectedView] = useState<'aggregated' | 'byTool'>('aggregated');
   const [selectedTools, setSelectedTools] = useState<string[]>([]);
   const [visibleTools, setVisibleTools] = useState<string[]>([]);
 
-  // Get unique tool names for the specific tool filter dropdown
+  // Get unique tool names
   const uniqueToolNames = useMemo(() => {
     return Array.from(new Set(toolInteractions.map(interaction => interaction.tool_name)));
   }, [toolInteractions]);
 
   // Check if any filters are active
-  const hasActiveFilters = toolType !== 'all' || 
-                          performanceFilter !== 'all' || 
-                          statusFilter !== 'all' || 
-                          specificToolFilter !== '';
+  const hasActiveFilters = false;
 
   // Clear all filters function
   const clearAllFilters = () => {
-    setToolType('all');
-    setPerformanceFilter('all');
-    setStatusFilter('all');
-    setSpecificToolFilter('');
+    // Implementation of clearAllFilters
   };
 
   // Update fetchToolData to implement fallback behavior for missing endpoints
@@ -385,13 +373,11 @@ export default function ToolUsageAnalysis({
           }
         ];
         
-        // Otherwise, fetch data as usual with a single request
+        // Add filter params to request
         const params = buildQueryParams({ 
           time_range: timeRange,
           interaction_type: 'execution',
-          page_size: 100, // Set to maximum allowed value (100)
-          ...(statusFilter !== 'all' && { tool_status: statusFilter }),
-          ...(specificToolFilter !== '' && { tool_name: specificToolFilter })
+          page_size: 100 // Set to maximum allowed value (100)
         });
         
         let data: ToolInteractionsResponse | null = null;
@@ -418,58 +404,31 @@ export default function ToolUsageAnalysis({
           
           // Process tool usage data
           const toolData = processToolData(data.interactions);
-          
-          // Apply filters
-          let filteredData = toolData;
-          
-          if (toolType !== 'all') {
-            const isInternal = toolType === 'internal';
-            filteredData = filteredData.filter(tool => tool.is_internal === isInternal);
-          }
-          
-          if (performanceFilter !== 'all') {
-            const thresholds = {
-              'slow': 1000, // tools taking more than 1s
-              'medium': 500, // tools taking 500ms-1s
-              'fast': 0, // tools taking less than 500ms
-              'very_slow': 2000 // tools taking more than 2s
-            };
-            
-            const threshold = thresholds[performanceFilter as keyof typeof thresholds];
-            const maxThreshold = performanceFilter === 'fast' ? 500 : 
-                               performanceFilter === 'medium' ? 1000 : 
-                               performanceFilter === 'slow' ? 2000 : Number.MAX_SAFE_INTEGER;
-            
-            filteredData = filteredData.filter(tool => 
-              tool.avg_duration_ms >= threshold && 
-              tool.avg_duration_ms < maxThreshold
-            );
-          }
-          
-          setToolUsageData(filteredData);
+          setToolUsageData(toolData);
           
           // Process time series data
-          const timeSeriesResult = processTimeSeriesData(data.interactions);
-          setTimeSeriesData(timeSeriesResult.aggregated);
-          setAggregatedTimeData(timeSeriesResult.aggregated);
-          setToolSpecificTimeData(timeSeriesResult.toolSpecificTimeData);
+          const { aggregated, byTool, toolSpecificTimeData: specificTimeData } = processTimeSeriesData(data.interactions);
+          setAggregatedTimeData(aggregated);
+          setToolSpecificTimeData(specificTimeData);
+          
+          // Get the top 5 most used tools to set as visible by default
+          const topTools = [...toolData]
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 5)
+            .map(tool => tool.tool_name);
+          
+          setVisibleTools(topTools);
+          setSelectedTools(topTools);
+          
+          // Mark as fetched to prevent refetching
           setDataFetched(true);
         } else {
-          setToolUsageData([]);
-          setTimeSeriesData([]);
-          setAggregatedTimeData([]);
-          setToolSpecificTimeData([]);
-          setError('No tool usage data available for the selected period');
+          setError('No tool usage data available for the selected time period.');
         }
-      } catch (apiError) {
-        console.error('API error:', apiError);
-        setError('Error communicating with the API. Please try again later.');
-        // Mark as fetched to prevent further requests with invalid parameters
-        setDataFetched(true);
+      } catch (err) {
+        console.error('Failed to fetch tool data:', err);
+        setError('Failed to fetch tool data. Please try again later.');
       }
-    } catch (err) {
-      console.error('Error fetching tool data:', err);
-      setError('Failed to load tool usage data');
     } finally {
       setLoading(false);
       requestInProgress.current = false;
@@ -540,12 +499,26 @@ export default function ToolUsageAnalysis({
       (a, b) => new Date(a.request_timestamp).getTime() - new Date(b.request_timestamp).getTime()
     );
     
+    if (sortedInteractions.length === 0) {
+      return {
+        aggregated: [],
+        byTool: {},
+        toolSpecificTimeData: []
+      };
+    }
+    
     // Group by date and tool
     const dateToolMap = new Map<string, Map<string, number>>();
+    
+    // Build a set of all tool names to ensure we populate data for each tool on each date
+    const allToolNames = new Set<string>();
     
     sortedInteractions.forEach(interaction => {
       const date = new Date(interaction.request_timestamp).toISOString().split('T')[0];
       const toolName = interaction.tool_name;
+      
+      // Add to tool names list
+      allToolNames.add(toolName);
       
       if (!dateToolMap.has(date)) {
         dateToolMap.set(date, new Map<string, number>());
@@ -580,7 +553,8 @@ export default function ToolUsageAnalysis({
       });
       
       // Process by-tool data
-      toolMap.forEach((count, toolName) => {
+      // Initialize data for all tools to ensure all tools have entries for all dates
+      allToolNames.forEach(toolName => {
         if (!byToolData[toolName]) {
           byToolData[toolName] = dateRange.map(d => ({
             timestamp: d.toISOString().split('T')[0],
@@ -588,7 +562,10 @@ export default function ToolUsageAnalysis({
             [toolName]: 0
           }));
         }
-        
+      });
+      
+      // Then update with actual counts
+      toolMap.forEach((count, toolName) => {
         const dataPoint = byToolData[toolName].find(p => p.date === formattedDate);
         if (dataPoint) {
           dataPoint[toolName] = count;
@@ -705,76 +682,30 @@ export default function ToolUsageAnalysis({
     return tools.sort() as string[];
   }, [timeSeriesData]);
   
-  // Prepare trend chart data
-  const toolTrendData = useMemo(() => {
-    if (selectedView !== 'byTool' || selectedTools.length === 0) return [];
-    
-    // Group by timestamp
-    const groupedByTime = new Map<string, Map<string, number>>();
-    
-    timeSeriesData.forEach(item => {
-      if (!item.tool_name || !selectedTools.includes(item.tool_name)) return;
-      
-      if (!groupedByTime.has(item.timestamp)) {
-        groupedByTime.set(item.timestamp, new Map());
-      }
-      
-      const timeGroup = groupedByTime.get(item.timestamp)!;
-      timeGroup.set(item.tool_name, (timeGroup.get(item.tool_name) || 0) + item.value);
-    });
-    
-    // Convert to chart-friendly format
-    const chartData: any[] = [];
-    
-    groupedByTime.forEach((toolValues, timestamp) => {
-      const entry: any = { date: formatTimestamp(timestamp, timeRange) };
-      
-      selectedTools.forEach(tool => {
-        entry[tool] = toolValues.get(tool) || 0;
-      });
-      
-      chartData.push(entry);
-    });
-    
-    return chartData.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  }, [timeSeriesData, selectedView, selectedTools, timeRange]);
-  
-  // For the aggregated view, sum all tool executions at each timestamp
+  // Create memoized data for charts to ensure they render correctly
   const aggregatedTrendData = useMemo(() => {
-    if (selectedView !== 'aggregated') return [];
+    return aggregatedTimeData;
+  }, [aggregatedTimeData]);
+
+  const toolTrendData = useMemo(() => {
+    if (selectedTools.length === 0) return toolSpecificTimeData;
     
-    const groupedByTime = new Map<string, number>();
-    
-    timeSeriesData.forEach(item => {
-      groupedByTime.set(item.timestamp, (groupedByTime.get(item.timestamp) || 0) + item.value);
+    // Create a properly filtered dataset for the chart
+    const filteredData = toolSpecificTimeData.map(dataPoint => {
+      const filteredPoint: any = { date: dataPoint.date };
+      selectedTools.forEach(toolName => {
+        if (dataPoint[toolName] !== undefined) {
+          filteredPoint[toolName] = dataPoint[toolName];
+        } else {
+          // Ensure the property exists even if it's zero
+          filteredPoint[toolName] = 0;
+        }
+      });
+      return filteredPoint;
     });
     
-    return Array.from(groupedByTime.entries())
-      .map(([timestamp, value]) => ({
-        date: formatTimestamp(timestamp, timeRange),
-        "Tool Executions": value
-      }))
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  }, [timeSeriesData, selectedView, timeRange]);
-  
-  // Format timestamp based on time range with improved formatting
-  function formatTimestamp(timestamp: string, range: string): string {
-    const date = new Date(timestamp);
-    
-    if (range === '24h') {
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } else if (range === '7d') {
-      return `${date.toLocaleDateString([], { weekday: 'short' })} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-    } else if (range === '30d') {
-      return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-    } else if (range === '90d') {
-      return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-    } else if (range === '180d') {
-      return date.toLocaleDateString([], { month: 'short', year: '2-digit' });
-    } else {
-      return date.toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' });
-    }
-  }
+    return filteredData;
+  }, [toolSpecificTimeData, selectedTools]);
   
   // Tool colors for the by-tool view
   const toolColors: Record<string, Color> = {};
@@ -802,131 +733,13 @@ export default function ToolUsageAnalysis({
       if (prev.includes(toolName)) {
         return prev.filter(t => t !== toolName);
       } else {
-        return [...prev, toolName];
+        // Limit to a reasonable number of tools to show on the chart
+        if (prev.length < 8) {
+          return [...prev, toolName];
+        }
+        return prev;
       }
     });
-  };
-
-  // Compact Filter UI Component
-  const CompactFilterUI = () => (
-    <div className="mb-4 flex flex-wrap gap-2">
-      <div className="flex-1 min-w-[200px]">
-        <Select
-          value={toolType}
-          onValueChange={setToolType}
-          placeholder="Tool type"
-        >
-          <SelectItem value="all">All Tools</SelectItem>
-          <SelectItem value="internal">
-            <Badge color="indigo" className="mr-1.5" /> Internal
-          </SelectItem>
-          <SelectItem value="external">
-            <Badge color="violet" className="mr-1.5" /> External
-          </SelectItem>
-        </Select>
-      </div>
-      
-      <div className="flex-1 min-w-[200px]">
-        <Select
-          value={performanceFilter}
-          onValueChange={setPerformanceFilter}
-          placeholder="Performance"
-        >
-          <SelectItem value="all">All Performance</SelectItem>
-          <SelectItem value="fast"><Badge color="green" className="mr-1.5" /> Fast (&lt;500ms)</SelectItem>
-          <SelectItem value="medium"><Badge color="amber" className="mr-1.5" /> Medium (500-1000ms)</SelectItem>
-          <SelectItem value="slow"><Badge color="red" className="mr-1.5" /> Slow (&gt;1000ms)</SelectItem>
-          <SelectItem value="very_slow"><Badge color="rose" className="mr-1.5" /> Very Slow (&gt;2s)</SelectItem>
-        </Select>
-      </div>
-      
-      <div className="flex-1 min-w-[200px]">
-        <Select
-          value={statusFilter}
-          onValueChange={setStatusFilter}
-          placeholder="Status"
-        >
-          <SelectItem value="all">All Status</SelectItem>
-          <SelectItem value="success"><Badge color="green" className="mr-1.5" /> Success</SelectItem>
-          <SelectItem value="error"><Badge color="red" className="mr-1.5" /> Error</SelectItem>
-          <SelectItem value="pending"><Badge color="blue" className="mr-1.5" /> Pending</SelectItem>
-        </Select>
-      </div>
-      
-      <div className="flex-1 min-w-[200px]">
-        <Select
-          value={specificToolFilter}
-          onValueChange={setSpecificToolFilter}
-          placeholder="Select specific tool"
-        >
-          <SelectItem value="">All Tools</SelectItem>
-          {uniqueToolNames.map(tool => (
-            <SelectItem key={tool} value={tool}>
-              {tool}
-            </SelectItem>
-          ))}
-        </Select>
-      </div>
-      
-      {hasActiveFilters && (
-        <Button 
-          variant="secondary" 
-          color="gray" 
-          onClick={clearAllFilters}
-          size="xs"
-          icon={ArrowPathIcon}
-          className="h-9 whitespace-nowrap"
-        >
-          Clear
-        </Button>
-      )}
-    </div>
-  );
-
-  // Active Filters Display Component
-  const ActiveFiltersDisplay = () => {
-    if (!hasActiveFilters) return null;
-    
-    return (
-      <div className="flex flex-wrap gap-1.5 mb-4">
-        {toolType !== 'all' && (
-          <div className="flex h-6 items-center bg-indigo-100 text-indigo-800 rounded-full px-2 space-x-1 text-xs font-medium">
-            <span>{toolType === 'internal' ? 'Internal' : 'External'}</span>
-            <XMarkIcon className="h-3 w-3 cursor-pointer" onClick={() => setToolType('all')} />
-          </div>
-        )}
-        
-        {performanceFilter !== 'all' && (
-          <div className={`flex h-6 items-center px-2 space-x-1 text-xs font-medium rounded-full
-            ${performanceFilter === 'fast' ? 'bg-green-100 text-green-800' : 
-            performanceFilter === 'medium' ? 'bg-amber-100 text-amber-800' : 
-            performanceFilter === 'slow' ? 'bg-red-100 text-red-800' : 
-            'bg-rose-100 text-rose-800'}`}
-          >
-            <span>{performanceFilter.charAt(0).toUpperCase() + performanceFilter.slice(1).replace('_', ' ')}</span>
-            <XMarkIcon className="h-3 w-3 cursor-pointer" onClick={() => setPerformanceFilter('all')} />
-          </div>
-        )}
-        
-        {statusFilter !== 'all' && (
-          <div className={`flex h-6 items-center px-2 space-x-1 text-xs font-medium rounded-full
-            ${statusFilter === 'success' ? 'bg-green-100 text-green-800' : 
-            statusFilter === 'error' ? 'bg-red-100 text-red-800' : 
-            'bg-blue-100 text-blue-800'}`}
-          >
-            <span>{statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1)}</span>
-            <XMarkIcon className="h-3 w-3 cursor-pointer" onClick={() => setStatusFilter('all')} />
-          </div>
-        )}
-        
-        {specificToolFilter && (
-          <div className="flex h-6 items-center bg-purple-100 text-purple-800 rounded-full px-2 space-x-1 text-xs font-medium">
-            <span>{specificToolFilter}</span>
-            <XMarkIcon className="h-3 w-3 cursor-pointer" onClick={() => setSpecificToolFilter('')} />
-          </div>
-        )}
-      </div>
-    );
   };
 
   // Update the refresh function to properly reset the dataFetched flag
@@ -977,7 +790,7 @@ export default function ToolUsageAnalysis({
     if (dataFetched && !error && !dashboardError) {
       setDataFetched(false);
     }
-  }, [toolType, performanceFilter, statusFilter, specificToolFilter, error, dashboardError]);
+  }, [error, dashboardError]);
 
   // Update the render to show loading and error states from dashboard with better user experience
   const renderContent = () => {
@@ -1020,10 +833,6 @@ export default function ToolUsageAnalysis({
           <div>
             <Flex className="mb-4 items-center justify-between">
               <Text>Tool execution frequency by tool name</Text>
-              <Legend
-                categories={['Internal Tools', 'External Tools']}
-                colors={['indigo', 'violet']}
-              />
             </Flex>
             
             {histogramData.length > 0 ? (
@@ -1077,7 +886,7 @@ export default function ToolUsageAnalysis({
                             ></div>
                           ))}
                           <div 
-                            className={`h-full rounded-lg transition-all duration-500 ease-out ${tool.is_internal ? 'bg-indigo-500' : 'bg-violet-500'}`}
+                            className="h-full rounded-lg transition-all duration-500 ease-out bg-gradient-to-r from-indigo-500/80 via-indigo-400/60 to-indigo-300/40"
                             style={{ width: `${Math.max(1, percentage)}%` }} // Ensure even small values are visible
                           />
                           <div className="absolute top-0 left-0 w-full h-full opacity-0 group-hover:opacity-10 bg-white transition-opacity duration-200" />
@@ -1091,7 +900,6 @@ export default function ToolUsageAnalysis({
                           <div className="bg-gray-900 text-white p-2 rounded-lg shadow-lg text-xs whitespace-nowrap">
                             <div className="font-medium">{tool.tool_name}</div>
                             <div className="mt-1">{tool.count.toLocaleString()} executions</div>
-                            <div className="mt-0.5">Type: {tool.is_internal ? 'Internal' : 'External'}</div>
                             {/* Arrow */}
                             <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-gray-900"></div>
                           </div>
@@ -1157,72 +965,84 @@ export default function ToolUsageAnalysis({
             {selectedView === 'aggregated' ? (
               <Card className="mt-4">
                 <Title className="text-center mb-2">Tool Executions Over Time</Title>
-                <AreaChart
-                  className="h-72"
-                  data={aggregatedTrendData}
-                  index="date"
-                  categories={["Tool Executions"]}
-                  colors={["indigo"]}
-                  valueFormatter={cleanNumberFormatter}
-                  customTooltip={(props) => (
-                    <div className="bg-white p-2 shadow rounded border border-gray-200">
-                      <div className="text-sm font-medium">{props.payload && new Date(props.payload[0]?.payload.date).toLocaleDateString()}</div>
-                      <div className="text-xs text-gray-500 mb-1">{props.payload && new Date(props.payload[0]?.payload.date).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</div>
-                      {props.payload?.map((entry, i) => (
-                        <div key={i} className="flex items-center gap-2">
-                          <div className="h-2 w-2 rounded-full" style={{ backgroundColor: entry.color }}></div>
-                          <span className="text-xs">{entry.value.toLocaleString()} executions</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  showLegend={false}
-                  showGradient={true}
-                  yAxisWidth={40}
-                  minValue={0}
-                  autoMinValue={false}
-                  showYAxis={true}
-                  showXAxis={true}
-                  startEndOnly={false}
-                  showAnimation={true}
-                  curveType="natural"
-                />
+                {aggregatedTrendData && aggregatedTrendData.length > 0 ? (
+                  <AreaChart
+                    className="h-72"
+                    data={aggregatedTrendData}
+                    index="date"
+                    categories={["Tool Executions"]}
+                    colors={["indigo"]}
+                    valueFormatter={cleanNumberFormatter}
+                    customTooltip={(props) => (
+                      <div className="bg-white p-2 shadow rounded border border-gray-200">
+                        <div className="text-sm font-medium">{props.payload && new Date(props.payload[0]?.payload.date).toLocaleDateString()}</div>
+                        <div className="text-xs text-gray-500 mb-1">{props.payload && new Date(props.payload[0]?.payload.date).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</div>
+                        {props.payload?.map((entry, i) => (
+                          <div key={i} className="flex items-center gap-2">
+                            <div className="h-2 w-2 rounded-full" style={{ backgroundColor: entry.color }}></div>
+                            <span className="text-xs">{entry.value.toLocaleString()} executions</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    showLegend={false}
+                    showGradient={true}
+                    yAxisWidth={40}
+                    minValue={0}
+                    autoMinValue={false}
+                    showYAxis={true}
+                    showXAxis={true}
+                    startEndOnly={false}
+                    showAnimation={true}
+                    curveType="natural"
+                  />
+                ) : (
+                  <div className="h-72 flex items-center justify-center">
+                    <Text>No data available for the selected time period</Text>
+                  </div>
+                )}
               </Card>
             ) : (
               <div>
                 {selectedTools.length > 0 ? (
                   <Card className="mt-4">
                     <Title className="text-center mb-2">Tool Executions By Tool</Title>
-                    <AreaChart
-                      className="h-72"
-                      data={toolTrendData}
-                      index="date"
-                      categories={selectedTools}
-                      colors={selectedTools.map((_, i) => colorOptions[i % colorOptions.length])}
-                      valueFormatter={cleanNumberFormatter}
-                      customTooltip={(props) => (
-                        <div className="bg-white p-2 shadow rounded border border-gray-200">
-                          <div className="text-sm font-medium">{props.payload && new Date(props.payload[0]?.payload.date).toLocaleDateString()}</div>
-                          <div className="text-xs text-gray-500 mb-1">{props.payload && new Date(props.payload[0]?.payload.date).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</div>
-                          {props.payload?.map((entry, i) => (
-                            <div key={i} className="flex items-center gap-2">
-                              <div className="h-2 w-2 rounded-full" style={{ backgroundColor: entry.color }}></div>
-                              <span className="text-xs">{entry.name}: {entry.value.toLocaleString()} executions</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      showLegend={true}
-                      showGradient={true}
-                      yAxisWidth={40}
-                      minValue={0}
-                      autoMinValue={false}
-                      showYAxis={true}
-                      showXAxis={true}
-                      startEndOnly={false}
-                      showAnimation={true}
-                      curveType="natural"
-                    />
+                    {toolTrendData && toolTrendData.length > 0 ? (
+                      <AreaChart
+                        className="h-72"
+                        data={toolTrendData}
+                        index="date"
+                        categories={selectedTools}
+                        colors={selectedTools.map((_, i) => colorOptions[i % colorOptions.length])}
+                        valueFormatter={cleanNumberFormatter}
+                        customTooltip={(props) => (
+                          <div className="bg-white p-2 shadow rounded border border-gray-200">
+                            <div className="text-sm font-medium">{props.payload && new Date(props.payload[0]?.payload.date).toLocaleDateString()}</div>
+                            <div className="text-xs text-gray-500 mb-1">{props.payload && new Date(props.payload[0]?.payload.date).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</div>
+                            {props.payload?.map((entry, i) => (
+                              <div key={i} className="flex items-center gap-2">
+                                <div className="h-2 w-2 rounded-full" style={{ backgroundColor: entry.color }}></div>
+                                <span className="text-xs">{entry.name}: {entry.value.toLocaleString()} executions</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        showLegend={true}
+                        showGradient={true}
+                        yAxisWidth={40}
+                        minValue={0}
+                        autoMinValue={false}
+                        showYAxis={true}
+                        showXAxis={true}
+                        startEndOnly={false}
+                        showAnimation={true}
+                        curveType="natural"
+                      />
+                    ) : (
+                      <div className="h-72 flex items-center justify-center">
+                        <Text>No data available for the selected tools</Text>
+                      </div>
+                    )}
                     
                     <div className="mt-4 flex items-center justify-between">
                       <Text className="text-sm">Selected tools:</Text>
@@ -1247,20 +1067,56 @@ export default function ToolUsageAnalysis({
                         </Badge>
                       ))}
                     </div>
+                    
+                    {/* Add tool selection grid below the chart */}
+                    <div className="mt-6 border-t pt-4">
+                      <Text className="mb-2 font-medium">Add more tools to compare:</Text>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mt-3">
+                        {toolUsageData
+                          .filter(tool => !selectedTools.includes(tool.tool_name))
+                          .map((tool) => (
+                            <div
+                              key={tool.tool_name}
+                              onClick={() => toggleToolSelection(tool.tool_name)}
+                              className={`
+                                px-3 py-2 rounded-lg border cursor-pointer transition-all
+                                bg-gray-50 border-gray-200 hover:bg-gray-100
+                              `}
+                            >
+                              <div className="flex items-center gap-2">
+                                <div className={`h-2 w-2 rounded-full ${tool.is_internal ? 'bg-indigo-500' : 'bg-violet-500'}`} />
+                                <div className="text-sm font-medium truncate">{tool.tool_name}</div>
+                              </div>
+                              <div className="text-xs mt-1 text-gray-500">{tool.count.toLocaleString()} executions</div>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
                   </Card>
                 ) : (
                   <div className="mt-4">
-                    <Text>Select tools to compare:</Text>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 mt-2">
+                    <Text className="mb-2 font-medium">Select tools to compare:</Text>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mt-3">
                       {toolUsageData.map((tool) => (
-                        <Badge
+                        <div
                           key={tool.tool_name}
-                          color={selectedTools.includes(tool.tool_name) ? (tool.is_internal ? 'indigo' : 'violet') : 'gray'}
-                          className="cursor-pointer"
                           onClick={() => toggleToolSelection(tool.tool_name)}
+                          className={`
+                            px-3 py-2 rounded-lg border cursor-pointer transition-all
+                            ${selectedTools.includes(tool.tool_name) 
+                              ? tool.is_internal 
+                                ? 'bg-indigo-100 border-indigo-300 text-indigo-800' 
+                                : 'bg-violet-100 border-violet-300 text-violet-800'
+                              : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                            }
+                          `}
                         >
-                          {tool.tool_name}
-                        </Badge>
+                          <div className="flex items-center gap-2">
+                            <div className={`h-2 w-2 rounded-full ${tool.is_internal ? 'bg-indigo-500' : 'bg-violet-500'}`} />
+                            <div className="text-sm font-medium truncate">{tool.tool_name}</div>
+                          </div>
+                          <div className="text-xs mt-1 text-gray-500">{tool.count.toLocaleString()} executions</div>
+                        </div>
                       ))}
                     </div>
                   </div>
@@ -1293,12 +1149,6 @@ export default function ToolUsageAnalysis({
         </Button>
       }
     >
-      {/* Compact Filter UI */}
-      <CompactFilterUI />
-      
-      {/* Active Filters Display */}
-      <ActiveFiltersDisplay />
-
       <TabGroup index={activeTab} onIndexChange={setActiveTab}>
         <TabList className="mb-4">
           <Tab icon={ChartBarIcon}>Tool Usage</Tab>
