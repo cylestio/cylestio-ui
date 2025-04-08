@@ -239,10 +239,38 @@ body {
     }
   }
 
+  /* Make sure charts don't overflow on mobile */
+  @media (max-width: 640px) {
+    .tremor-Chart-container {
+      @apply overflow-x-auto;
+      max-width: 100%;
+    }
+    
+    .dashboard-overflow-fix {
+      @apply overflow-visible pb-4;
+    }
+  }
+  
+  /* Ensure proper overflow handling for dashboard cards */
+  .dashboard-card-scrollable {
+    @apply overflow-auto;
+    max-height: 400px;
+  }
+  
+  /* Add proper spacing between consecutive dashboard sections */
+  .dashboard-section-spacing {
+    @apply mb-8;
+  }
+
   /* Tablet specific adjustments */
   @media (min-width: 641px) and (max-width: 1024px) {
     .tablet-layout-adjustment {
       @apply grid-cols-2;
+    }
+    
+    /* Ensure proper padding between sections on tablet */
+    .dashboard-section-spacing {
+      @apply mb-10;
     }
   }
 

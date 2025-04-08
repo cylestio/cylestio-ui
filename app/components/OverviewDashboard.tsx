@@ -751,7 +751,7 @@ export default function OverviewDashboard({ timeRange }: OverviewDashboardProps)
         {/* Continue with other sections... */}
         
         {/* Token Usage Breakdown Section */}
-        <div className="mt-6">
+        <div className="mt-6 mb-8">
           <TokenUsageBreakdown 
             timeRange={timeRange}
             className="h-full" 
@@ -759,7 +759,7 @@ export default function OverviewDashboard({ timeRange }: OverviewDashboardProps)
         </div>
         
         {/* Tool Usage Analysis Section */}
-        <div className="mt-6">
+        <div className="mt-6 mb-8">
           <ToolUsageAnalysis 
             timeRange={timeRange}
             className="h-full"

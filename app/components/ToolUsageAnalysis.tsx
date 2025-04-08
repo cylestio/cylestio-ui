@@ -31,7 +31,8 @@ import {
   ClockIcon, 
   ChartBarIcon,
   ArrowPathIcon,
-  XMarkIcon
+  XMarkIcon,
+  ArrowTrendingUpIcon
 } from '@heroicons/react/24/outline'
 import { fetchAPI, buildQueryParams } from '../lib/api'
 import { METRICS } from '../lib/api-endpoints'
@@ -1132,36 +1133,25 @@ export default function ToolUsageAnalysis({
   };
 
   return (
-    <DashboardCard
-      className={className}
-      title="Tool Usage Analysis"
-      icon={<WrenchScrewdriverIcon className="h-5 w-5" />}
-      description="Monitor and analyze tool usage patterns and performance"
-      footer={
-        <Button
-          variant="light"
-          icon={ArrowPathIcon}
-          onClick={handleRefresh}
-          disabled={loading || dashboardLoading || requestInProgress.current}
-          size="xs"
-        >
-          Refresh
-        </Button>
-      }
-    >
-      <TabGroup index={activeTab} onIndexChange={setActiveTab}>
-        <TabList className="mb-4">
-          <Tab icon={ChartBarIcon}>Tool Usage</Tab>
-          <Tab icon={ClockIcon}>Slow Tools</Tab>
-          <Tab icon={ChartBarIcon}>Execution Trends</Tab>
-        </TabList>
-        
-        <TabPanels>
-          <TabPanel>{renderContent()}</TabPanel>
-          <TabPanel>{renderContent()}</TabPanel>
-          <TabPanel>{renderContent()}</TabPanel>
-        </TabPanels>
-      </TabGroup>
-    </DashboardCard>
+    <div>
+      <DashboardCard
+        title="Tool Usage Analysis"
+        icon={<WrenchScrewdriverIcon className="h-5 w-5" />}
+        description="Monitor and analyze tool usage patterns and performance"
+        className={`${className}`}
+        contentClassName="pb-4 overflow-visible"
+      >
+        <TabGroup index={activeTab} onIndexChange={setActiveTab}>
+          <TabList variant="line" className="mt-1">
+            <Tab icon={ChartBarIcon}>Tool Usage</Tab>
+            <Tab icon={ClockIcon}>Slow Tools</Tab>
+            <Tab icon={ArrowTrendingUpIcon}>Execution Trends</Tab>
+          </TabList>
+          <div className="overflow-visible mt-4">
+            {renderContent()}
+          </div>
+        </TabGroup>
+      </DashboardCard>
+    </div>
   );
 } 

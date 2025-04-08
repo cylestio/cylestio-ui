@@ -22,30 +22,36 @@ export type DashboardCardProps = {
 }
 
 const getVariantStyles = (variant: DashboardCardProps['variant'] = 'default') => {
-  const variants = {
-    default: {
-      header: '',
-      border: 'border-neutral-200',
-      title: 'text-neutral-900'
-    },
-    primary: {
-      header: 'bg-primary-50',
-      border: 'border-primary-200',
-      title: 'text-primary-900'
-    },
-    secondary: {
-      header: 'bg-secondary-50',
-      border: 'border-secondary-200',
-      title: 'text-secondary-900'
-    },
-    neutral: {
-      header: 'bg-neutral-50',
-      border: 'border-neutral-200',
-      title: 'text-neutral-900'
-    }
+  switch (variant) {
+    case 'primary':
+      return {
+        header: 'bg-blue-50',
+        border: 'border-blue-200',
+        title: 'text-blue-700',
+        iconColor: 'text-blue-600'
+      }
+    case 'secondary':
+      return {
+        header: 'bg-purple-50',
+        border: 'border-purple-200',
+        title: 'text-purple-700',
+        iconColor: 'text-purple-600'
+      }
+    case 'neutral':
+      return {
+        header: 'bg-neutral-50',
+        border: 'border-neutral-200',
+        title: 'text-neutral-700',
+        iconColor: 'text-neutral-600'
+      }
+    default:
+      return {
+        header: '',
+        border: 'border-neutral-200',
+        title: 'text-neutral-800',
+        iconColor: 'text-neutral-500'
+      }
   }
-  
-  return variants[variant]
 }
 
 const DashboardCard: React.FC<DashboardCardProps> = ({
@@ -77,7 +83,7 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
   return (
     <Card 
       className={`
-        overflow-hidden
+        overflow-visible
         ${showBorder ? `border ${variantStyles.border}` : 'border-transparent'} 
         transition-all duration-200 hover:shadow-md
         ${mobileOptimized && isMobile ? 'dashboard-card-mobile' : ''}
@@ -85,48 +91,34 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
       `}
     >
       {/* Card Header */}
-      {(title || icon) && (
-        <div 
-          className={`
-            flex justify-between items-center
-            ${description ? 'mb-1' : 'mb-4'}
-            ${variantStyles.header && 'px-6 py-3 -mx-6 -mt-6 mb-6 border-b border-neutral-200'}
-            ${collapsible ? 'cursor-pointer' : ''}
-          `}
-          onClick={collapsible ? toggleCollapse : undefined}
-        >
-          <Flex className="items-center space-x-2">
-            {icon && <span className="text-neutral-500">{icon}</span>}
-            
-            <Title className={`text-lg font-medium ${variantStyles.title} ${mobileOptimized && isMobile ? 'dashboard-card-title-mobile' : ''}`}>
-              {title}
-            </Title>
-            
-            {helpText && (
-              <div className="relative group">
-                <InformationCircleIcon className="h-5 w-5 text-neutral-400 cursor-help" />
-                <div className="absolute z-10 left-0 bottom-full mb-2 w-64 p-2 bg-white rounded shadow-lg border border-neutral-200 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
-                  <Text className="text-xs text-neutral-700">{helpText}</Text>
-                </div>
-              </div>
-            )}
-          </Flex>
+      <div className={`flex items-center justify-between ${description ? 'mb-2' : 'mb-4'}`}>
+        <div className="flex items-center">
+          {icon && <div className={`mr-2 ${variantStyles.iconColor}`}>{icon}</div>}
+          <Title className={mobileOptimized && isMobile ? 'dashboard-card-title-mobile' : ''}>{title}</Title>
           
-          {collapsible && (
-            <span className="text-neutral-400">
-              {isCollapsed ? (
-                <ChevronDownIcon className="h-5 w-5" />
-              ) : (
-                <ChevronUpIcon className="h-5 w-5" />
-              )}
-            </span>
+          {helpText && (
+            <div className="relative ml-1.5 group">
+              <InformationCircleIcon className="h-4 w-4 text-neutral-400 cursor-help" />
+              <div className="absolute left-0 bottom-full mb-2 w-64 p-2 bg-white rounded shadow-lg border border-neutral-200 text-xs text-neutral-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity duration-200 z-50">
+                {helpText}
+              </div>
+            </div>
           )}
         </div>
-      )}
+        
+        {collapsible && (
+          <button 
+            onClick={toggleCollapse} 
+            className="p-1 text-neutral-400 hover:text-neutral-600 transition-colors duration-150"
+          >
+            {isCollapsed ? <ChevronDownIcon className="h-5 w-5" /> : <ChevronUpIcon className="h-5 w-5" />}
+          </button>
+        )}
+      </div>
       
-      {/* Description */}
+      {/* Card Description */}
       {description && (
-        <Text className="text-neutral-500 text-sm mb-4">
+        <Text className="text-sm text-neutral-500 mb-4">
           {description}
         </Text>
       )}
@@ -136,7 +128,7 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
         className={`
           ${contentClassName}
           ${collapsible ? 'transition-all duration-300 ease-in-out' : ''}
-          ${collapsible && isCollapsed ? 'max-h-0 overflow-hidden opacity-0' : 'max-h-screen opacity-100'}
+          ${collapsible && isCollapsed ? 'max-h-0 overflow-hidden opacity-0' : 'overflow-visible opacity-100'}
         `}
       >
         {isLoading ? (

@@ -427,7 +427,7 @@ export default function TokenUsageBreakdown({ className = '', timeRange = '30d' 
         title="Token Usage Insights"
         icon={<ChartPieIcon className="h-5 w-5" />}
         className={`${className}`}
-        contentClassName="pb-2"
+        contentClassName="pb-4 overflow-visible"
         collapsible={isExpanded}
         defaultCollapsed={false}
       >
@@ -550,8 +550,8 @@ export default function TokenUsageBreakdown({ className = '', timeRange = '30d' 
                 <Title>Cost Breakdown</Title>
                 <Text className="text-sm text-gray-500 mb-4">Detailed cost analysis by model</Text>
                 
-                <div className="overflow-x-auto border border-gray-200 rounded-lg">
-                  <table className="w-full divide-y divide-gray-200">
+                <div className="overflow-auto max-h-[400px]">
+                  <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50 sticky top-0 z-10">
                       <tr>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Model</th>
