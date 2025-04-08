@@ -750,56 +750,6 @@ export default function OverviewDashboard({ timeRange }: OverviewDashboardProps)
 
         {/* Continue with other sections... */}
         
-        {/* Use ResponsiveContainer for token usage and tool executions */}
-        <ResponsiveContainer
-          defaultLayout="grid"
-          columns={{ default: 1, md: 2 }}
-          spacing="md"
-          className="mb-6 md:mb-8"
-        >
-          <DashboardCard
-            title="Token Usage"
-            description="Total tokens used by LLMs"
-            icon={<DocumentTextIcon className="h-5 w-5" />}
-          >
-            <AreaChart
-              className="h-64 mt-4"
-              data={prepareChartData(tokenUsage)}
-              index="date"
-              categories={["value"]}
-              colors={["indigo"]}
-              valueFormatter={(value) => `${formatNumber(value)} tokens`}
-              showLegend={false}
-              showXAxis={!isMobileView}
-              showGridLines={!isMobileView}
-              showYAxis={!isMobileView}
-              showTooltip={true}
-              autoMinValue={true}
-            />
-          </DashboardCard>
-          
-          <DashboardCard
-            title="Tool Executions"
-            description="Count of tool executions by AI agents"
-            icon={<CpuChipIcon className="h-5 w-5" />}
-          >
-            <AreaChart
-              className="h-64 mt-4"
-              data={prepareChartData(toolExecutions)}
-              index="date"
-              categories={["value"]}
-              colors={["cyan"]}
-              valueFormatter={(value) => `${formatNumber(value)} executions`}
-              showLegend={false}
-              showXAxis={!isMobileView}
-              showGridLines={!isMobileView}
-              showYAxis={!isMobileView}
-              showTooltip={true}
-              autoMinValue={true}
-            />
-          </DashboardCard>
-        </ResponsiveContainer>
-        
         {/* Token Usage Breakdown Section */}
         <div className="mt-6">
           <TokenUsageBreakdown 
