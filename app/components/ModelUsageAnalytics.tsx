@@ -22,7 +22,8 @@ import {
   TableCell,
   Badge,
   Color,
-  Button
+  Button,
+  Legend
 } from '@tremor/react'
 import {
   ChartPieIcon,
@@ -40,6 +41,8 @@ import LoadingState from './LoadingState'
 import EmptyState from './EmptyState'
 import ErrorMessage from './ErrorMessage'
 import { colors } from './DesignSystem'
+import { SimpleDonutChart } from './SimpleDonutChart'
+import { ModelDistributionChart } from './ModelDistributionChart'
 
 // Define types for the API responses
 type LLMAnalyticsResponse = {
@@ -163,20 +166,20 @@ type ModelUsageAnalyticsProps = {
   timeRange?: string;
 };
 
-// Add a proper color mapping array
+// Refined pastel colors matching Tool Execution graph reference
 const chartColors = [
-  "blue",
-  "indigo", 
-  "cyan", 
-  "emerald",
-  "green",
-  "violet", 
-  "purple",
-  "fuchsia", 
-  "pink",
-  "rose",
-  "orange",
-  "amber"
+  "#818cf8", // Primary soft blue (similar to get_forecast)
+  "#a78bfa", // Soft purple (similar to get_alerts)
+  "#60a5fa", // Lighter blue
+  "#34d399", // Soft green (similar to unknown)
+  "#fbbf24", // Amber (similar to get_forecast2)
+  "#f472b6", // Pink
+  "#4ade80", // Light green
+  "#38bdf8", // Sky blue
+  "#a5b4fc", // Softer indigo
+  "#93c5fd", // Soft blue
+  "#c4b5fd", // Lavender
+  "#e879f9"  // Fuchsia
 ];
 
 export default function ModelUsageAnalytics({ className = '', timeRange = '30d' }: ModelUsageAnalyticsProps) {
@@ -283,10 +286,27 @@ export default function ModelUsageAnalytics({ className = '', timeRange = '30d' 
   const getModelChartData = () => {
     if (!modelData?.breakdown) return [];
     
-    return modelData.breakdown.map((item) => {
+    // Sort data by request_count in descending order for better visualization
+    const sortedData = [...modelData.breakdown].sort(
+      (a, b) => b.metrics.request_count - a.metrics.request_count
+    );
+    
+    // Limit to top 8 models for better visualization if there are many
+    const topModels = sortedData.slice(0, 8);
+    
+    // Calculate total requests for percentage calculation
+    const totalRequests = sortedData.reduce(
+      (sum, item) => sum + item.metrics.request_count, 0
+    );
+    
+    return topModels.map((item) => {
       const displayName = MODEL_DISPLAY_NAMES[item.key.toLowerCase()] || item.key;
+      const percentage = totalRequests > 0 
+        ? ((item.metrics.request_count / totalRequests) * 100).toFixed(1) 
+        : '0';
+      
       return {
-        name: displayName,
+        name: `${displayName} (${percentage}%)`,
         value: item.metrics.request_count
       };
     });
@@ -363,10 +383,30 @@ export default function ModelUsageAnalytics({ className = '', timeRange = '30d' 
   const getAgentModelDistribution = () => {
     if (!agentData?.breakdown) return [];
     
-    return agentData.breakdown.map(item => ({
-      name: item.key,
-      value: item.metrics.request_count
-    }));
+    // Sort data by request_count in descending order for better visualization
+    const sortedData = [...agentData.breakdown].sort(
+      (a, b) => b.metrics.request_count - a.metrics.request_count
+    );
+    
+    // Limit to top 8 agents for better visualization if there are many
+    const topAgents = sortedData.slice(0, 8);
+    
+    // Calculate total requests for percentage calculation
+    const totalRequests = sortedData.reduce(
+      (sum, item) => sum + item.metrics.request_count, 0
+    );
+    
+    return topAgents.map(item => {
+      const agentName = item.key;
+      const percentage = totalRequests > 0 
+        ? ((item.metrics.request_count / totalRequests) * 100).toFixed(1) 
+        : '0';
+      
+      return {
+        name: `${agentName} (${percentage}%)`,
+        value: item.metrics.request_count
+      };
+    });
   };
 
   const getCostPerTokenData = () => {
@@ -473,17 +513,16 @@ export default function ModelUsageAnalytics({ className = '', timeRange = '30d' 
               <Card>
                 <Title>Model Request Distribution</Title>
                 <Text>Distribution of requests across different models</Text>
-                <DonutChart
-                  className="mt-6 h-60"
-                  data={getModelChartData()}
-                  category="value"
-                  index="name"
-                  valueFormatter={formatNumber}
-                  colors={chartColors}
-                  showAnimation={true}
-                  variant="pie"
-                  showTooltip={true}
-                />
+                <div className="mt-4 flex justify-center items-center">
+                  <ModelDistributionChart
+                    data={getModelChartData().map(item => ({
+                      name: item.name,
+                      count: item.value
+                    }))}
+                    valueFormatter={(value) => `${formatNumber(value)}`}
+                    className="w-full"
+                  />
+                </div>
               </Card>
               
               <Card>
@@ -612,17 +651,16 @@ export default function ModelUsageAnalytics({ className = '', timeRange = '30d' 
               <Card>
                 <Title>Model Usage by Agent</Title>
                 <Text>Distribution of requests by agent</Text>
-                <DonutChart
-                  className="mt-6 h-60"
-                  data={getAgentModelDistribution()}
-                  category="value"
-                  index="name"
-                  valueFormatter={formatNumber}
-                  colors={chartColors}
-                  showAnimation={true}
-                  variant="pie"
-                  showTooltip={true}
-                />
+                <div className="mt-4 flex justify-center items-center">
+                  <ModelDistributionChart
+                    data={getAgentModelDistribution().map(item => ({
+                      name: item.name,
+                      count: item.value
+                    }))}
+                    valueFormatter={(value) => `${formatNumber(value)}`}
+                    className="w-full"
+                  />
+                </div>
               </Card>
             </div>
           </TabPanel>
