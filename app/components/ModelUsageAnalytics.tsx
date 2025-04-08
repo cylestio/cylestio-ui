@@ -525,7 +525,7 @@ export default function ModelUsageAnalytics({ className = '', timeRange = '30d' 
                 </div>
               </Card>
               
-              <Card>
+              <Card className="overflow-hidden">
                 <Title>Model Comparison</Title>
                 <Text>Key metrics across different models</Text>
                 <Table className="mt-4">
@@ -535,7 +535,7 @@ export default function ModelUsageAnalytics({ className = '', timeRange = '30d' 
                       <TableHeaderCell className="font-semibold text-right">Requests</TableHeaderCell>
                       <TableHeaderCell className="font-semibold text-right">Tokens</TableHeaderCell>
                       <TableHeaderCell className="font-semibold text-right">Avg. Time</TableHeaderCell>
-                      <TableHeaderCell className="font-semibold text-right">Success Rate</TableHeaderCell>
+                      <TableHeaderCell className="font-semibold text-right">Cost</TableHeaderCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -545,11 +545,7 @@ export default function ModelUsageAnalytics({ className = '', timeRange = '30d' 
                         <TableCell className="text-right">{formatNumber(item.requests)}</TableCell>
                         <TableCell className="text-right">{formatNumber(item.tokens)}</TableCell>
                         <TableCell className="text-right">{formatDuration(item.responseTime)}</TableCell>
-                        <TableCell className="text-right">
-                          <Badge size="sm" color={item.successRate > 0.95 ? 'green' : item.successRate > 0.9 ? 'yellow' : 'red'}>
-                            {(item.successRate * 100).toFixed(1)}%
-                          </Badge>
-                        </TableCell>
+                        <TableCell className="text-right">{formatCost(item.cost)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
