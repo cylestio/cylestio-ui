@@ -19,23 +19,273 @@ body {
 }
 
 @layer components {
+  /* Button variants */
   .btn-primary {
-    @apply bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded;
+    @apply bg-primary-500 hover:bg-primary-600 text-white font-medium py-2 px-4 rounded-md transition-colors;
   }
   
+  .btn-secondary {
+    @apply bg-secondary-500 hover:bg-secondary-600 text-white font-medium py-2 px-4 rounded-md transition-colors;
+  }
+  
+  .btn-success {
+    @apply bg-success-500 hover:bg-success-600 text-white font-medium py-2 px-4 rounded-md transition-colors;
+  }
+  
+  .btn-warning {
+    @apply bg-warning-500 hover:bg-warning-600 text-white font-medium py-2 px-4 rounded-md transition-colors;
+  }
+  
+  .btn-error {
+    @apply bg-error-500 hover:bg-error-600 text-white font-medium py-2 px-4 rounded-md transition-colors;
+  }
+  
+  .btn-outline-primary {
+    @apply border border-primary-500 text-primary-500 hover:bg-primary-50 font-medium py-2 px-4 rounded-md transition-colors;
+  }
+  
+  .btn-outline-secondary {
+    @apply border border-secondary-500 text-secondary-500 hover:bg-secondary-50 font-medium py-2 px-4 rounded-md transition-colors;
+  }
+  
+  /* Card variants */
   .card {
-    @apply bg-white shadow-lg rounded-lg p-6 mb-6;
+    @apply bg-white shadow-md rounded-lg p-6 mb-6 transition-shadow hover:shadow-lg;
   }
   
   .card-title {
-    @apply text-xl font-semibold mb-4 text-gray-800;
+    @apply text-xl font-semibold mb-4 text-neutral-800;
   }
   
+  .card-primary {
+    @apply border-l-4 border-primary-500;
+  }
+  
+  .card-secondary {
+    @apply border-l-4 border-secondary-500;
+  }
+  
+  .card-success {
+    @apply border-l-4 border-success-500;
+  }
+  
+  .card-warning {
+    @apply border-l-4 border-warning-500;
+  }
+  
+  .card-error {
+    @apply border-l-4 border-error-500;
+  }
+  
+  /* Badge variants */
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+  
+  .badge-primary {
+    @apply bg-primary-100 text-primary-800;
+  }
+  
+  .badge-secondary {
+    @apply bg-secondary-100 text-secondary-800;
+  }
+  
+  .badge-success {
+    @apply bg-success-100 text-success-800;
+  }
+  
+  .badge-warning {
+    @apply bg-warning-100 text-warning-800;
+  }
+  
+  .badge-error {
+    @apply bg-error-100 text-error-800;
+  }
+  
+  /* Status indicators */
+  .status-indicator {
+    @apply w-2.5 h-2.5 rounded-full inline-block mr-1.5;
+  }
+  
+  .status-active {
+    @apply bg-success-500;
+  }
+  
+  .status-inactive {
+    @apply bg-neutral-400;
+  }
+  
+  .status-warning {
+    @apply bg-warning-500;
+  }
+  
+  .status-error {
+    @apply bg-error-500;
+  }
+  
+  /* Navigation elements */
   .sidebar-link {
-    @apply flex items-center p-2 text-gray-600 rounded-lg hover:bg-gray-100;
+    @apply flex items-center p-2 text-neutral-600 rounded-lg hover:bg-neutral-100 transition-colors;
   }
   
   .sidebar-link.active {
-    @apply bg-blue-50 text-blue-700;
+    @apply bg-primary-50 text-primary-700;
+  }
+  
+  /* Form elements */
+  .form-input {
+    @apply block w-full rounded-md border-neutral-300 shadow-sm focus:border-primary-500 focus:ring-primary-500;
+  }
+  
+  .form-select {
+    @apply block w-full rounded-md border-neutral-300 shadow-sm focus:border-primary-500 focus:ring-primary-500;
+  }
+  
+  .form-checkbox {
+    @apply rounded border-neutral-300 text-primary-600 focus:ring-primary-500;
+  }
+  
+  .form-radio {
+    @apply border-neutral-300 text-primary-600 focus:ring-primary-500;
+  }
+  
+  /* Layout utilities */
+  .section-container {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+  
+  .grid-dashboard {
+    @apply grid gap-6 md:grid-cols-2 lg:grid-cols-3;
+  }
+  
+  .grid-metrics {
+    @apply grid gap-4 md:grid-cols-2 lg:grid-cols-4;
+  }
+
+  /* Responsive utilities */
+  .content-simplified-mobile {
+    @apply md:content-normal;
+  }
+
+  .content-simplified-mobile > *:not(:first-child):not(:nth-child(2)) {
+    @apply hidden md:block;
+  }
+
+  /* Touch-friendly elements */
+  .touch-target {
+    @apply min-h-11 min-w-11; /* Minimum 44px touch target */
+  }
+
+  /* Enhanced mobile navigation */
+  .mobile-nav-item {
+    @apply flex items-center px-4 py-3 text-base font-medium rounded-md transition-colors duration-150 ease-in-out;
+  }
+
+  .mobile-nav-item.active {
+    @apply bg-primary-50 text-primary-700;
+  }
+
+  .mobile-nav-item:not(.active) {
+    @apply text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900;
+  }
+
+  /* Mobile-specific chart adjustments */
+  .chart-mobile-optimized {
+    @apply h-48 md:h-64 mt-2 md:mt-4;
+  }
+
+  /* Progressive disclosure patterns */
+  .expandable-content {
+    @apply max-h-0 overflow-hidden transition-all duration-300 ease-in-out;
+  }
+
+  .expandable-content.expanded {
+    @apply max-h-screen;
+  }
+
+  /* Mobile-friendly tables */
+  .table-responsive {
+    @apply overflow-x-auto -mx-4 sm:mx-0;
+  }
+
+  .table-responsive table {
+    @apply min-w-full;
+  }
+
+  .table-mobile-row {
+    @apply flex flex-col border-b border-neutral-200 py-2 md:table-row;
+  }
+
+  .table-mobile-cell {
+    @apply flex justify-between items-center py-1 md:table-cell md:py-2;
+  }
+
+  .table-mobile-cell-label {
+    @apply font-medium text-neutral-500 md:hidden;
+  }
+
+  /* Specific mobile styles for dashboard cards */
+  @media (max-width: 640px) {
+    .dashboard-card-mobile {
+      @apply p-3; /* Smaller padding on mobile */
+    }
+    
+    .dashboard-card-title-mobile {
+      @apply text-base; /* Smaller titles on mobile */
+    }
+    
+    .dashboard-metric-mobile {
+      @apply text-2xl; /* Smaller metrics on mobile */
+    }
+  }
+
+  /* Make sure charts don't overflow on mobile */
+  @media (max-width: 640px) {
+    .tremor-Chart-container {
+      @apply overflow-x-auto;
+      max-width: 100%;
+    }
+    
+    .dashboard-overflow-fix {
+      @apply overflow-visible pb-4;
+    }
+  }
+  
+  /* Ensure proper overflow handling for dashboard cards */
+  .dashboard-card-scrollable {
+    @apply overflow-auto;
+    max-height: 400px;
+  }
+  
+  /* Add proper spacing between consecutive dashboard sections */
+  .dashboard-section-spacing {
+    @apply mb-8;
+  }
+
+  /* Tablet specific adjustments */
+  @media (min-width: 641px) and (max-width: 1024px) {
+    .tablet-layout-adjustment {
+      @apply grid-cols-2;
+    }
+    
+    /* Ensure proper padding between sections on tablet */
+    .dashboard-section-spacing {
+      @apply mb-10;
+    }
+  }
+
+  /* Hide elements on small screens but show on larger ones */
+  .hide-on-mobile {
+    @apply hidden sm:block;
+  }
+
+  /* Show elements on small screens but hide on larger ones */
+  .show-on-mobile {
+    @apply block sm:hidden;
+  }
+
+  /* Adjust line height and font size for better readability on mobile */
+  .mobile-text-adjustments {
+    @apply text-base leading-relaxed sm:text-sm sm:leading-normal;
   }
 } 

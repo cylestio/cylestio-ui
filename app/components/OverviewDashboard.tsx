@@ -10,11 +10,6 @@ import {
   AreaChart,
   Flex,
   Badge,
-  TabGroup,
-  TabList,
-  Tab,
-  TabPanels,
-  TabPanel,
   Select,
   SelectItem,
   Button,
@@ -30,7 +25,8 @@ import {
   Color,
   Legend,
   List,
-  ListItem
+  ListItem,
+  Bold
 } from '@tremor/react'
 import {
   BoltIcon,
@@ -54,13 +50,30 @@ import {
   UserCircleIcon,
   DocumentTextIcon,
   ChevronDoubleRightIcon,
-  ChartPieIcon
+  ChartPieIcon,
+  HomeIcon,
+  UserGroupIcon,
+  CurrencyDollarIcon
 } from '@heroicons/react/24/outline'
 import { ConnectionStatus } from './ConnectionStatus'
 import { SimpleDonutChart } from './SimpleDonutChart'
+import SectionHeader from './SectionHeader'
+import ExpandableSection from './ExpandableSection'
+import Breadcrumbs from './Breadcrumbs'
+import MetricCard from './MetricCard'
+import DashboardCard from './DashboardCard'
 import Link from 'next/link'
 import { fetchAPI, buildQueryParams } from '../lib/api'
-import { DASHBOARD, AGENTS, METRICS } from '../lib/api-endpoints'
+import { DASHBOARD, AGENTS, METRICS, SECURITY } from '../lib/api-endpoints'
+import { colors } from './DesignSystem'
+import LoadingState from './LoadingState'
+import EmptyState from './EmptyState'
+import ErrorMessage from './ErrorMessage'
+import ResponsiveContainer from './ResponsiveContainer'
+import TokenUsageBreakdown from './TokenUsageBreakdown'
+import ToolUsageAnalysis from './ToolUsageAnalysis'
+import ModelUsageAnalytics from './ModelUsageAnalytics'
+import { formatISOToLocalDisplay, formatChartDate as formatChartTimestamp } from '../lib/dateUtils'
 
 // Define types based on the new API
 type DashboardMetric = {
@@ -107,6 +120,32 @@ type MetricChartData = {
   data: TimeSeriesData[];
 };
 
+// Add ToolInteraction and ToolInteractionsResponse types to match the API response
+type ToolInteraction = {
+  id: number;
+  event_id: number;
+  tool_name: string;
+  interaction_type: string;
+  status: string;
+  status_code: number;
+  parameters: any;
+  result: any;
+  request_timestamp: string;
+  response_timestamp: string;
+  duration_ms: number;
+  framework_name: string;
+  agent_id: string;
+};
+
+type ToolInteractionsResponse = {
+  total: number;
+  page: number;
+  page_size: number;
+  from_time: string;
+  to_time: string;
+  interactions: ToolInteraction[];
+};
+
 // Calculate health score based on metrics
 const calculateHealthScore = (metrics: DashboardMetric[]): number => {
   if (!metrics || metrics.length === 0) return 100;
@@ -146,7 +185,17 @@ const getHealthStatus = (score: number): { status: string; color: Color } => {
   return { status: 'Critical', color: 'red' };
 };
 
-export default function OverviewDashboard() {
+// Convert API's 'stable' trend to 'flat' for our components
+const mapTrendDirection = (apiTrend: 'up' | 'down' | 'stable'): 'up' | 'down' | 'flat' => {
+  if (apiTrend === 'stable') return 'flat';
+  return apiTrend;
+};
+
+type OverviewDashboardProps = {
+  timeRange: string;
+};
+
+export default function OverviewDashboard({ timeRange }: OverviewDashboardProps) {
   const [metrics, setMetrics] = useState<DashboardMetric[]>([])
   const [topAgents, setTopAgents] = useState<Agent[]>([])
   const [llmRequests, setLlmRequests] = useState<TimeSeriesData[]>([])
@@ -154,1024 +203,710 @@ export default function OverviewDashboard() {
   const [toolExecutions, setToolExecutions] = useState<TimeSeriesData[]>([])
   const [sessionCounts, setSessionCounts] = useState<TimeSeriesData[]>([])
   
-  const [timeRange, setTimeRange] = useState<string>('30d')
-  const [loading, setLoading] = useState(true)
+  // Using timeRange from props instead of state
+  const [loading, setLoading] = useState<boolean>(true)
   const [error, setError] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
-  const [activeTab, setActiveTab] = useState(0)
   const [healthScore, setHealthScore] = useState(100)
   const [selectedMetric, setSelectedMetric] = useState<string | null>(null)
+  const [isMobileView, setIsMobileView] = useState(false)
 
   // Fetch all dashboard data
   const fetchDashboardData = async () => {
     try {
-      setLoading(true)
-      setError(null)
+      setLoading(true);
+      setError(null);
+
+      // Track if we received any data at all
+      let receivedAnyData = false;
 
       // Fetch top-level metrics
-      const params = { time_range: timeRange };
-      const metricsData = await fetchAPI<MetricsResponse>(`${DASHBOARD.METRICS}${buildQueryParams(params)}`);
-      setMetrics(metricsData.metrics)
-      
-      // Calculate health score
-      setHealthScore(calculateHealthScore(metricsData.metrics));
+      let currentMetrics: DashboardMetric[] = [];
+      try {
+        const params = { time_range: timeRange };
+        console.log(`Fetching dashboard metrics from: ${DASHBOARD.METRICS}${buildQueryParams(params)}`);
+        
+        const metricsData = await fetchAPI<MetricsResponse>(`${DASHBOARD.METRICS}${buildQueryParams(params)}`);
+        if (metricsData && metricsData.metrics && metricsData.metrics.length > 0) {
+          currentMetrics = metricsData.metrics;
+          setMetrics(currentMetrics);
+          // Calculate health score
+          setHealthScore(calculateHealthScore(currentMetrics));
+          receivedAnyData = true;
+        } else {
+          console.log('No metrics data received from API');
+          // If we don't have metrics data, set empty array rather than leaving previous data
+          currentMetrics = [];
+          setMetrics([]);
+        }
+      } catch (error) {
+        console.warn('Failed to fetch metrics data:', error);
+        // Don't set empty metrics on error to avoid hiding entire dashboard
+      }
       
       // Fetch top agents
-      const agentsParams = {
-        page: 1,
-        page_size: 5,
-        sort_by: 'request_count',
-        sort_dir: 'desc',
-        status: 'active'
-      };
-      
       try {
+        const agentsParams = {
+          page: 1,
+          page_size: 100, // Increase to get a more accurate count of active agents
+          sort_by: 'request_count',
+          sort_dir: 'desc'
+        };
+        
         const agentsData = await fetchAPI<TopAgentsResponse>(`${AGENTS.LIST}${buildQueryParams(agentsParams)}`);
-        setTopAgents(agentsData.items || []);
+        if (agentsData && agentsData.items && agentsData.items.length > 0) {
+          setTopAgents(agentsData.items);
+          
+          // Count active agents (agents that sent events in last 24 hours)
+          const activeAgents = agentsData.items.filter(agent => agent.status === 'active');
+          
+          // Add active agents count to metrics if not already there
+          const activeAgentMetric = currentMetrics.find(m => m.metric === 'active_agents');
+          if (!activeAgentMetric) {
+            // Here we can try to calculate a trend based on historical data
+            const previousActiveAgentsCount = currentMetrics.find(m => m.metric === 'active_agents_previous')?.value || activeAgents.length;
+            const change = previousActiveAgentsCount > 0 
+              ? ((activeAgents.length - previousActiveAgentsCount) / previousActiveAgentsCount) * 100 
+              : 0;
+            const trend = change > 0 ? 'up' : (change < 0 ? 'down' : 'stable');
+            
+            currentMetrics = [
+              ...currentMetrics,
+              {
+                metric: 'active_agents',
+                value: activeAgents.length,
+                change: Math.abs(change),
+                trend: trend
+              }
+            ];
+          }
+          
+          receivedAnyData = true;
+        }
       } catch (error) {
         console.warn('Failed to fetch top agents:', error);
       }
       
-      // Fetch LLM requests time series
+      // Always fetch security alerts data regardless of metrics state
       try {
-        const llmParams = {
-          time_range: timeRange,
-          interval: getInterval(timeRange)
-        };
+        console.log('Fetching security alerts...');
+        const alertsResponse = await fetchAPI<{ count: number; time_range: { from: string; to: string; description: string } }>(`${SECURITY.ALERT_COUNT}?time_range=${timeRange}`);
+        const alertsCount = alertsResponse?.count || 0;
+        console.log('Received security alerts count:', alertsCount);
         
-        const llmData = await fetchAPI<MetricChartData>(`${METRICS.LLM_REQUEST_COUNT}${buildQueryParams(llmParams)}`);
-        setLlmRequests(llmData.data || []);
+        // For comparison, calculate change without fetching previous period if it would be invalid
+        let previousAlertsCount = 0;
+        let change = 0;
+        let trend: 'up' | 'down' | 'stable' = 'stable';
+        
+        // Only fetch previous period for valid time ranges
+        if (timeRange === '24h' || timeRange === '7d' || timeRange === '30d') {
+          const previousPeriod = timeRange === '24h' ? '48h' : (timeRange === '7d' ? '14d' : '30d');
+          try {
+            const previousAlertsResponse = await fetchAPI<{ count: number }>(`${SECURITY.ALERT_COUNT}?time_range=${previousPeriod}`);
+            previousAlertsCount = previousAlertsResponse?.count || 0;
+            console.log('Previous period alerts count:', previousAlertsCount);
+            
+            // Calculate change percentage
+            if (previousAlertsCount > 0 || alertsCount > 0) {
+              const baseCount = Math.max(previousAlertsCount, 1); // Avoid division by zero
+              change = ((alertsCount - previousAlertsCount) / baseCount) * 100;
+              trend = change > 0 ? 'up' : (change < 0 ? 'down' : 'stable');
+            }
+          } catch (error) {
+            console.warn('Failed to fetch previous period alerts, skipping trend calculation');
+          }
+        }
+        
+        // Update metrics with security alerts
+        setMetrics(prevMetrics => {
+          const metricsWithoutAlerts = prevMetrics.filter(m => m.metric !== 'security_alerts');
+          const updatedMetrics = [
+            ...metricsWithoutAlerts,
+            {
+              metric: 'security_alerts',
+              value: alertsCount,
+              change: Math.abs(change),
+              trend: trend
+            }
+          ];
+          console.log('Updated metrics with security alerts:', updatedMetrics);
+          return updatedMetrics;
+        });
+        
+        receivedAnyData = true;
       } catch (error) {
-        console.warn('Failed to fetch LLM requests:', error);
+        console.error('Failed to fetch security alerts count:', error);
+        // Don't reset to 0 on error, keep existing value if any
+        setMetrics(prevMetrics => {
+          const existingAlertMetric = prevMetrics.find(m => m.metric === 'security_alerts');
+          if (existingAlertMetric) {
+            return prevMetrics; // Keep existing metrics unchanged
+          }
+          // Only add a zero metric if there wasn't one before
+          const metricsWithoutAlerts = prevMetrics.filter(m => m.metric !== 'security_alerts');
+          return [
+            ...metricsWithoutAlerts,
+            {
+              metric: 'security_alerts',
+              value: 0,
+              change: 0,
+              trend: 'stable'
+            }
+          ];
+        });
       }
       
-      // Fetch token usage time series
-      try {
-        const tokenParams = {
-          time_range: timeRange,
-          interval: getInterval(timeRange)
-        };
-        
-        const tokenData = await fetchAPI<MetricChartData>(`${METRICS.LLM_TOKEN_USAGE}${buildQueryParams(tokenParams)}`);
-        setTokenUsage(tokenData.data || []);
-      } catch (error) {
-        console.warn('Failed to fetch token usage:', error);
+      // Add estimated cost metric if not present in API response
+      if (!currentMetrics.find(m => m.metric === 'token_usage_cost')) {
+        // Fetch token usage cost data
+        try {
+          const costResponse = await fetchAPI<{ total?: number }>(`${METRICS.TOKEN_USAGE_COST}?time_range=${timeRange}`);
+          const cost = costResponse?.total || 0;
+          
+          currentMetrics = [
+            ...currentMetrics,
+            {
+              metric: 'token_usage_cost',
+              value: cost,
+              change: 0,
+              trend: 'stable'
+            }
+          ];
+        } catch (error) {
+          console.warn('Failed to fetch token usage cost:', error);
+          currentMetrics = [
+            ...currentMetrics,
+            {
+              metric: 'token_usage_cost',
+              value: 0,
+              change: 0,
+              trend: 'stable'
+            }
+          ];
+        }
       }
       
-      // Fetch tool executions time series
+      // Fetch tool data directly from the tool interactions API
       try {
-        const toolParams = {
-          time_range: timeRange,
-          interval: getInterval(timeRange)
-        };
+        const toolsResponse = await fetchAPI<ToolInteractionsResponse>(`${METRICS.TOOL_INTERACTIONS}?time_range=${timeRange}`);
         
-        const toolData = await fetchAPI<MetricChartData>(`${METRICS.TOOL_EXECUTION_COUNT}${buildQueryParams(toolParams)}`);
-        setToolExecutions(toolData.data || []);
+        if (toolsResponse && toolsResponse.interactions) {
+          // Count unique tools
+          const uniqueTools = new Set<string>();
+          toolsResponse.interactions.forEach(interaction => {
+            if (interaction.tool_name) {
+              uniqueTools.add(interaction.tool_name);
+            }
+          });
+          
+          // Add tools count to metrics
+          if (!currentMetrics.find(m => m.metric === 'tools_count')) {
+            currentMetrics = [
+              ...currentMetrics,
+              {
+                metric: 'tools_count',
+                value: uniqueTools.size,
+                change: 0,
+                trend: 'stable'
+              }
+            ];
+          }
+        }
       } catch (error) {
-        console.warn('Failed to fetch tool executions:', error);
+        console.warn('Failed to count unique tools:', error);
       }
       
-      // Fetch session counts time series
+      // Calculate date range for API requests
+      const currentTime = new Date();
+      let startDate = new Date();
+      
+      switch (timeRange) {
+        case '24h':
+          startDate.setHours(startDate.getHours() - 24);
+          break;
+        case '7d':
+          startDate.setDate(startDate.getDate() - 7);
+          break;
+        case '30d':
+          startDate.setDate(startDate.getDate() - 30);
+          break;
+        default:
+          startDate.setDate(startDate.getDate() - 7);
+      }
+
+      // Fetch chart data for LLM requests
       try {
-        const sessionParams = {
-          time_range: timeRange,
-          interval: getInterval(timeRange)
-        };
+        const llmRequestsResponse = await fetchAPI<MetricChartData>(
+          `${METRICS.LLM_REQUEST_COUNT}?time_range=${timeRange}`
+        );
         
-        const sessionData = await fetchAPI<MetricChartData>(`${METRICS.SESSION_COUNT}${buildQueryParams(sessionParams)}`);
-        setSessionCounts(sessionData.data || []);
+        if (llmRequestsResponse && llmRequestsResponse.data) {
+          setLlmRequests(llmRequestsResponse.data);
+          receivedAnyData = true;
+        }
       } catch (error) {
-        console.warn('Failed to fetch session counts:', error);
+        console.warn('Failed to fetch LLM requests chart data:', error);
       }
       
-      setLastUpdated(new Date())
+      // Fetch token usage data
+      try {
+        const tokenUsageResponse = await fetchAPI<MetricChartData>(
+          `${METRICS.LLM_TOKEN_USAGE}?time_range=${timeRange}`
+        );
+        
+        if (tokenUsageResponse && tokenUsageResponse.data) {
+          setTokenUsage(tokenUsageResponse.data);
+          receivedAnyData = true;
+        }
+      } catch (error) {
+        console.warn('Failed to fetch token usage chart data:', error);
+      }
+      
+      // Fetch tool execution data
+      try {
+        const toolExecutionsResponse = await fetchAPI<ToolInteractionsResponse>(
+          `${METRICS.TOOL_INTERACTIONS}?time_range=${timeRange}&interaction_type=execution`
+        );
+        
+        if (toolExecutionsResponse && toolExecutionsResponse.interactions) {
+          // Process tool executions into time series data
+          const processedData = toolExecutionsResponse.interactions.reduce((acc: TimeSeriesData[], interaction) => {
+            const timestamp = interaction.request_timestamp;
+            const existingPoint = acc.find(point => point.timestamp === timestamp);
+            
+            if (existingPoint) {
+              existingPoint.value += 1;
+            } else {
+              acc.push({
+                timestamp,
+                value: 1
+              });
+            }
+            
+            return acc;
+          }, []);
+          
+          setToolExecutions(processedData);
+          receivedAnyData = true;
+        } else {
+          setToolExecutions([]);
+        }
+      } catch (error) {
+        console.error('Failed to fetch tool executions:', error);
+        setToolExecutions([]);
+      }
+      
+      // Fetch session counts data
+      try {
+        const sessionCountsResponse = await fetchAPI<MetricChartData>(
+          `${METRICS.SESSION_COUNT}?time_range=${timeRange}`
+        );
+        
+        if (sessionCountsResponse && sessionCountsResponse.data) {
+          setSessionCounts(sessionCountsResponse.data);
+          receivedAnyData = true;
+        }
+      } catch (error) {
+        console.warn('Failed to fetch session counts chart data:', error);
+      }
+      
+      // After all data is fetched
+      setLastUpdated(new Date());
+      setLoading(false);
     } catch (err) {
-      console.error('Error fetching dashboard data:', err)
-      setError(`${err instanceof Error ? err.message : 'Failed to load dashboard data'}`)
-    } finally {
-      setLoading(false)
+      setError('Error fetching dashboard data. Please try again.');
+      setLoading(false);
+      console.error('Dashboard data fetch error:', err);
     }
   }
-  
-  // Helper function to get appropriate interval based on time range
+
+  // Helper functions
   const getInterval = (range: string): string => {
     switch (range) {
-      case '1h': return '1m'
-      case '1d': return '1h'
-      case '7d': return '1d'
-      case '30d': return '1d'
-      default: return '1d'
+      case '24h':
+        return '1h';
+      case '7d':
+        return '1d';
+      case '30d':
+        return '1d';
+      case '90d':
+        return '1w';
+      default:
+        return '1d';
     }
   }
 
-  // Initial data fetch
-  useEffect(() => {
-    fetchDashboardData()
-  }, [timeRange])
-
-  // Format metric name for display
   const formatMetricName = (metric: string) => {
-    const parts = metric.split('.')
-    return parts.map(part => 
-      part.charAt(0).toUpperCase() + part.slice(1)
-    ).join(' ')
+    return metric
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, l => l.toUpperCase())
   }
 
-  // Format metric value
   const formatMetricValue = (metric: string, value: number) => {
-    if (metric.includes('token')) {
-      return `${value.toLocaleString()} tokens`
-    } else if (metric.includes('time') || metric.includes('duration')) {
-      return `${value.toLocaleString()} ms`
-    } else if (metric.includes('rate')) {
-      return `${(value * 100).toFixed(1)}%`
-    } else if (metric.includes('cost')) {
-      return `$${value.toFixed(2)}`
+    if (metric.includes('time') && !metric.includes('count')) {
+      return `${value} ms`;
+    } else if (metric.includes('percentage') || metric.includes('rate')) {
+      return `${value}%`;
+    } else {
+      return value.toLocaleString();
     }
-    return value.toLocaleString()
   }
 
-  // Format date for charts
   const formatChartDate = (timestamp: string, range: string) => {
-    const date = new Date(timestamp)
-    
-    switch (range) {
-      case '1h':
-        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      case '1d':
-        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      default:
-        return date.toLocaleDateString([], { month: 'short', day: 'numeric' })
-    }
+    return formatChartTimestamp(timestamp, range);
   }
 
-  // Format the timestamp
   const formatTimestamp = (timestamp: string) => {
-    try {
-      const date = new Date(timestamp)
-      return date.toLocaleString()
-    } catch (e) {
-      return 'Invalid date'
-    }
-  }
-  
-  // Status badge component
-  const StatusBadge = ({ status }: { status: string }) => {
-    switch (status.toLowerCase()) {
-      case 'active':
-        return <Badge color="green">Active</Badge>
-      case 'inactive':
-      case 'paused':
-        return <Badge color="gray">Inactive</Badge>
-      case 'error':
-        return <Badge color="red">Error</Badge>
-      default:
-        return <Badge color="gray">{status}</Badge>
-    }
+    return formatISOToLocalDisplay(timestamp, {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   }
 
-  // Helper to transform time series data for charts
+  const StatusBadge = ({ status }: { status: string }) => {
+    let color: Color = 'gray';
+    if (status === 'active') color = 'green';
+    if (status === 'error') color = 'red';
+    if (status === 'warning') color = 'amber';
+    if (status === 'stale') color = 'gray';
+    
+    return (
+      <Badge color={color} size="sm">
+        {status.charAt(0).toUpperCase() + status.slice(1)}
+      </Badge>
+    );
+  };
+
   const prepareChartData = (data: TimeSeriesData[]) => {
+    if (!data || data.length === 0) {
+      // Return at least one data point for empty data
+      return [{
+        date: formatChartDate(new Date().toISOString(), timeRange),
+        value: 0
+      }];
+    }
+    
     return data.map(item => ({
       date: formatChartDate(item.timestamp, timeRange),
       value: item.value
-    }))
+    }));
   }
 
-  // Get icon for metric
   const getMetricIcon = (metric: string) => {
-    if (metric.includes('llm') || metric.includes('token')) return <BoltIcon className="h-5 w-5" />
-    if (metric.includes('tool')) return <CpuChipIcon className="h-5 w-5" />
-    if (metric.includes('error')) return <ExclamationTriangleIcon className="h-5 w-5" />
-    if (metric.includes('session')) return <ChatBubbleLeftRightIcon className="h-5 w-5" />
-    if (metric.includes('time') || metric.includes('duration')) return <ClockIcon className="h-5 w-5" />
-    return <ChartBarIcon className="h-5 w-5" />
+    if (metric.includes('error') || metric.includes('failure')) return <XCircleIcon className="h-5 w-5 text-red-500" />;
+    if (metric.includes('time')) return <ClockIcon className="h-5 w-5 text-emerald-500" />;
+    if (metric.includes('token')) return <DocumentTextIcon className="h-5 w-5 text-blue-500" />;
+    if (metric.includes('request')) return <BoltIcon className="h-5 w-5 text-purple-500" />;
+    if (metric.includes('session')) return <UserCircleIcon className="h-5 w-5 text-indigo-500" />;
+    return <ChartBarIcon className="h-5 w-5 text-blue-500" />;
   }
 
-  // Get color for metric
   const getMetricColor = (metric: string): Color => {
-    if (metric.includes('llm') || metric.includes('token')) return 'blue'
-    if (metric.includes('tool')) return 'indigo'
-    if (metric.includes('error')) return 'red'
-    if (metric.includes('session')) return 'emerald'
-    if (metric.includes('time') || metric.includes('duration')) return 'amber'
-    return 'slate'
+    if (metric.includes('error') || metric.includes('failure')) return 'red';
+    if (metric.includes('time')) return 'emerald';
+    if (metric.includes('token')) return 'blue';
+    if (metric.includes('request')) return 'purple';
+    if (metric.includes('session')) return 'indigo';
+    return 'blue';
   }
 
-  // Determine if trend is positive
   const isPositiveTrend = (metric: string, trend: string): boolean => {
-    if (metric.includes('error') || metric.includes('failure')) {
-      return trend === 'down'
+    if (metric.includes('error') || metric.includes('failure') || metric.includes('time')) {
+      return trend === 'down';
     }
-    return trend === 'up'
+    return trend === 'up';
   }
 
-  // Get metrics by category
+  // Categorize metrics by type
   const getMetricsByCategory = () => {
     const categories = {
-      'LLM': metrics.filter(m => m.metric.includes('llm') || m.metric.includes('token')),
-      'Tools': metrics.filter(m => m.metric.includes('tool')),
-      'Sessions': metrics.filter(m => m.metric.includes('session')),
-      'Performance': metrics.filter(m => m.metric.includes('time') || m.metric.includes('duration')),
-      'Errors': metrics.filter(m => m.metric.includes('error') || m.metric.includes('failure')),
-      'Other': metrics.filter(m => 
-        !m.metric.includes('llm') && 
-        !m.metric.includes('token') && 
-        !m.metric.includes('tool') && 
-        !m.metric.includes('session') && 
-        !m.metric.includes('time') && 
-        !m.metric.includes('duration') && 
-        !m.metric.includes('error') && 
-        !m.metric.includes('failure')
-      )
-    }
-    
-    // Remove empty categories
-    Object.keys(categories).forEach(key => {
-      if (categories[key as keyof typeof categories].length === 0) {
-        delete categories[key as keyof typeof categories]
-      }
-    })
-    
-    return categories
-  }
-
-  // Get chart data for agent comparison
-  const getAgentComparisonData = () => {
-    if (!topAgents || topAgents.length === 0) return []
-    
-    return topAgents.map(agent => ({
-      name: agent.name,
-      'Requests': agent.request_count,
-      'Tokens': agent.token_usage / 1000 // Show in thousands
-    }))
-  }
-
-  // Format large numbers for display
-  const formatNumber = (value: number): string => {
-    if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`
-    if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`
-    return value.toString()
-  }
-
-  // Generate summary metrics for overview section
-  const getSummaryMetrics = () => {
-    const summaryMetrics = []
-    
-    // LLM Requests
-    const llmRequestMetric = metrics.find(m => m.metric === 'llm_request_count')
-    if (llmRequestMetric) {
-      summaryMetrics.push({
-        name: 'LLM Requests',
-        value: llmRequestMetric.value,
-        change: llmRequestMetric.change,
-        trend: llmRequestMetric.trend,
-        icon: <BoltIcon className="h-6 w-6" />,
-        color: 'blue' as Color
-      })
-    }
-    
-    // Token Usage
-    const tokenUsageMetric = metrics.find(m => m.metric === 'llm_token_usage')
-    if (tokenUsageMetric) {
-      summaryMetrics.push({
-        name: 'Token Usage',
-        value: tokenUsageMetric.value,
-        change: tokenUsageMetric.change,
-        trend: tokenUsageMetric.trend,
+      performance: {
+        title: 'Performance',
+        icon: <ChartBarIcon className="h-6 w-6" />,
+        description: 'Key performance metrics including response times and throughput',
+        metrics: metrics.filter(m => 
+          m.metric.includes('time') || 
+          m.metric.includes('throughput') ||
+          m.metric.includes('performance')
+        )
+      },
+      usage: {
+        title: 'Usage',
+        icon: <ChartPieIcon className="h-6 w-6" />,
+        description: 'System usage patterns and resource utilization metrics',
+        metrics: metrics.filter(m => 
+          m.metric.includes('request_count') || 
+          m.metric.includes('call_count') ||
+          m.metric.includes('usage') ||
+          m.metric.includes('rate')
+        )
+      },
+      security: {
+        title: 'Security',
+        icon: <ShieldExclamationIcon className="h-6 w-6" />,
+        description: 'Security-related metrics including errors and alerts',
+        metrics: metrics.filter(m => 
+          m.metric.includes('error') || 
+          m.metric.includes('alert') ||
+          m.metric.includes('security') ||
+          m.metric.includes('block')
+        )
+      },
+      tokens: {
+        title: 'Tokens',
         icon: <DocumentTextIcon className="h-6 w-6" />,
-        color: 'indigo' as Color,
-        suffix: ' tokens'
-      })
-    }
-    
-    // Tool Executions
-    const toolExecMetric = metrics.find(m => m.metric === 'tool_execution_count')
-    if (toolExecMetric) {
-      summaryMetrics.push({
-        name: 'Tool Executions',
-        value: toolExecMetric.value,
-        change: toolExecMetric.change,
-        trend: toolExecMetric.trend,
+        description: 'Token usage statistics and cost analysis',
+        metrics: metrics.filter(m => 
+          m.metric.includes('token')
+        )
+      },
+      tools: {
+        title: 'Tools',
         icon: <CpuChipIcon className="h-6 w-6" />,
-        color: 'emerald' as Color
-      })
-    }
+        description: 'Tool execution metrics and performance',
+        metrics: metrics.filter(m => 
+          m.metric.includes('tool')
+        )
+      },
+      sessions: {
+        title: 'Sessions',
+        icon: <UserCircleIcon className="h-6 w-6" />,
+        description: 'User session statistics and engagement metrics',
+        metrics: metrics.filter(m => 
+          m.metric.includes('session')
+        )
+      }
+    };
     
-    // Avg Response Time
-    const responseTimeMetric = metrics.find(m => m.metric === 'llm_avg_response_time')
-    if (responseTimeMetric) {
-      summaryMetrics.push({
-        name: 'Avg Response Time',
-        value: responseTimeMetric.value,
-        change: responseTimeMetric.change,
-        trend: responseTimeMetric.trend,
-        icon: <ClockIcon className="h-6 w-6" />,
-        color: 'amber' as Color,
-        suffix: ' ms',
-        inverseTrend: true
-      })
-    }
-    
-    // Error Count
-    const errorCountMetric = metrics.find(m => m.metric === 'error_count')
-    if (errorCountMetric) {
-      summaryMetrics.push({
-        name: 'Errors',
-        value: errorCountMetric.value,
-        change: errorCountMetric.change,
-        trend: errorCountMetric.trend,
-        icon: <ExclamationTriangleIcon className="h-6 w-6" />,
-        color: 'red' as Color,
-        inverseTrend: true
-      })
-    }
-    
-    // Sessions
-    const sessionCountMetric = metrics.find(m => m.metric === 'session_count')
-    if (sessionCountMetric) {
-      summaryMetrics.push({
-        name: 'Sessions',
-        value: sessionCountMetric.value,
-        change: sessionCountMetric.change,
-        trend: sessionCountMetric.trend,
-        icon: <ChatBubbleLeftRightIcon className="h-6 w-6" />,
-        color: 'green' as Color
-      })
-    }
-    
-    return summaryMetrics
+    return categories;
   }
 
-  // Get health status based on the health score
-  const healthStatus = getHealthStatus(healthScore)
+  const formatNumber = (value: number): string => {
+    if (value >= 1000000) {
+      return `${(value / 1000000).toFixed(1)}M`;
+    } else if (value >= 1000) {
+      return `${(value / 1000).toFixed(1)}K`;
+    }
+    return value.toString();
+  }
 
+  // Get the top 4 metrics for summary section
+  const getSummaryMetrics = () => {
+    const summaryMetrics = [
+      metrics.find(m => m.metric.includes('request_count')),
+      metrics.find(m => m.metric.includes('token_usage')),
+      metrics.find(m => m.metric.includes('response_time')),
+      metrics.find(m => m.metric.includes('error_count'))
+    ].filter(Boolean) as DashboardMetric[];
+    
+    // If we don't have enough, add more metrics
+    if (summaryMetrics.length < 4 && metrics.length >= 4) {
+      const additionalMetrics = metrics
+        .filter(m => !summaryMetrics.some(sm => sm.metric === m.metric))
+        .slice(0, 4 - summaryMetrics.length);
+      
+      return [...summaryMetrics, ...additionalMetrics];
+    }
+    
+    return summaryMetrics;
+  }
+
+  // Reload data when time range changes
+  useEffect(() => {
+    fetchDashboardData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timeRange]);
+
+  // Check if we're in mobile view on mount and when window resizes
+  useEffect(() => {
+    const checkIsMobile = () => {
+      setIsMobileView(window.innerWidth < 768) // 768px is the md breakpoint
+    }
+    
+    // Set initial value
+    checkIsMobile()
+    
+    // Add event listener for window resize
+    window.addEventListener('resize', checkIsMobile)
+    
+    // Clean up
+    return () => {
+      window.removeEventListener('resize', checkIsMobile)
+    }
+  }, [])
+
+  // Loading state
+  if (loading) {
+    return <LoadingState variant="skeleton" contentType="metrics" />
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <ErrorMessage 
+        message={error}
+        severity="error"
+        retryText="Retry"
+        onRetry={fetchDashboardData}
+        alternativeActionText="Switch to Default View"
+        onAlternativeAction={fetchDashboardData}
+      />
+    )
+  }
+
+  // Empty state
+  if (metrics.length === 0 && error) {
+    return (
+      <EmptyState 
+        title="No Dashboard Data Available"
+        description="There is no metrics data collected for the selected time period."
+        actionText="Refresh Data"
+        onAction={fetchDashboardData}
+        secondaryActionText="Reload"
+        onSecondaryAction={fetchDashboardData}
+      />
+    )
+  }
+
+  // Even if metrics are empty, we'll show the dashboard if other data is available
+  const metricCategories = getMetricsByCategory();
+  const summaryMetrics = getSummaryMetrics();
+  const healthStatus = getHealthStatus(healthScore);
+  
+  // In the render section, add debug logging for the security alerts metric
+  const securityAlertsMetric = metrics.find(m => m.metric === 'security_alerts');
+  console.log('Current security alerts metric:', securityAlertsMetric);
+  
   return (
-    <div className="space-y-6">
-      {/* Streamlined header with embedded connection status */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
-        <div className="flex items-center justify-between p-6 border-b border-gray-100">
-          <div className="flex items-center space-x-4">
-            <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-3 rounded-xl shadow-md">
-              <EyeIcon className="h-6 w-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-800">Cylestio Monitor</h1>
-              <p className="text-gray-500">AI Agent Observability Dashboard</p>
-            </div>
-            <div className="ml-4">
-              <ConnectionStatus />
-            </div>
-          </div>
-          
-          <Flex justifyContent="end" alignItems="center" className="gap-4">
-            <Select
-              value={timeRange}
-              onValueChange={(value) => setTimeRange(value)}
-              className="w-40 border border-gray-200 rounded-md shadow-sm"
-            >
-              <SelectItem value="1h">Last hour</SelectItem>
-              <SelectItem value="1d">Last 24 hours</SelectItem>
-              <SelectItem value="7d">Last 7 days</SelectItem>
-              <SelectItem value="30d">Last 30 days</SelectItem>
-            </Select>
+    <div className="p-4 sm:p-6 pt-0">
+      <div>
+        {/* Time range filter moved to page.tsx for better layout */}
+        
+        <div className="mb-4 md:mb-6">
+          {/* System Overview metric cards */}
+          <ResponsiveContainer
+            defaultLayout="grid"
+            columns={{ default: 2, md: 2, lg: 4 }}
+            spacing="md"
+          >
+            <MetricCard
+              title="Active Agents"
+              value={topAgents.filter(a => a.status === 'active').length || 0}
+              icon={
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7 text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="5" />
+                  <path d="M12 7 L12 17" />
+                  <path d="M7 12 L17 12" />
+                  <path d="M3.5 8.5 L7 12 L3.5 15.5" />
+                  <path d="M20.5 8.5 L17 12 L20.5 15.5" />
+                  <path d="M8.5 3.5 L12 7 L15.5 3.5" />
+                  <path d="M8.5 20.5 L12 17 L15.5 20.5" />
+                </svg>
+              }
+              variant="primary"
+              valueClassName="text-2xl"
+              size="md"
+              trend={null}
+            />
             
-            <Button
-              icon={ArrowPathIcon}
-              color="blue"
-              size="sm"
-              loading={loading}
-              onClick={fetchDashboardData}
-              tooltip="Refresh all data"
-              className="shadow-sm"
-            >
-              Refresh
-            </Button>
-          </Flex>
+            <MetricCard
+              title="Security Alerts"
+              value={(() => {
+                const alertValue = metrics.find(m => m.metric === 'security_alerts')?.value;
+                console.log('Security Alerts MetricCard - Full metrics array:', metrics);
+                console.log('Security Alerts MetricCard - Found metric:', metrics.find(m => m.metric === 'security_alerts'));
+                console.log('Security Alerts MetricCard - Final value:', alertValue);
+                return alertValue || 0;
+              })()}
+              icon={<ShieldExclamationIcon className="w-7 h-7 text-red-600" />}
+              variant="error"
+              valueClassName="text-2xl"
+              size="md"
+              trend={null}
+            />
+            
+            <MetricCard
+              title="Available Tools"
+              value={toolExecutions.reduce((acc, item) => {
+                // Extract unique tool names from tool executions
+                const toolName = item.dimensions?.tool_name;
+                if (toolName && !acc.includes(toolName)) {
+                  acc.push(toolName);
+                }
+                return acc;
+              }, [
+                // Add known tools from the application if tool executions data doesn't have them
+                'get_forecast', 
+                'get_alerts',
+                'get_weather',
+                'search_data', 
+                'analyze_text'
+              ]).length || metrics.find(m => m.metric === 'tools_count')?.value || 5}
+              icon={
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7 text-indigo-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="4" y="4" width="16" height="16" rx="2" />
+                  <path d="M9 9h6v6H9z" />
+                  <path d="M4 9h2" />
+                  <path d="M4 15h2" />
+                  <path d="M18 9h2" />
+                  <path d="M18 15h2" />
+                  <path d="M9 4v2" />
+                  <path d="M15 4v2" />
+                  <path d="M9 18v2" />
+                  <path d="M15 18v2" />
+                </svg>
+              }
+              variant="secondary"
+              valueClassName="text-2xl"
+              size="md"
+              trend={null}
+            />
+            
+            <MetricCard
+              title="Estimated Cost"
+              value={`$${(metrics.find(m => m.metric === 'token_usage_cost')?.value || 0.05).toFixed(2)}`}
+              icon={<CurrencyDollarIcon className="w-7 h-7 text-emerald-600" />}
+              variant="success"
+              valueClassName="text-2xl"
+              size="md"
+              trend={null}
+            />
+          </ResponsiveContainer>
         </div>
         
-        {error && (
-          <div className="bg-red-50 px-6 py-3 border-b border-red-100">
-            <Flex alignItems="center" className="gap-2 text-red-600">
-              <ExclamationTriangleIcon className="h-5 w-5" />
-              <Text className="font-medium">{error}</Text>
-            </Flex>
-          </div>
-        )}
+        {/* ResponsiveContainer removed along with System Health and LLM Requests components */}
+
+        {/* Continue with other sections... */}
         
-        {/* Real-time status bar */}
-        <div className="bg-gray-50 px-6 py-3 border-b border-gray-100 flex justify-between items-center">
-          <Flex alignItems="center" className="gap-3">
-            <div className="flex items-center">
-              <div className={`w-3 h-3 rounded-full mr-2 ${healthScore >= 90 ? 'bg-green-500' : healthScore >= 75 ? 'bg-yellow-500' : 'bg-red-500'}`}></div>
-              <Text className="font-medium">System Health: {healthScore}% ({healthStatus.status})</Text>
-            </div>
-            <div className="h-4 border-r border-gray-300 mx-2"></div>
-            <Text className="text-gray-600">
-              Last updated: {lastUpdated ? lastUpdated.toLocaleTimeString() : 'Never'}
-            </Text>
-          </Flex>
-          <Flex className="gap-6">
-            {metrics.find(m => m.metric === 'error_count')?.value > 0 && (
-              <Flex alignItems="center" className="gap-1 text-red-600">
-                <ExclamationTriangleIcon className="h-4 w-4" />
-                <Text className="font-medium">{metrics.find(m => m.metric === 'error_count')?.value} Errors</Text>
-              </Flex>
-            )}
-            <Flex alignItems="center" className="gap-1 text-blue-600">
-              <BoltIcon className="h-4 w-4" />
-              <Text className="font-medium">{metrics.find(m => m.metric === 'llm_request_count')?.value || 0} LLM Requests</Text>
-            </Flex>
-          </Flex>
+        {/* Token Usage Breakdown Section */}
+        <div className="mt-6 mb-8">
+          <TokenUsageBreakdown 
+            timeRange={timeRange}
+            className="h-full" 
+          />
         </div>
+        
+        {/* Model Usage Analytics Section */}
+        <div className="mt-6 mb-8">
+          <ModelUsageAnalytics 
+            timeRange={timeRange}
+            className="h-full"
+          />
+        </div>
+        
+        {/* Tool Usage Analysis Section */}
+        <div className="mt-6 mb-8">
+          <ToolUsageAnalysis 
+            timeRange={timeRange}
+            className="h-full"
+          />
+        </div>
+        
+        {/* Continue with the rest of the dashboard ... */}
       </div>
-
-      {/* Key Metrics Summary */}
-      <div className="grid grid-cols-1 lg:grid-cols-6 gap-6">
-        {/* Key performance indicators */}
-        <div className="lg:col-span-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-          {/* LLM Requests */}
-          <Card className="shadow-sm border border-gray-100 bg-gradient-to-b from-white to-blue-50">
-            <Flex alignItems="start" justifyContent="between">
-              <div>
-                <Text className="text-gray-500">LLM Requests</Text>
-                <Metric className="text-3xl my-1">{metrics.find(m => m.metric === 'llm_request_count')?.value || 0}</Metric>
-                <Flex alignItems="center" className="mt-1">
-                  <Badge color="blue" size="xs">
-                    {metrics.find(m => m.metric === 'llm_request_count')?.trend === 'up' ? '↑' : '↓'} 
-                    {Math.abs(metrics.find(m => m.metric === 'llm_request_count')?.change || 0).toFixed(1)}%
-                  </Badge>
-                  <Text className="text-xs text-gray-500 ml-2">vs. previous period</Text>
-                </Flex>
-              </div>
-              <div className="bg-blue-100 rounded-full p-2">
-                <BoltIcon className="h-8 w-8 text-blue-600" />
-              </div>
-            </Flex>
-            {llmRequests.length > 0 && (
-              <div className="mt-4 -mb-4 -ml-4 -mr-4">
-                <AreaChart
-                  data={prepareChartData(llmRequests)}
-                  index="date"
-                  categories={["value"]}
-                  colors={["blue"]}
-                  showAnimation={false}
-                  showLegend={false}
-                  showXAxis={false}
-                  showYAxis={false}
-                  showGridLines={false}
-                  showTooltip={false}
-                  curveType="natural"
-                  className="h-16 mt-2"
-                />
-              </div>
-            )}
-          </Card>
-          
-          {/* Token Usage */}
-          <Card className="shadow-sm border border-gray-100 bg-gradient-to-b from-white to-indigo-50">
-            <Flex alignItems="start" justifyContent="between">
-              <div>
-                <Text className="text-gray-500">Token Usage</Text>
-                <Metric className="text-3xl my-1">
-                  {metrics.find(m => m.metric === 'llm_token_usage')?.value?.toLocaleString() || 0}
-                </Metric>
-                <Flex alignItems="center" className="mt-1">
-                  <Badge color="indigo" size="xs">
-                    {metrics.find(m => m.metric === 'llm_token_usage')?.trend === 'up' ? '↑' : '↓'} 
-                    {Math.abs(metrics.find(m => m.metric === 'llm_token_usage')?.change || 0).toFixed(1)}%
-                  </Badge>
-                  <Text className="text-xs text-gray-500 ml-2">vs. previous period</Text>
-                </Flex>
-              </div>
-              <div className="bg-indigo-100 rounded-full p-2">
-                <DocumentTextIcon className="h-8 w-8 text-indigo-600" />
-              </div>
-            </Flex>
-            {tokenUsage.length > 0 && (
-              <div className="mt-4 -mb-4 -ml-4 -mr-4">
-                <AreaChart
-                  data={prepareChartData(tokenUsage)}
-                  index="date"
-                  categories={["value"]}
-                  colors={["indigo"]}
-                  showAnimation={false}
-                  showLegend={false}
-                  showXAxis={false}
-                  showYAxis={false}
-                  showGridLines={false}
-                  showTooltip={false}
-                  curveType="natural"
-                  className="h-16 mt-2"
-                />
-              </div>
-            )}
-          </Card>
-          
-          {/* Response Time */}
-          <Card className="shadow-sm border border-gray-100 bg-gradient-to-b from-white to-amber-50">
-            <Flex alignItems="start" justifyContent="between">
-              <div>
-                <Text className="text-gray-500">Avg Response Time</Text>
-                <Metric className="text-3xl my-1">
-                  {metrics.find(m => m.metric === 'llm_avg_response_time')?.value?.toLocaleString() || 0} ms
-                </Metric>
-                <Flex alignItems="center" className="mt-1">
-                  <Badge 
-                    color={metrics.find(m => m.metric === 'llm_avg_response_time')?.trend === 'down' ? 'green' : 'red'} 
-                    size="xs"
-                  >
-                    {metrics.find(m => m.metric === 'llm_avg_response_time')?.trend === 'up' ? '↑' : '↓'} 
-                    {Math.abs(metrics.find(m => m.metric === 'llm_avg_response_time')?.change || 0).toFixed(1)}%
-                  </Badge>
-                  <Text className="text-xs text-gray-500 ml-2">vs. previous period</Text>
-                </Flex>
-              </div>
-              <div className="bg-amber-100 rounded-full p-2">
-                <ClockIcon className="h-8 w-8 text-amber-600" />
-              </div>
-            </Flex>
-          </Card>
-          
-          {/* Sessions */}
-          <Card className="shadow-sm border border-gray-100 bg-gradient-to-b from-white to-emerald-50">
-            <Flex alignItems="start" justifyContent="between">
-              <div>
-                <Text className="text-gray-500">Sessions</Text>
-                <Metric className="text-3xl my-1">
-                  {metrics.find(m => m.metric === 'session_count')?.value || 0}
-                </Metric>
-                <Flex alignItems="center" className="mt-1">
-                  <Badge color="emerald" size="xs">
-                    {metrics.find(m => m.metric === 'session_count')?.trend === 'up' ? '↑' : '↓'} 
-                    {Math.abs(metrics.find(m => m.metric === 'session_count')?.change || 0).toFixed(1)}%
-                  </Badge>
-                  <Text className="text-xs text-gray-500 ml-2">vs. previous period</Text>
-                </Flex>
-              </div>
-              <div className="bg-emerald-100 rounded-full p-2">
-                <ChatBubbleLeftRightIcon className="h-8 w-8 text-emerald-600" />
-              </div>
-            </Flex>
-            {sessionCounts.length > 0 && (
-              <div className="mt-4 -mb-4 -ml-4 -mr-4">
-                <AreaChart
-                  data={prepareChartData(sessionCounts)}
-                  index="date"
-                  categories={["value"]}
-                  colors={["emerald"]}
-                  showAnimation={false}
-                  showLegend={false}
-                  showXAxis={false}
-                  showYAxis={false}
-                  showGridLines={false}
-                  showTooltip={false}
-                  curveType="natural"
-                  className="h-16 mt-2"
-                />
-              </div>
-            )}
-          </Card>
-        </div>
-
-        {/* Health & Errors Section */}
-        <div className="lg:col-span-2">
-          <Card className="shadow-sm border border-gray-100 h-full">
-            <Title>System Status</Title>
-            <Flex justifyContent="center" alignItems="center" className="mt-4 relative">
-              <DonutChart
-                data={[
-                  { name: 'Health', value: healthScore },
-                  { name: 'Remaining', value: 100 - healthScore }
-                ]}
-                showLabel={false}
-                showAnimation={true}
-                category="value"
-                index="name"
-                colors={[healthScore >= 90 ? 'green' : healthScore >= 75 ? 'yellow' : 'red', 'gray']}
-                variant="donut"
-                className="w-44 h-44 mx-auto"
-              />
-              <div className="absolute inset-0 flex flex-col justify-center items-center">
-                <Text className="text-lg font-medium">{healthStatus.status}</Text>
-                <Metric className="text-4xl">{healthScore}%</Metric>
-              </div>
-            </Flex>
-            
-            <Divider className="my-4" />
-            
-            <div className="space-y-4">
-              <Flex alignItems="center" justifyContent="between">
-                <Flex alignItems="center" className="gap-2">
-                  <div className={`p-1 rounded-full ${metrics.find(m => m.metric === 'error_count')?.value > 0 ? 'bg-red-100' : 'bg-green-100'}`}>
-                    {metrics.find(m => m.metric === 'error_count')?.value > 0 ? (
-                      <ExclamationTriangleIcon className="h-4 w-4 text-red-600" />
-                    ) : (
-                      <CheckCircleIcon className="h-4 w-4 text-green-600" />
-                    )}
-                  </div>
-                  <Text className="font-medium">Error Rate</Text>
-                </Flex>
-                <Badge 
-                  color={metrics.find(m => m.metric === 'error_count')?.value > 0 ? 'red' : 'green'}
-                  size="sm"
-                >
-                  {metrics.find(m => m.metric === 'error_count')?.value || 0} errors
-                </Badge>
-              </Flex>
-              
-              <Flex alignItems="center" justifyContent="between">
-                <Flex alignItems="center" className="gap-2">
-                  <div className={`p-1 rounded-full ${metrics.find(m => m.metric === 'llm_avg_response_time')?.value > 2000 ? 'bg-amber-100' : 'bg-green-100'}`}>
-                    {metrics.find(m => m.metric === 'llm_avg_response_time')?.value > 2000 ? (
-                      <ClockIcon className="h-4 w-4 text-amber-600" />
-                    ) : (
-                      <CheckCircleIcon className="h-4 w-4 text-green-600" />
-                    )}
-                  </div>
-                  <Text className="font-medium">Response Time</Text>
-                </Flex>
-                <Badge 
-                  color={metrics.find(m => m.metric === 'llm_avg_response_time')?.value > 2000 ? 'amber' : 'green'}
-                  size="sm"
-                >
-                  {metrics.find(m => m.metric === 'llm_avg_response_time')?.value?.toLocaleString() || 0} ms
-                </Badge>
-              </Flex>
-              
-              <Flex alignItems="center" justifyContent="between">
-                <Flex alignItems="center" className="gap-2">
-                  <div className="p-1 rounded-full bg-blue-100">
-                    <ServerIcon className="h-4 w-4 text-blue-600" />
-                  </div>
-                  <Text className="font-medium">API Status</Text>
-                </Flex>
-                <Badge color="green" size="sm">Operational</Badge>
-              </Flex>
-            </div>
-          </Card>
-        </div>
-      </div>
-
-      {/* Main Analytics Section */}
-      <TabGroup>
-        <div className="bg-white rounded-t-lg shadow-sm border border-gray-100 p-4">
-          <TabList className="gap-2">
-            <Tab className="px-4 py-2 rounded-md data-[selected=true]:bg-blue-50 data-[selected=true]:text-blue-700 hover:bg-gray-50">
-              <Flex alignItems="center" className="gap-2">
-                <ChartBarIcon className="h-5 w-5" />
-                <span>Performance Trends</span>
-              </Flex>
-            </Tab>
-            <Tab className="px-4 py-2 rounded-md data-[selected=true]:bg-blue-50 data-[selected=true]:text-blue-700 hover:bg-gray-50">
-              <Flex alignItems="center" className="gap-2">
-                <UserCircleIcon className="h-5 w-5" />
-                <span>Agent Activity</span>
-              </Flex>
-            </Tab>
-            <Tab className="px-4 py-2 rounded-md data-[selected=true]:bg-blue-50 data-[selected=true]:text-blue-700 hover:bg-gray-50">
-              <Flex alignItems="center" className="gap-2">
-                <ChartPieIcon className="h-5 w-5" />
-                <span>Metrics Breakdown</span>
-              </Flex>
-            </Tab>
-          </TabList>
-        </div>
-        
-        <div className="bg-white rounded-b-lg shadow-sm border-x border-b border-gray-100 p-6">
-          <TabPanels>
-            {/* Performance Trends Tab */}
-            <TabPanel>
-              <div className="space-y-6">
-                {/* Performance Overview */}
-                <Grid numItemsMd={2} className="gap-6">
-                  {/* LLM Requests Chart */}
-                  <Card className="shadow-sm border border-gray-100">
-                    <Flex alignItems="center" className="gap-2">
-                      <div className="bg-blue-100 p-1.5 rounded-full">
-                        <BoltIcon className="h-5 w-5 text-blue-600" />
-                      </div>
-                      <Title>LLM Requests</Title>
-                    </Flex>
-                    
-                    {llmRequests.length > 0 ? (
-                      <AreaChart
-                        className="h-72 mt-4"
-                        data={prepareChartData(llmRequests)}
-                        index="date"
-                        categories={["value"]}
-                        colors={["blue"]}
-                        valueFormatter={(value) => value.toLocaleString()}
-                        showLegend={false}
-                        showAnimation={true}
-                        curveType="natural"
-                      />
-                    ) : (
-                      <Flex justifyContent="center" alignItems="center" className="h-72 bg-gray-50 rounded-lg border border-gray-200 mt-4">
-                        <Text>No data available</Text>
-                      </Flex>
-                    )}
-                  </Card>
-                  
-                  {/* Token Usage Chart */}
-                  <Card className="shadow-sm border border-gray-100">
-                    <Flex alignItems="center" className="gap-2">
-                      <div className="bg-indigo-100 p-1.5 rounded-full">
-                        <DocumentTextIcon className="h-5 w-5 text-indigo-600" />
-                      </div>
-                      <Title>Token Usage</Title>
-                    </Flex>
-                    
-                    {tokenUsage.length > 0 ? (
-                      <AreaChart
-                        className="h-72 mt-4"
-                        data={prepareChartData(tokenUsage)}
-                        index="date"
-                        categories={["value"]}
-                        colors={["indigo"]}
-                        valueFormatter={(value) => `${value.toLocaleString()} tokens`}
-                        showLegend={false}
-                        showAnimation={true}
-                        curveType="natural"
-                      />
-                    ) : (
-                      <Flex justifyContent="center" alignItems="center" className="h-72 bg-gray-50 rounded-lg border border-gray-200 mt-4">
-                        <Text>No data available</Text>
-                      </Flex>
-                    )}
-                  </Card>
-                  
-                  {/* Tool Executions Chart */}
-                  <Card className="shadow-sm border border-gray-100">
-                    <Flex alignItems="center" className="gap-2">
-                      <div className="bg-emerald-100 p-1.5 rounded-full">
-                        <CpuChipIcon className="h-5 w-5 text-emerald-600" />
-                      </div>
-                      <Title>Tool Executions</Title>
-                    </Flex>
-                    
-                    {toolExecutions.length > 0 ? (
-                      <AreaChart
-                        className="h-72 mt-4"
-                        data={prepareChartData(toolExecutions)}
-                        index="date"
-                        categories={["value"]}
-                        colors={["emerald"]}
-                        valueFormatter={(value) => value.toLocaleString()}
-                        showLegend={false}
-                        showAnimation={true}
-                        curveType="natural"
-                      />
-                    ) : (
-                      <Flex justifyContent="center" alignItems="center" className="h-72 bg-gray-50 rounded-lg border border-gray-200 mt-4">
-                        <Text>No data available</Text>
-                      </Flex>
-                    )}
-                  </Card>
-                  
-                  {/* Sessions Chart */}
-                  <Card className="shadow-sm border border-gray-100">
-                    <Flex alignItems="center" className="gap-2">
-                      <div className="bg-green-100 p-1.5 rounded-full">
-                        <ChatBubbleLeftRightIcon className="h-5 w-5 text-green-600" />
-                      </div>
-                      <Title>Sessions</Title>
-                    </Flex>
-                    
-                    {sessionCounts.length > 0 ? (
-                      <AreaChart
-                        className="h-72 mt-4"
-                        data={prepareChartData(sessionCounts)}
-                        index="date"
-                        categories={["value"]}
-                        colors={["green"]}
-                        valueFormatter={(value) => value.toLocaleString()}
-                        showLegend={false}
-                        showAnimation={true}
-                        curveType="natural"
-                      />
-                    ) : (
-                      <Flex justifyContent="center" alignItems="center" className="h-72 bg-gray-50 rounded-lg border border-gray-200 mt-4">
-                        <Text>No data available</Text>
-                      </Flex>
-                    )}
-                  </Card>
-                </Grid>
-              </div>
-            </TabPanel>
-            
-            {/* Agent Activity Tab */}
-            <TabPanel>
-              <div className="space-y-6">
-                <Flex alignItems="center" className="gap-2">
-                  <div className="bg-blue-100 p-1.5 rounded-full">
-                    <UserCircleIcon className="h-5 w-5 text-blue-600" />
-                  </div>
-                  <Title>Top Performing Agents</Title>
-                </Flex>
-                
-                {topAgents.length === 0 ? (
-                  <Card className="shadow-sm border border-gray-100">
-                    <Flex justifyContent="center" alignItems="center" className="py-12 bg-gray-50 rounded-lg">
-                      <Text>No agent data available.</Text>
-                    </Flex>
-                  </Card>
-                ) : (
-                  <Grid numItemsMd={12} className="gap-6">
-                    {/* Agent Activity Overview */}
-                    <Card className="md:col-span-4 shadow-sm border border-gray-100">
-                      <Title>Agent Overview</Title>
-                      
-                      <div className="mt-4 space-y-4">
-                        {topAgents.slice(0, 3).map((agent, index) => (
-                          <div key={agent.agent_id} className={`p-4 rounded-lg ${index === 0 ? 'bg-blue-50 border border-blue-100' : 'bg-gray-50 border border-gray-100'}`}>
-                            <Flex justifyContent="between" alignItems="start">
-                              <div>
-                                <Text className="font-medium">{agent.name}</Text>
-                                <Flex className="mt-1 gap-2">
-                                  <Badge color="slate" size="xs">{agent.type}</Badge>
-                                  <StatusBadge status={agent.status} />
-                                </Flex>
-                              </div>
-                              <Flex direction="col" className="text-right">
-                                <Text className="text-lg font-semibold">{agent.request_count}</Text>
-                                <Text className="text-xs text-gray-500">requests</Text>
-                              </Flex>
-                            </Flex>
-                            
-                            <Grid numItemsMd={3} className="mt-3 gap-2">
-                              <div className="bg-white rounded p-2 border border-gray-200">
-                                <Flex alignItems="center" className="gap-1">
-                                  <BoltIcon className="h-3 w-3 text-blue-500" />
-                                  <Text className="text-xs">Requests</Text>
-                                </Flex>
-                                <Text className="font-medium">{formatNumber(agent.request_count)}</Text>
-                              </div>
-                              
-                              <div className="bg-white rounded p-2 border border-gray-200">
-                                <Flex alignItems="center" className="gap-1">
-                                  <DocumentTextIcon className="h-3 w-3 text-indigo-500" />
-                                  <Text className="text-xs">Tokens</Text>
-                                </Flex>
-                                <Text className="font-medium">{formatNumber(agent.token_usage)}</Text>
-                              </div>
-                              
-                              <div className="bg-white rounded p-2 border border-gray-200">
-                                <Flex alignItems="center" className="gap-1">
-                                  <ExclamationTriangleIcon className="h-3 w-3 text-red-500" />
-                                  <Text className="text-xs">Errors</Text>
-                                </Flex>
-                                <Text className="font-medium">{formatNumber(agent.error_count)}</Text>
-                              </div>
-                            </Grid>
-                          </div>
-                        ))}
-                      </div>
-                      
-                      <Flex justifyContent="center" className="mt-4">
-                        <Link href="/agents">
-                          <Button variant="light" color="blue" size="sm" icon={ChevronDoubleRightIcon} iconPosition="right">
-                            View all agents
-                          </Button>
-                        </Link>
-                      </Flex>
-                    </Card>
-                    
-                    {/* Agent Comparison Chart */}
-                    <Card className="md:col-span-8 shadow-sm border border-gray-100">
-                      <Title>Performance Comparison</Title>
-                      
-                      <div className="mt-4">
-                        <BarChart
-                          className="h-80"
-                          data={getAgentComparisonData()}
-                          index="name"
-                          categories={["Requests", "Tokens"]}
-                          colors={["blue", "indigo"]}
-                          valueFormatter={(value) => value.toLocaleString()}
-                          stack={false}
-                          showLegend={true}
-                          showAnimation={true}
-                        />
-                      </div>
-                      
-                      <Divider className="my-4" />
-                      
-                      <Table>
-                        <TableHead>
-                          <TableRow>
-                            <TableHeaderCell>Agent</TableHeaderCell>
-                            <TableHeaderCell>Type</TableHeaderCell>
-                            <TableHeaderCell>Status</TableHeaderCell>
-                            <TableHeaderCell>Metrics</TableHeaderCell>
-                            <TableHeaderCell>Action</TableHeaderCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {topAgents.map((agent) => (
-                            <TableRow key={agent.agent_id} className="hover:bg-gray-50">
-                              <TableCell>
-                                <Text className="font-medium">{agent.name}</Text>
-                              </TableCell>
-                              <TableCell>
-                                <Badge color="slate">{agent.type}</Badge>
-                              </TableCell>
-                              <TableCell>
-                                <StatusBadge status={agent.status} />
-                              </TableCell>
-                              <TableCell>
-                                <Flex alignItems="center" className="gap-2">
-                                  <Flex alignItems="center" className="gap-1">
-                                    <BoltIcon className="h-4 w-4 text-blue-500" />
-                                    <Text className="text-sm">{formatNumber(agent.request_count)}</Text>
-                                  </Flex>
-                                  <div className="h-4 border-r border-gray-200"></div>
-                                  <Flex alignItems="center" className="gap-1">
-                                    <DocumentTextIcon className="h-4 w-4 text-indigo-500" />
-                                    <Text className="text-sm">{formatNumber(agent.token_usage)}</Text>
-                                  </Flex>
-                                  {agent.error_count > 0 && (
-                                    <>
-                                      <div className="h-4 border-r border-gray-200"></div>
-                                      <Flex alignItems="center" className="gap-1">
-                                        <ExclamationTriangleIcon className="h-4 w-4 text-red-500" />
-                                        <Text className="text-sm">{formatNumber(agent.error_count)}</Text>
-                                      </Flex>
-                                    </>
-                                  )}
-                                </Flex>
-                              </TableCell>
-                              <TableCell>
-                                <Link href={`/agents/${agent.agent_id}`}>
-                                  <Button variant="light" color="blue" size="xs">
-                                    Details
-                                  </Button>
-                                </Link>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </Card>
-                  </Grid>
-                )}
-              </div>
-            </TabPanel>
-            
-            {/* Metrics Breakdown Tab */}
-            <TabPanel>
-              <div className="space-y-6">
-                <Flex alignItems="center" className="gap-2">
-                  <div className="bg-blue-100 p-1.5 rounded-full">
-                    <ChartPieIcon className="h-5 w-5 text-blue-600" />
-                  </div>
-                  <Title>Performance Metrics</Title>
-                </Flex>
-                
-                <Grid numItemsMd={2} className="gap-6">
-                  {Object.entries(getMetricsByCategory()).map(([category, categoryMetrics]) => (
-                    <Card key={category} className="shadow-sm border border-gray-100">
-                      <div className="flex items-center gap-2">
-                        {category === 'LLM' && <div className="p-1.5 rounded-full bg-blue-100"><BoltIcon className="h-5 w-5 text-blue-600" /></div>}
-                        {category === 'Tools' && <div className="p-1.5 rounded-full bg-emerald-100"><CpuChipIcon className="h-5 w-5 text-emerald-600" /></div>}
-                        {category === 'Sessions' && <div className="p-1.5 rounded-full bg-green-100"><ChatBubbleLeftRightIcon className="h-5 w-5 text-green-600" /></div>}
-                        {category === 'Performance' && <div className="p-1.5 rounded-full bg-amber-100"><ClockIcon className="h-5 w-5 text-amber-600" /></div>}
-                        {category === 'Errors' && <div className="p-1.5 rounded-full bg-red-100"><ExclamationTriangleIcon className="h-5 w-5 text-red-600" /></div>}
-                        {category === 'Other' && <div className="p-1.5 rounded-full bg-gray-100"><ChartBarIcon className="h-5 w-5 text-gray-600" /></div>}
-                        <Title>{category}</Title>
-                      </div>
-                      
-                      <List className="mt-4 divide-y divide-gray-100">
-                        {categoryMetrics.map((metric) => (
-                          <ListItem key={metric.metric} className="py-4">
-                            <Flex justifyContent="between" alignItems="center">
-                              <Flex alignItems="center" className="gap-2">
-                                <div className={`p-1.5 rounded-full bg-${getMetricColor(metric.metric)}-100`}>
-                                  {getMetricIcon(metric.metric)}
-                                </div>
-                                <div>
-                                  <Text className="font-medium">{formatMetricName(metric.metric)}</Text>
-                                  <Metric className="text-xl">{formatMetricValue(metric.metric, metric.value)}</Metric>
-                                </div>
-                              </Flex>
-                              <Badge 
-                                color={isPositiveTrend(metric.metric, metric.trend) ? 'green' : 'red'}
-                                size="sm"
-                              >
-                                {metric.trend === 'up' ? '↑' : '↓'} {Math.abs(metric.change).toFixed(1)}%
-                              </Badge>
-                            </Flex>
-                          </ListItem>
-                        ))}
-                      </List>
-                    </Card>
-                  ))}
-                </Grid>
-              </div>
-            </TabPanel>
-          </TabPanels>
-        </div>
-      </TabGroup>
     </div>
-  );
+  )
 }

@@ -11,6 +11,9 @@ import {
 import { useDataUpdates } from '../lib/hooks/useDataUpdates';
 import { DataUpdateType } from '../../src/lib/db/data-update-service';
 import { ConnectionStatus } from './ConnectionStatus';
+import { fetchAPI } from '../lib/api';
+import LoadingState from './LoadingState';
+import EmptyState from './EmptyState';
 
 // Define metric data type
 export interface MetricsData {
@@ -173,26 +176,26 @@ export default function DashboardMetrics({
 
   // Show loading skeleton if loading
   if (isLoading) {
-    return (
-      <div className={`space-y-6 ${className}`}>
-        <Grid numItemsMd={2} numItemsLg={4} className="gap-6">
-          {[1, 2, 3, 4].map((i) => (
-            <Card key={i} className={`animate-pulse ${cardClassName}`} data-testid="metric-skeleton">
-              <div className="h-8 bg-gray-200 rounded mb-2 w-1/2"></div>
-              <div className="h-10 bg-gray-300 rounded w-1/3"></div>
-            </Card>
-          ))}
-        </Grid>
-      </div>
-    );
+    return <LoadingState variant="skeleton" contentType="metrics" />
   }
 
   // Show empty state if no data
   if (!data && !metrics.totalRequests) {
     return (
-      <div className={`p-6 text-center ${className}`}>
-        <p className="text-lg text-gray-500">No metrics available</p>
-      </div>
+      <EmptyState 
+        contentType="metrics"
+        actionText="Refresh Metrics"
+        onAction={() => {
+          // Use the existing fetchMetrics function from this component
+          const refreshData = async () => {
+            setLoading(true);
+            const newData = await fetchMetrics();
+            setMetrics(newData);
+            setLoading(false);
+          };
+          refreshData();
+        }}
+      />
     );
   }
 

@@ -34,6 +34,7 @@ import Link from 'next/link';
 import { EventDetail } from './EventDetail';
 import { fetchAPI, buildQueryParams } from '../lib/api';
 import { TELEMETRY } from '../lib/api-endpoints';
+import { formatISOToLocalDisplay, formatChartDate as formatChartTimestamp } from '../lib/dateUtils';
 
 // Define types based on new API
 type Event = {
@@ -109,9 +110,34 @@ export function EventsDashboard() {
       // Build query parameters
       const params: Record<string, any> = {
         page,
-        page_size: pagination.page_size,
-        time_range: timeRange
+        page_size: pagination.page_size
       };
+      
+      // Use from_time and to_time instead of time_range for precise control
+      // Get date range with ISO 8601 UTC format
+      const currentTime = new Date();
+      let startDate = new Date();
+      
+      switch (timeRange) {
+        case '1h':
+          startDate.setHours(startDate.getHours() - 1);
+          break;
+        case '1d':
+          startDate.setDate(startDate.getDate() - 1);
+          break;
+        case '7d':
+          startDate.setDate(startDate.getDate() - 7);
+          break;
+        case '30d':
+          startDate.setDate(startDate.getDate() - 30);
+          break;
+        default:
+          startDate.setDate(startDate.getDate() - 7);
+      }
+      
+      // Set from_time and to_time in ISO 8601 UTC format
+      params.from_time = startDate.toISOString();
+      params.to_time = currentTime.toISOString();
       
       // Add filters if specified
       if (typeFilter !== 'all') params.event_name = typeFilter;
@@ -309,26 +335,12 @@ export function EventsDashboard() {
 
   // Format the timestamp
   const formatTimestamp = (timestamp: string) => {
-    try {
-      const date = new Date(timestamp);
-      return date.toLocaleString();
-    } catch (e) {
-      return 'Invalid date';
-    }
+    return formatISOToLocalDisplay(timestamp);
   };
 
   // Format date for charts
   const formatChartDate = (timestamp: string, range: string) => {
-    const date = new Date(timestamp);
-    
-    switch (range) {
-      case '1h':
-        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      case '1d':
-        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      default:
-        return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-    }
+    return formatChartTimestamp(timestamp, range);
   };
 
   // Transform time series data for charts

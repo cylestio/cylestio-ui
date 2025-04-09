@@ -23,7 +23,7 @@ export const DASHBOARD = {
 export const SECURITY = {
   ALERTS: '/v1/security/alerts',
   ALERT_DETAIL: (id: string) => `/v1/security/alerts/${id}`,
-  ALERT_COUNT: '/v1/metrics/security/alert_count',
+  ALERT_COUNT: '/v1/alerts/count',
   SEVERITY: '/v1/metrics/security/severity',
   TYPES: '/v1/metrics/security/types',
   STATUS: '/v1/metrics/security/status',
@@ -49,11 +49,18 @@ export const METRICS = {
   LLM_USAGE: '/v1/metrics/llms',
   LLM_REQUESTS: '/v1/metrics/llms/requests',
   
+  // New LLM metrics
+  LLM_ANALYTICS: '/v1/metrics/llm/analytics',
+  LLM_MODELS: '/v1/metrics/llm/models',
+  LLM_USAGE_TRENDS: '/v1/metrics/llm/usage_trends',
+  LLM_AGENT_USAGE: '/v1/metrics/llm/agent_usage',
+  LLM_AGENT_MODEL_RELATIONSHIPS: '/v1/metrics/llm/agent_model_relationships',
+  
   // Tool metrics
-  TOOL_EXECUTION_COUNT: '/v1/metrics/tool/execution_count',
   TOOL_SUCCESS_RATE: '/v1/metrics/tool/success_rate',
   TOOL_USAGE: '/v1/metrics/tools',
   TOOL_EXECUTIONS: '/v1/metrics/tools/executions',
+  TOOL_INTERACTIONS: '/v1/metrics/tool_interactions',
   
   // Session metrics
   SESSION_COUNT: '/v1/metrics/session/count',
@@ -64,6 +71,7 @@ export const METRICS = {
   
   // Token metrics
   TOKEN_USAGE: '/v1/metrics/tokens',
+  TOKEN_USAGE_COST: '/v1/metrics/pricing/token_usage_cost',
   
   // Performance metrics
   PERFORMANCE: '/v1/metrics/performance',

@@ -70,7 +70,13 @@ export function buildQueryParams(params: Record<string, any>): string {
   // Add each parameter to the query string if it has a value
   Object.entries(params).forEach(([key, value]) => {
     if (value !== undefined && value !== null && value !== '') {
-      queryParams.append(key, String(value));
+      // Ensure time parameters are in ISO 8601 format with UTC timezone
+      if ((key === 'from_time' || key === 'to_time' || key === 'from' || key === 'to') && value instanceof Date) {
+        // Convert Date objects to ISO 8601 string with UTC timezone
+        queryParams.append(key, value.toISOString());
+      } else {
+        queryParams.append(key, String(value));
+      }
     }
   });
   

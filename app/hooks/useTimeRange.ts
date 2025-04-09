@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { formatTimeRangeToUTC, formatDateToUTC } from '../lib/dateUtils';
 
 type TimeRange = '24h' | '7d' | '30d' | 'custom';
 
@@ -11,6 +12,10 @@ interface UseTimeRangeReturn {
   setRange: (range: TimeRange) => void;
   startTime: Date;
   endTime: Date;
+  startTimeUTC: string;
+  endTimeUTC: string;
+  from_time: string; // ISO 8601 UTC for API
+  to_time: string;   // ISO 8601 UTC for API
   setCustomTimeRange: (start: Date, end: Date) => void;
 }
 
@@ -21,7 +26,7 @@ export function useTimeRange(options: TimeRangeOptions = {}): UseTimeRangeReturn
   const [customStart, setCustomStart] = useState<Date | null>(null);
   const [customEnd, setCustomEnd] = useState<Date | null>(null);
   
-  const { startTime, endTime } = useMemo(() => {
+  const { startTime, endTime, from_time, to_time } = useMemo(() => {
     const end = new Date();
     let start = new Date();
     
@@ -38,11 +43,18 @@ export function useTimeRange(options: TimeRangeOptions = {}): UseTimeRangeReturn
       case 'custom':
         return {
           startTime: customStart || start,
-          endTime: customEnd || end
+          endTime: customEnd || end,
+          ...formatTimeRangeToUTC(customStart || start, customEnd || end)
         };
     }
     
-    return { startTime: start, endTime: end };
+    const timeRange = formatTimeRangeToUTC(start, end);
+    return { 
+      startTime: start, 
+      endTime: end,
+      from_time: timeRange.from_time,
+      to_time: timeRange.to_time
+    };
   }, [range, customStart, customEnd]);
   
   const setCustomTimeRange = (start: Date, end: Date) => {
@@ -56,6 +68,10 @@ export function useTimeRange(options: TimeRangeOptions = {}): UseTimeRangeReturn
     setRange,
     startTime,
     endTime,
+    startTimeUTC: from_time,
+    endTimeUTC: to_time,
+    from_time,
+    to_time,
     setCustomTimeRange
   };
 } 
