@@ -1,88 +1,85 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Card, Title, Text, Select, SelectItem } from '@tremor/react';
+import React, { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { 
+  Card, 
+  Title, 
+  Text, 
+  Grid, 
+  Flex,
+  Badge,
+  Divider,
+  Metric,
+  Tab,
+  TabGroup,
+  TabList,
+  TabPanel,
+  TabPanels,
+  Select,
+  SelectItem
+} from '@tremor/react';
+import { 
+  UserCircleIcon, 
+  ExclamationTriangleIcon
+} from '@heroicons/react/24/outline';
+
 import BreadcrumbNavigation from '../drilldown/BreadcrumbNavigation';
-import { AgentHeader } from './AgentHeader';
-import { AgentMetricsDashboard } from './AgentMetricsDashboard';
-import { AgentSessionsTable } from './AgentSessionsTable';
-import { AgentToolUsage } from './AgentToolUsage';
-import { AgentLLMUsage } from './AgentLLMUsage';
 import LoadingState from '../LoadingState';
 import ErrorMessage from '../ErrorMessage';
-
-// Types from the API
-type Agent = {
-  agent_id: string;
-  name: string;
-  type: string;
-  status: string;
-  description?: string;
-  created_at: string;
-  updated_at: string;
-  configuration?: Record<string, any>;
-  metrics?: {
-    request_count: number;
-    token_usage: number;
-    error_count: number;
-    avg_response_time?: number;
-    success_rate?: number;
-    cost_estimate?: number;
-    session_count?: number;
-    avg_session_duration?: number;
-    top_tools?: { name: string; count: number }[];
-  };
-};
-
-type DashboardMetric = {
-  metric: string;
-  value: number;
-  change: number;
-  trend: 'up' | 'down' | 'stable';
-};
-
-type TimeRangeOption = '24h' | '7d' | '30d';
+import { AgentMetricsDashboard } from './AgentMetricsDashboard';
+import { AgentSessionsTable } from './AgentSessionsTable';
+import { AgentLLMUsage } from './AgentLLMUsage';
+import { AgentToolUsage } from './AgentToolUsage';
+import { fetchAPI } from '../../lib/api';
+import { AGENTS } from '../../lib/api-endpoints';
+import { Agent, TimeRangeOption } from '../../types/agent';
+import appSettings from '../../config/app-settings';
 
 interface AgentDetailContainerProps {
   agentId: string;
 }
 
 export function AgentDetailContainer({ agentId }: AgentDetailContainerProps) {
-  // State for agent data
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [agent, setAgent] = useState<Agent | null>(null);
-  const [dashboardMetrics, setDashboardMetrics] = useState<DashboardMetric[]>([]);
-  
-  // UI state
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [timeRange, setTimeRange] = useState<TimeRangeOption>('7d');
-  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+  const [timeRange, setTimeRange] = useState<TimeRangeOption>(
+    (searchParams.get('time_range') as TimeRangeOption) || 
+    appSettings.timeRanges.default as TimeRangeOption
+  );
 
-  // Fetch agent data
+  // Function to handle time range changes
+  const handleTimeRangeChange = (value: string) => {
+    setTimeRange(value as TimeRangeOption);
+  };
+
   useEffect(() => {
     const fetchAgentData = async () => {
+      if (!agentId) return;
+
+      setLoading(true);
       try {
-        setLoading(true);
-        setError(null);
+        // Include time range in request
+        const params = { time_range: timeRange };
+        const queryString = new URLSearchParams(params).toString();
+        const endpoint = `${AGENTS.DETAIL(agentId)}${queryString ? `?${queryString}` : ''}`;
         
-        // Fetch agent details
-        const agentResponse = await fetch(`/api/agents/${agentId}`);
-        if (!agentResponse.ok) {
-          throw new Error(`Failed to fetch agent: ${agentResponse.statusText}`);
-        }
-        const agentData: Agent = await agentResponse.json();
-        setAgent(agentData);
+        const data = await fetchAPI<Agent>(endpoint);
         
-        // Fetch dashboard metrics
-        const dashboardResponse = await fetch(`/api/agents/${agentId}/dashboard?time_range=${timeRange}`);
-        if (dashboardResponse.ok) {
-          const dashboardData = await dashboardResponse.json();
-          setDashboardMetrics(dashboardData.metrics || []);
-        }
-        
-        setLastUpdated(new Date());
+        // Normalize agent data structure for consistent usage
+        // Ensure metrics properties are accessible directly if needed
+        setAgent({
+          ...data,
+          request_count: data.request_count || data.metrics?.request_count || 0,
+          token_usage: data.token_usage || data.metrics?.token_usage || 0,
+          error_count: data.error_count || data.metrics?.error_count || 0
+        });
       } catch (err: any) {
-        setError(err.message || 'An error occurred while fetching agent data');
+        console.error('Error fetching agent details:', err);
+        setError(err.message || 'Failed to load agent details');
       } finally {
         setLoading(false);
       }
@@ -91,35 +88,58 @@ export function AgentDetailContainer({ agentId }: AgentDetailContainerProps) {
     fetchAgentData();
   }, [agentId, timeRange]);
 
-  // Handle time range change
-  const handleTimeRangeChange = (value: string) => {
-    setTimeRange(value as TimeRangeOption);
-  };
-
   if (loading) {
     return <LoadingState message="Loading agent details..." />;
   }
 
   if (error) {
-    return <ErrorMessage message={error} />;
+    return (
+      <ErrorMessage 
+        message={error} 
+        onRetry={() => {
+          setError(null);
+          setLoading(true);
+          router.refresh();
+        }} 
+      />
+    );
   }
 
   if (!agent) {
-    return <ErrorMessage message="Agent not found" />;
+    return (
+      <div className="p-4 md:p-6">
+        <Card className="mx-auto max-w-lg">
+          <div className="text-center">
+            <ExclamationTriangleIcon className="h-12 w-12 mx-auto text-amber-500 mb-4" />
+            <Title>Agent Not Found</Title>
+            <Text className="mt-2 mb-4">The agent with ID {agentId} was not found.</Text>
+            <button 
+              onClick={() => router.push('/agents')}
+              className="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded"
+            >
+              Go to Agent Explorer
+            </button>
+          </div>
+        </Card>
+      </div>
+    );
   }
 
   return (
-    <div>
+    <div className="p-4 md:p-6">
+      {/* Breadcrumb Navigation */}
       <BreadcrumbNavigation
         items={[
+          { label: 'Home', href: '/' },
           { label: 'Agents', href: '/agents' },
-          { label: agent.name, href: `/agents/${agentId}` },
+          { label: agent.name, current: true }
         ]}
-        preserveFilters
+        className="mb-4"
       />
       
-      <div className="mb-6 flex justify-between items-center">
-        <Title className="text-2xl font-bold">Agent Details</Title>
+      {/* Time Range Selector and Title Row */}
+      <div className="flex justify-between items-center mb-6">
+        <Title className="text-2xl font-bold">{agent.name}</Title>
         <div className="w-40">
           <Select value={timeRange} onValueChange={handleTimeRangeChange}>
             <SelectItem value="24h">Last 24 hours</SelectItem>
@@ -129,28 +149,93 @@ export function AgentDetailContainer({ agentId }: AgentDetailContainerProps) {
         </div>
       </div>
       
-      <div className="space-y-6">
-        <AgentHeader agent={agent} lastUpdated={lastUpdated} />
+      {/* Agent Header Card */}
+      <Card className="mb-6">
+        <Flex justifyContent="between" alignItems="center">
+          <Flex alignItems="center">
+            <div className="bg-primary-50 p-3 rounded-full mr-4">
+              <UserCircleIcon className="h-6 w-6 text-primary-500" />
+            </div>
+            <div>
+              <Text>{agent.type || 'Other'} Agent</Text>
+              <Text className="text-gray-500">Last active {new Date(agent.updated_at).toLocaleString()}</Text>
+            </div>
+          </Flex>
+          
+          <Badge color={agent.status === 'active' ? 'green' : 'gray'} size="xl">
+            {agent.status === 'active' ? 'Active' : 'Inactive'}
+          </Badge>
+        </Flex>
         
-        <AgentMetricsDashboard 
-          agent={agent} 
-          metrics={dashboardMetrics} 
-          agentId={agentId} 
-        />
+        {agent.description && (
+          <>
+            <Divider className="my-4" />
+            <Text>{agent.description}</Text>
+          </>
+        )}
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Card>
-            <AgentToolUsage agentId={agentId} timeRange={timeRange} />
+        <Divider className="my-4" />
+        
+        <Grid numItemsMd={2} numItemsLg={4} className="gap-4">
+          <Card decoration="top" decorationColor="blue">
+            <Text>Total Requests</Text>
+            <Metric>{agent.request_count.toLocaleString()}</Metric>
           </Card>
-          <Card>
+          
+          <Card decoration="top" decorationColor="emerald">
+            <Text>Success Rate</Text>
+            <Metric>
+              {agent.metrics?.success_rate 
+                ? `${agent.metrics.success_rate}%` 
+                : agent.request_count > 0 && agent.error_count > 0 
+                  ? `${Math.round(((agent.request_count - agent.error_count) / agent.request_count) * 100)}%` 
+                  : 'N/A'}
+            </Metric>
+          </Card>
+          
+          <Card decoration="top" decorationColor="amber">
+            <Text>Token Usage</Text>
+            <Metric>{agent.token_usage.toLocaleString()}</Metric>
+          </Card>
+          
+          <Card decoration="top" decorationColor="red">
+            <Text>Errors</Text>
+            <Metric>{agent.error_count.toLocaleString()}</Metric>
+          </Card>
+        </Grid>
+      </Card>
+      
+      {/* Agent Details Tabs */}
+      <TabGroup className="mb-6">
+        <TabList>
+          <Tab>Overview</Tab>
+          <Tab>Sessions</Tab>
+          <Tab>LLM Usage</Tab>
+          <Tab>Tools</Tab>
+        </TabList>
+        
+        <TabPanels>
+          {/* Overview Panel */}
+          <TabPanel>
+            <AgentMetricsDashboard agentId={agentId} timeRange={timeRange} />
+          </TabPanel>
+          
+          {/* Sessions Panel */}
+          <TabPanel>
+            <AgentSessionsTable agentId={agentId} timeRange={timeRange} />
+          </TabPanel>
+          
+          {/* LLM Usage Panel */}
+          <TabPanel>
             <AgentLLMUsage agentId={agentId} timeRange={timeRange} />
-          </Card>
-        </div>
-        
-        <Card>
-          <AgentSessionsTable agentId={agentId} timeRange={timeRange} />
-        </Card>
-      </div>
+          </TabPanel>
+          
+          {/* Tools Panel */}
+          <TabPanel>
+            <AgentToolUsage agentId={agentId} timeRange={timeRange} />
+          </TabPanel>
+        </TabPanels>
+      </TabGroup>
     </div>
   );
 } 

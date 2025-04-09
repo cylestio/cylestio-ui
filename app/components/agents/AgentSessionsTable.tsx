@@ -11,8 +11,10 @@ import {
   ChevronRightIcon
 } from '@heroicons/react/24/outline';
 import Link from 'next/link';
-import LoadingState from '@/app/components/LoadingState';
-import ErrorMessage from '@/app/components/ErrorMessage';
+import LoadingState from '../../components/LoadingState';
+import ErrorMessage from '../../components/ErrorMessage';
+import { fetchAPI } from '../../lib/api';
+import { AGENTS } from '../../lib/api-endpoints';
 
 // Types
 type Session = {
@@ -58,15 +60,16 @@ export function AgentSessionsTable({ agentId, timeRange }: AgentSessionsTablePro
         setLoading(true);
         setError(null);
         
-        const response = await fetch(
-          `/api/agents/${agentId}/sessions?time_range=${timeRange}&page=${pagination.page}&page_size=${pagination.page_size}`
+        const data = await fetchAPI<{
+          items: Session[];
+          page: number;
+          page_size: number;
+          total_items: number;
+          total_pages: number;
+        }>(
+          `${AGENTS.SESSIONS(agentId)}?time_range=${timeRange}&page=${pagination.page}&page_size=${pagination.page_size}`
         );
         
-        if (!response.ok) {
-          throw new Error(`Failed to fetch sessions: ${response.statusText}`);
-        }
-        
-        const data = await response.json();
         setSessions(data.items || []);
         setPagination({
           page: data.page || 1,
@@ -104,13 +107,41 @@ export function AgentSessionsTable({ agentId, timeRange }: AgentSessionsTablePro
   const StatusBadge = ({ status }: { status: string }) => {
     switch (status.toLowerCase()) {
       case 'completed':
-        return <Badge icon={CheckCircleIcon} color="green">Completed</Badge>;
+        return (
+          <Badge color="green">
+            <div className="flex items-center gap-1">
+              <CheckCircleIcon className="h-4 w-4" />
+              <span>Completed</span>
+            </div>
+          </Badge>
+        );
       case 'active':
-        return <Badge icon={ClockIcon} color="blue">Active</Badge>;
+        return (
+          <Badge color="blue">
+            <div className="flex items-center gap-1">
+              <ClockIcon className="h-4 w-4" />
+              <span>Active</span>
+            </div>
+          </Badge>
+        );
       case 'error':
-        return <Badge icon={XCircleIcon} color="red">Error</Badge>;
+        return (
+          <Badge color="red">
+            <div className="flex items-center gap-1">
+              <XCircleIcon className="h-4 w-4" />
+              <span>Error</span>
+            </div>
+          </Badge>
+        );
       case 'warning':
-        return <Badge icon={ExclamationTriangleIcon} color="amber">Warning</Badge>;
+        return (
+          <Badge color="amber">
+            <div className="flex items-center gap-1">
+              <ExclamationTriangleIcon className="h-4 w-4" />
+              <span>Warning</span>
+            </div>
+          </Badge>
+        );
       default:
         return <Badge color="gray">{status}</Badge>;
     }
@@ -186,11 +217,13 @@ export function AgentSessionsTable({ agentId, timeRange }: AgentSessionsTablePro
                 <Link href={`/agents/${agentId}/sessions/${session.session_id}`}>
                   <Button 
                     variant="light" 
-                    icon={ChevronRightIcon} 
                     color="blue"
                     size="xs"
                   >
-                    Details
+                    <div className="flex items-center gap-1">
+                      <ChevronRightIcon className="h-4 w-4" />
+                      <span>Details</span>
+                    </div>
                   </Button>
                 </Link>
               </TableCell>
@@ -228,8 +261,11 @@ export function AgentSessionsTable({ agentId, timeRange }: AgentSessionsTablePro
       
       <div className="mt-4 text-right">
         <Link href={`/agents/${agentId}/sessions`}>
-          <Button variant="light" icon={ArrowPathIcon}>
-            View All Sessions
+          <Button variant="light">
+            <div className="flex items-center gap-1">
+              <ArrowPathIcon className="h-4 w-4" />
+              <span>View All Sessions</span>
+            </div>
           </Button>
         </Link>
       </div>

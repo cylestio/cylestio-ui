@@ -4,8 +4,10 @@ import { useState, useEffect } from 'react';
 import { Title, Text, DonutChart, ProgressBar, Flex, Metric, Legend } from '@tremor/react';
 import { CommandLineIcon } from '@heroicons/react/24/outline';
 import Link from 'next/link';
-import LoadingState from '@/app/components/LoadingState';
-import ErrorMessage from '@/app/components/ErrorMessage';
+import LoadingState from '../../components/LoadingState';
+import ErrorMessage from '../../components/ErrorMessage';
+import { fetchAPI } from '../../lib/api';
+import { AGENTS } from '../../lib/api-endpoints';
 
 // Types
 type ToolUsage = {
@@ -36,13 +38,10 @@ export function AgentToolUsage({ agentId, timeRange }: AgentToolUsageProps) {
         setLoading(true);
         setError(null);
         
-        const response = await fetch(`/api/agents/${agentId}/tools?time_range=${timeRange}`);
+        const data = await fetchAPI<{ items: ToolUsage[] }>(
+          `${AGENTS.TOOL_USAGE(agentId)}?time_range=${timeRange}`
+        );
         
-        if (!response.ok) {
-          throw new Error(`Failed to fetch tool usage: ${response.statusText}`);
-        }
-        
-        const data = await response.json();
         setToolUsage(data.items || []);
       } catch (err: any) {
         setError(err.message || 'An error occurred while fetching tool usage');

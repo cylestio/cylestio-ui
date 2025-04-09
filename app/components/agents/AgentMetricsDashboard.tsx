@@ -1,8 +1,11 @@
 'use client';
 
 import { Grid, Title, Text } from '@tremor/react';
-import DrilldownMetricCard from '@/app/components/drilldown/DrilldownMetricCard';
+import DrilldownMetricCard from '../../components/drilldown/DrilldownMetricCard';
 import { ClockIcon, UserGroupIcon, CommandLineIcon, CurrencyDollarIcon, ExclamationTriangleIcon, ChatBubbleBottomCenterTextIcon } from '@heroicons/react/24/outline';
+import { useState, useEffect } from 'react';
+import { fetchAPI } from '../../lib/api';
+import { AGENTS } from '../../lib/api-endpoints';
 
 // Types
 type Agent = {
@@ -35,15 +38,62 @@ type DashboardMetric = {
 };
 
 interface AgentMetricsDashboardProps {
-  agent: Agent;
-  metrics: DashboardMetric[];
+  agent?: Agent;
+  metrics?: DashboardMetric[];
   agentId: string;
+  timeRange?: string;
 }
 
-export function AgentMetricsDashboard({ agent, metrics, agentId }: AgentMetricsDashboardProps) {
+export function AgentMetricsDashboard({ agent, metrics = [], agentId, timeRange }: AgentMetricsDashboardProps) {
+  // Placeholder dashboard data in case we don't have agent or metrics
+  const [loading, setLoading] = useState(true);
+  const [dashboardData, setDashboardData] = useState<DashboardMetric[]>([]);
+  const [agentData, setAgentData] = useState<Agent | null>(null);
+
+  // Fetch dashboard data if not provided
+  useEffect(() => {
+    if (!agent || metrics.length === 0) {
+      const fetchDashboardData = async () => {
+        try {
+          // Fetch dashboard metrics if not provided
+          const response = await fetchAPI<{ metrics: DashboardMetric[] }>(
+            `${AGENTS.DASHBOARD(agentId)}?time_range=${timeRange || '7d'}`
+          );
+          setDashboardData(response.metrics || []);
+          
+          // Fetch agent data if not provided
+          if (!agent) {
+            const agentResponse = await fetchAPI<Agent>(AGENTS.DETAIL(agentId));
+            setAgentData(agentResponse);
+          }
+        } catch (error) {
+          console.error('Error fetching dashboard data:', error);
+        } finally {
+          setLoading(false);
+        }
+      };
+      
+      fetchDashboardData();
+    } else {
+      setDashboardData(metrics);
+      setAgentData(agent);
+      setLoading(false);
+    }
+  }, [agent, metrics, agentId, timeRange]);
+
+  if (loading) {
+    return <div>Loading dashboard metrics...</div>;
+  }
+
+  // Use the provided agent or the one we fetched
+  const activeAgent = agent || agentData;
+  if (!activeAgent) {
+    return <div>No agent data available</div>;
+  }
+
   // Helper function to find a metric by name
   const findMetric = (name: string): DashboardMetric | undefined => {
-    return metrics.find(m => m.metric.toLowerCase() === name.toLowerCase());
+    return dashboardData.find(m => m.metric.toLowerCase() === name.toLowerCase());
   };
 
   // Formatter for different metric types
@@ -65,13 +115,13 @@ export function AgentMetricsDashboard({ agent, metrics, agentId }: AgentMetricsD
     if (metricFromAPI) return metricFromAPI.value;
 
     // Fallback to agent.metrics
-    if (agent.metrics) {
+    if (activeAgent.metrics) {
       const key = metricName
         .replace(/\s+/g, '_')
-        .toLowerCase() as keyof typeof agent.metrics;
+        .toLowerCase() as keyof typeof activeAgent.metrics;
       
-      if (typeof agent.metrics[key] === 'number') {
-        return agent.metrics[key] as number;
+      if (typeof activeAgent.metrics[key] === 'number') {
+        return activeAgent.metrics[key] as number;
       }
     }
     return 0;
@@ -101,10 +151,8 @@ export function AgentMetricsDashboard({ agent, metrics, agentId }: AgentMetricsD
         <DrilldownMetricCard
           title="Avg. Response Time"
           value={formatMetricValue('avg_response_time', getMetricValue('avg_response_time'))}
-          icon={ClockIcon}
-          trend={getMetricTrend('avg_response_time')}
-          deltaType={getMetricTrend('avg_response_time') === 'down' ? 'moderateIncrease' : 'moderateDecrease'}
-          delta={`${Math.abs(getMetricDelta('avg_response_time')).toFixed(2)}%`}
+          icon={<ClockIcon className="h-5 w-5" />}
+          variant="primary"
           drilldownHref={`/agents/${agentId}/performance`}
           drilldownFilters={{ metric: 'response_time' }}
           drilldownLabel="View response time details"
@@ -114,10 +162,8 @@ export function AgentMetricsDashboard({ agent, metrics, agentId }: AgentMetricsD
         <DrilldownMetricCard
           title="Total Sessions"
           value={formatMetricValue('session_count', getMetricValue('session_count'))}
-          icon={UserGroupIcon}
-          trend={getMetricTrend('session_count')}
-          deltaType={getMetricTrend('session_count') === 'up' ? 'moderateIncrease' : 'moderateDecrease'}
-          delta={`${Math.abs(getMetricDelta('session_count')).toFixed(2)}%`}
+          icon={<UserGroupIcon className="h-5 w-5" />}
+          variant="primary"
           drilldownHref={`/agents/${agentId}/sessions`}
           drilldownLabel="View all sessions"
         />
@@ -126,10 +172,8 @@ export function AgentMetricsDashboard({ agent, metrics, agentId }: AgentMetricsD
         <DrilldownMetricCard
           title="Tool Executions"
           value={formatMetricValue('tool_execution_count', getMetricValue('tool_execution_count'))}
-          icon={CommandLineIcon}
-          trend={getMetricTrend('tool_execution_count')}
-          deltaType={getMetricTrend('tool_execution_count') === 'up' ? 'moderateIncrease' : 'moderateDecrease'}
-          delta={`${Math.abs(getMetricDelta('tool_execution_count')).toFixed(2)}%`}
+          icon={<CommandLineIcon className="h-5 w-5" />}
+          variant="primary"
           drilldownHref={`/agents/${agentId}/tools`}
           drilldownLabel="View tool usage details"
         />
@@ -138,10 +182,8 @@ export function AgentMetricsDashboard({ agent, metrics, agentId }: AgentMetricsD
         <DrilldownMetricCard
           title="Token Cost"
           value={formatMetricValue('cost_estimate', getMetricValue('cost_estimate'))}
-          icon={CurrencyDollarIcon}
-          trend={getMetricTrend('cost_estimate')}
-          deltaType={getMetricTrend('cost_estimate') === 'up' ? 'moderateDecrease' : 'moderateIncrease'}
-          delta={`${Math.abs(getMetricDelta('cost_estimate')).toFixed(2)}%`}
+          icon={<CurrencyDollarIcon className="h-5 w-5" />}
+          variant="primary"
           drilldownHref={`/agents/${agentId}/tokens`}
           drilldownLabel="View token usage details"
         />
@@ -150,10 +192,8 @@ export function AgentMetricsDashboard({ agent, metrics, agentId }: AgentMetricsD
         <DrilldownMetricCard
           title="Error Rate"
           value={formatMetricValue('error_rate', getMetricValue('error_rate'))}
-          icon={ExclamationTriangleIcon}
-          trend={getMetricTrend('error_rate')}
-          deltaType={getMetricTrend('error_rate') === 'down' ? 'moderateIncrease' : 'moderateDecrease'}
-          delta={`${Math.abs(getMetricDelta('error_rate')).toFixed(2)}%`}
+          icon={<ExclamationTriangleIcon className="h-5 w-5" />}
+          variant="error"
           drilldownHref={`/agents/${agentId}/errors`}
           drilldownLabel="View error details"
         />
@@ -162,10 +202,8 @@ export function AgentMetricsDashboard({ agent, metrics, agentId }: AgentMetricsD
         <DrilldownMetricCard
           title="LLM Requests"
           value={formatMetricValue('llm_request_count', getMetricValue('llm_request_count'))}
-          icon={ChatBubbleBottomCenterTextIcon}
-          trend={getMetricTrend('llm_request_count')}
-          deltaType={getMetricTrend('llm_request_count') === 'up' ? 'moderateIncrease' : 'moderateDecrease'}
-          delta={`${Math.abs(getMetricDelta('llm_request_count')).toFixed(2)}%`}
+          icon={<ChatBubbleBottomCenterTextIcon className="h-5 w-5" />}
+          variant="primary"
           drilldownHref={`/agents/${agentId}/llms`}
           drilldownLabel="View LLM usage details"
         />

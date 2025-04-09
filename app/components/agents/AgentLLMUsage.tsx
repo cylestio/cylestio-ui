@@ -4,8 +4,10 @@ import { useState, useEffect } from 'react';
 import { Title, Text, BarChart, Flex, Metric, Card } from '@tremor/react';
 import { ChatBubbleBottomCenterTextIcon, CurrencyDollarIcon } from '@heroicons/react/24/outline';
 import Link from 'next/link';
-import LoadingState from '@/app/components/LoadingState';
-import ErrorMessage from '@/app/components/ErrorMessage';
+import LoadingState from '../../components/LoadingState';
+import ErrorMessage from '../../components/ErrorMessage';
+import { fetchAPI } from '../../lib/api';
+import { AGENTS } from '../../lib/api-endpoints';
 
 // Types
 type LLMUsage = {
@@ -36,13 +38,10 @@ export function AgentLLMUsage({ agentId, timeRange }: AgentLLMUsageProps) {
         setLoading(true);
         setError(null);
         
-        const response = await fetch(`/api/agents/${agentId}/llms?time_range=${timeRange}`);
+        const data = await fetchAPI<{ items: LLMUsage[] }>(
+          `${AGENTS.LLM_USAGE(agentId)}?time_range=${timeRange}`
+        );
         
-        if (!response.ok) {
-          throw new Error(`Failed to fetch LLM usage: ${response.statusText}`);
-        }
-        
-        const data = await response.json();
         setLlmUsage(data.items || []);
       } catch (err: any) {
         setError(err.message || 'An error occurred while fetching LLM usage');

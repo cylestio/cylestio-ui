@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { 
   Card, Title, Text, Select, SelectItem, Grid, 
   Table, TableHead, TableHeaderCell, TableBody, TableRow, TableCell,
@@ -14,57 +14,14 @@ import ErrorMessage from '../ErrorMessage';
 import { SimpleDonutChart } from '../SimpleDonutChart';
 import DrilldownMetricCard from '../drilldown/DrilldownMetricCard';
 import appSettings from '../../config/app-settings';
-import { fetchAPI, buildQueryParams, PaginationParams, SearchParams } from '../../lib/api';
+import { fetchAPI, buildQueryParams } from '../../lib/api';
 import { AGENTS } from '../../lib/api-endpoints';
-
-// Types
-type Agent = {
-  agent_id: string;
-  name: string;
-  type: string;
-  status: string;
-  created_at: string;
-  updated_at: string;
-  request_count: number;
-  token_usage: number;
-  error_count: number;
-};
-
-type AgentListResponse = {
-  items: Agent[];
-  pagination: {
-    page: number;
-    page_size: number;
-    total: number;
-    total_pages: number;
-    has_next: boolean;
-    has_prev: boolean;
-  };
-  meta: {
-    timestamp: string;
-  };
-};
-
-type TimeRangeOption = '24h' | '7d' | '30d';
-
-type AgentFilterState = {
-  status?: string;
-  agent_type?: string;
-  page: number;
-  sort_by?: string;
-  sort_dir?: 'asc' | 'desc';
-  search?: string;
-};
-
-type PaginationInfo = {
-  page: number;
-  page_size: number;
-  total: number;
-  total_pages: number;
-}
+import { Agent, AgentListResponse, PaginationInfo, AgentFilterState, TimeRangeOption } from '../../types/agent';
 
 // Helper function to determine if an agent is active based on its last activity
 const isAgentActive = (agent: Agent): boolean => {
+  // Check if the agent has any events in the last X hours
+  // For now, we're using updated_at as a proxy for last event time
   const lastActive = new Date(agent.updated_at);
   const now = new Date();
   const thresholdHours = appSettings.agents.activeThresholdHours;
@@ -75,10 +32,11 @@ const isAgentActive = (agent: Agent): boolean => {
 
 export function AgentsExplorerContainer() {
   const router = useRouter();
+  const pathname = usePathname();
   
   // Data state
   const [agents, setAgents] = useState<Agent[]>([]);
-  const [pagination, setPagination] = useState({
+  const [pagination, setPagination] = useState<PaginationInfo>({
     page: 1, 
     page_size: 10, 
     total: 0,
@@ -92,7 +50,8 @@ export function AgentsExplorerContainer() {
   
   // Filter state
   const [filters, setFilters] = useState<AgentFilterState>({
-    page: 1
+    page: 1,
+    time_range: timeRange
   });
 
   // Get initial filters from URL - only once on initial load
@@ -106,15 +65,40 @@ export function AgentsExplorerContainer() {
     const initialFilters: AgentFilterState = {
       page: parseInt(searchParams.get('page') || '1', 10),
       status: searchParams.get('status') || undefined,
-      agent_type: searchParams.get('agent_type') || undefined,
       sort_by: searchParams.get('sort_by') || undefined,
       sort_dir: (searchParams.get('sort_dir') as 'asc' | 'desc') || undefined,
-      search: searchParams.get('search') || undefined
+      search: searchParams.get('search') || undefined,
+      time_range: (searchParams.get('time_range') as TimeRangeOption) || timeRange
     };
     
     setFilters(initialFilters);
+    if (initialFilters.time_range) {
+      setTimeRange(initialFilters.time_range as TimeRangeOption);
+    }
     didInitializeFromUrl.current = true;
-  }, []); // Empty dependency array - only run once
+  }, [searchParams, timeRange]); // Only run when searchParams change
+
+  // Update URL with current filters
+  useEffect(() => {
+    // Only update URL after initial load
+    if (!didInitializeFromUrl.current) return;
+    
+    const queryParams = new URLSearchParams();
+    
+    // Add all non-empty filters to URL
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        queryParams.set(key, String(value));
+      }
+    });
+    
+    // Update URL with new query params
+    const queryString = queryParams.toString();
+    const newUrl = queryString ? `${pathname}?${queryString}` : pathname;
+    
+    // Use replace to avoid adding to browser history
+    router.replace(newUrl, { scroll: false });
+  }, [filters, pathname, router]);
 
   // Fetch agent data
   const fetchAgents = useCallback(async () => {
@@ -126,12 +110,17 @@ export function AgentsExplorerContainer() {
       const params: Record<string, any> = {
         page: filters.page,
         page_size: 10, // Fixed page size for MVP
-        status: filters.status,
-        agent_type: filters.agent_type,
         sort_by: filters.sort_by,
         sort_dir: filters.sort_dir,
         search: filters.search,
+        time_range: filters.time_range
       };
+      
+      // Add status filter - note we'll apply active/inactive client-side
+      // based on our time threshold logic
+      if (filters.status) {
+        params.status = filters.status;
+      }
       
       console.log('Fetching agents with params:', params);
       
@@ -140,16 +129,30 @@ export function AgentsExplorerContainer() {
         `${AGENTS.LIST}${buildQueryParams(params)}`
       );
       
-      // Process agents to set their active status based on activity
-      const processedAgents = data.items.map(agent => ({
-        ...agent,
-        // Override the status based on activity if needed
-        active: isAgentActive(agent) 
-      }));
+      // Process agents data
+      let filteredAgents = data.items || [];
       
-      setAgents(processedAgents);
-      setPagination(data.pagination);
+      // Apply active/inactive filter client-side if needed
+      if (filters.status === 'active') {
+        filteredAgents = filteredAgents.filter(agent => isAgentActive(agent));
+      } else if (filters.status === 'inactive') {
+        filteredAgents = filteredAgents.filter(agent => !isAgentActive(agent));
+      }
+      
+      setAgents(filteredAgents);
+      
+      // Adjust pagination for client-side filtered results
+      if (filters.status === 'active' || filters.status === 'inactive') {
+        setPagination({
+          ...data.pagination,
+          total: filteredAgents.length,
+          total_pages: Math.max(1, Math.ceil(filteredAgents.length / data.pagination.page_size))
+        });
+      } else {
+        setPagination(data.pagination);
+      }
     } catch (err: any) {
+      console.error('Error fetching agents:', err);
       setError(err.message || 'An error occurred while fetching agents');
       // Set empty data on error
       setAgents([]);
@@ -167,11 +170,17 @@ export function AgentsExplorerContainer() {
   // Execute fetch when filters or time range change
   useEffect(() => {
     fetchAgents();
-  }, [fetchAgents, timeRange]);
+  }, [fetchAgents]);
 
   // Handle time range change
   const handleTimeRangeChange = (value: string) => {
-    setTimeRange(value as TimeRangeOption);
+    const newTimeRange = value as TimeRangeOption;
+    setTimeRange(newTimeRange);
+    setFilters(prev => ({
+      ...prev,
+      time_range: newTimeRange,
+      page: 1 // Reset to page 1 when time range changes
+    }));
   };
   
   // Handle filter changes
@@ -212,7 +221,7 @@ export function AgentsExplorerContainer() {
       type: 'select' as const,
       options: [
         { value: '', label: 'All Statuses' },
-        { value: 'active', label: 'Active' },
+        { value: 'active', label: `Active (last ${appSettings.agents.activeThresholdHours}h)` },
         { value: 'inactive', label: 'Inactive' }
       ],
       defaultValue: filters.status || ''
@@ -235,8 +244,9 @@ export function AgentsExplorerContainer() {
       <BreadcrumbNavigation
         items={[
           { label: 'Home', href: '/' },
-          { label: 'Agents', href: '/agents' },
+          { label: 'Agents', href: '/agents', current: true },
         ]}
+        preserveFilters={true}
       />
       
       <div className="mb-6 flex justify-between items-center">
@@ -250,99 +260,94 @@ export function AgentsExplorerContainer() {
         </div>
       </div>
       
-      <div className="space-y-6">
-        {/* Overview metrics */}
+      <div className="mb-6">
         <AgentsOverview agents={agents} timeRange={timeRange} />
-        
-        {/* Filters */}
-        <FilterBar
-          filters={filterOptions}
-          onFilterChange={handleFilterChange}
-          preserveFiltersInUrl={true}
-        />
-        
-        {/* Agents table */}
-        <Card>
-          {error ? (
-            <ErrorMessage message={error} />
-          ) : (
-            <AgentsTable 
-              agents={agents} 
-              pagination={pagination}
-              onPageChange={handlePageChange}
-            />
-          )}
-        </Card>
       </div>
+      
+      <Card className="mb-6">
+        <div className="mb-4">
+          <FilterBar 
+            filters={filterOptions} 
+            onFilterChange={handleFilterChange}
+            preserveFiltersInUrl={true}
+          />
+        </div>
+        
+        <AgentsTable 
+          agents={agents} 
+          pagination={pagination}
+          onPageChange={handlePageChange}
+        />
+      </Card>
     </div>
   );
 }
 
 // Inline AgentsOverview component
 function AgentsOverview({ agents, timeRange }: { agents: Agent[], timeRange: string }) {
-  // Calculate summary metrics
+  // Calculate metrics
   const totalAgents = agents.length;
-  
-  // Use isAgentActive helper to determine active status
   const activeAgents = agents.filter(agent => isAgentActive(agent)).length;
   const inactiveAgents = totalAgents - activeAgents;
-  const errorAgents = agents.filter(agent => agent.status === 'error').length;
+  const errorAgents = agents.filter(a => a.error_count > 0).length;
   
-  // Calculate agent distribution by status
-  const agentStatusData = [
-    { name: 'active', count: activeAgents },
-    { name: 'inactive', count: inactiveAgents }
-  ].filter(item => item.count > 0);
+  // Total request count & errors
+  const totalRequests = agents.reduce((sum, agent) => sum + (agent.request_count || 0), 0);
+  const totalErrors = agents.reduce((sum, agent) => sum + (agent.error_count || 0), 0);
   
+  // Format status data for chart
+  const statusChartData = [
+    { name: 'Active', count: activeAgents },
+    { name: 'Inactive', count: inactiveAgents }
+  ];
+
   return (
-    <div className="space-y-6">
-      <Grid numItemsMd={2} numItemsLg={4} className="gap-6">
+    <div>
+      <Grid numItems={1} numItemsMd={2} numItemsLg={4} className="gap-4 mb-6">
         <DrilldownMetricCard
           title="Total Agents"
           value={totalAgents.toString()}
+          variant="primary"
           drilldownHref="/agents"
+          preserveCurrentFilters={true}
         />
         
         <DrilldownMetricCard
-          title="Active Agents"
+          title={`Active (last ${appSettings.agents.activeThresholdHours}h)`}
           value={activeAgents.toString()}
           variant="success"
-          drilldownHref="/agents"
-          drilldownFilters={{ status: 'active' }}
+          drilldownHref={`/agents?status=active&time_range=${timeRange}`}
         />
         
         <DrilldownMetricCard
           title="Error State"
           value={errorAgents.toString()}
           variant="error"
-          drilldownHref="/agents"
-          drilldownFilters={{ status: 'error' }}
+          drilldownHref={errorAgents > 0 ? `/agents?error_count=1&time_range=${timeRange}` : undefined}
         />
         
         <DrilldownMetricCard
-          title="Inactive Agents"
+          title="Inactive"
           value={inactiveAgents.toString()}
           variant="neutral"
-          drilldownHref="/agents"
-          drilldownFilters={{ status: 'inactive' }}
+          drilldownHref={inactiveAgents > 0 ? `/agents?status=inactive&time_range=${timeRange}` : undefined}
         />
       </Grid>
       
-      <Grid numItemsMd={2} className="gap-6">
+      <div className="mb-6">
         <Card>
-          <Text className="text-lg font-medium mb-2">Agent Status Distribution</Text>
-          <div className="h-64 flex items-center justify-center">
-            {agentStatusData.length > 0 ? (
-              <SimpleDonutChart 
-                data={agentStatusData} 
-                showLegend={true}
-              />
-            ) : (
-              <Text className="text-gray-500">No data available</Text>
-            )}
-          </div>
+          <Title>Agent Status Distribution</Title>
+          <SimpleDonutChart
+            data={statusChartData}
+            showLegend={true}
+            showTotal={true}
+            className="mt-6"
+            valueFormatter={(value) => value.toString()}
+            colors={['emerald', 'gray']}
+            emptyMessage="No agent status data available"
+          />
         </Card>
-      </Grid>
+      </div>
     </div>
   );
 }
@@ -361,13 +366,11 @@ function AgentsTable({
   
   // Format status as badge
   const getStatusBadge = (agent: Agent) => {
-    const active = isAgentActive(agent);
-    
-    if (agent.status === 'error') {
+    if (agent.error_count > 0) {
       return <Badge color="rose">Error</Badge>;
     }
     
-    if (active) {
+    if (isAgentActive(agent)) {
       return <Badge color="emerald">Active</Badge>;
     }
     
@@ -380,9 +383,9 @@ function AgentsTable({
     return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
   };
   
-  // Navigate to agent detail
+  // Handle row click to navigate to agent detail
   const handleRowClick = (agentId: string) => {
-    router.push(`/agents/detail/${agentId}`);
+    router.push(`/agents/${agentId}`);
   };
   
   // Generate pagination controls
@@ -432,25 +435,25 @@ function AgentsTable({
         <TableHead>
           <TableRow>
             <TableHeaderCell>Name</TableHeaderCell>
-            <TableHeaderCell>Type</TableHeaderCell>
             <TableHeaderCell>Status</TableHeaderCell>
-            <TableHeaderCell>Requests</TableHeaderCell>
-            <TableHeaderCell>Errors</TableHeaderCell>
+            <TableHeaderCell className="text-right">Requests</TableHeaderCell>
+            <TableHeaderCell className="text-right">Errors</TableHeaderCell>
             <TableHeaderCell>Last Updated</TableHeaderCell>
           </TableRow>
         </TableHead>
         <TableBody>
           {agents.map((agent) => (
             <TableRow 
-              key={agent.agent_id}
+              key={agent.agent_id} 
+              className="cursor-pointer hover:bg-gray-50 transition-colors duration-150" 
               onClick={() => handleRowClick(agent.agent_id)}
-              className="cursor-pointer hover:bg-gray-50"
             >
-              <TableCell>{agent.name}</TableCell>
-              <TableCell className="capitalize">{agent.type}</TableCell>
+              <TableCell className="font-medium text-blue-600 hover:underline">
+                {agent.name}
+              </TableCell>
               <TableCell>{getStatusBadge(agent)}</TableCell>
-              <TableCell>{agent.request_count.toLocaleString()}</TableCell>
-              <TableCell>{agent.error_count.toLocaleString()}</TableCell>
+              <TableCell className="text-right">{agent.request_count.toLocaleString()}</TableCell>
+              <TableCell className="text-right">{agent.error_count.toLocaleString()}</TableCell>
               <TableCell>{formatDate(agent.updated_at)}</TableCell>
             </TableRow>
           ))}

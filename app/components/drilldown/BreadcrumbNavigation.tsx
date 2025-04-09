@@ -2,7 +2,7 @@
 
 import React from 'react'
 import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, usePathname } from 'next/navigation'
 import { ChevronRightIcon, HomeIcon } from '@heroicons/react/24/outline'
 
 export interface BreadcrumbItem {
@@ -12,98 +12,69 @@ export interface BreadcrumbItem {
   current?: boolean
 }
 
-export interface DrilldownBreadcrumbsProps {
+interface BreadcrumbNavigationProps {
   items: BreadcrumbItem[]
   className?: string
-  separator?: React.ReactNode
-  homeLink?: string
-  includeHome?: boolean
-  preserveFilters?: boolean // Whether to maintain filters when navigating up
+  preserveFilters?: boolean
 }
 
 /**
- * Enhanced Breadcrumbs component with drill-down navigation support
+ * BreadcrumbNavigation component that shows the current page path
+ * with options to preserve filters when navigating between pages
  */
-const BreadcrumbNavigation: React.FC<DrilldownBreadcrumbsProps> = ({
+const BreadcrumbNavigation: React.FC<BreadcrumbNavigationProps> = ({
   items,
   className = '',
-  separator = <ChevronRightIcon className="h-4 w-4 text-neutral-500 mx-2 flex-shrink-0" />,
-  homeLink = '/',
-  includeHome = true,
-  preserveFilters = false
+  preserveFilters = false,
 }) => {
   const searchParams = useSearchParams()
+  const pathname = usePathname()
   
-  // Function to add query parameters to links if preserveFilters is true
-  const getHrefWithParams = (href: string) => {
+  // Function to append current query params to URL if preserveFilters is true
+  const getHref = (href: string): string => {
     if (!preserveFilters || !href) return href
     
-    const url = new URL(href, window.location.origin)
+    // Don't append query params to current page
+    if (pathname === href) return href
+    
+    // Clone search params to a new URLSearchParams object
     const params = new URLSearchParams(searchParams.toString())
+    const query = params.toString()
     
-    // Append all current query parameters to the URL
-    params.forEach((value, key) => {
-      url.searchParams.set(key, value)
-    })
-    
-    return `${url.pathname}${url.search}`
+    if (!query) return href
+    return `${href}${href.includes('?') ? '&' : '?'}${query}`
   }
-  
-  // Build the array of items, optionally including the home item
-  const allItems = includeHome
-    ? [
-        {
-          label: 'Home',
-          href: homeLink,
-          icon: <HomeIcon className="h-4 w-4" />,
-          current: false
-        },
-        ...items
-      ]
-    : items
 
   return (
-    <nav className={`flex ${className}`} aria-label="Breadcrumb">
-      <ol className="flex items-center flex-wrap">
-        {allItems.map((item, index) => {
-          const isLast = index === allItems.length - 1
-          const finalHref = item.href ? getHrefWithParams(item.href) : undefined
-
-          return (
-            <li
-              key={`${item.label}-${index}`}
-              className="flex items-center text-sm"
-            >
-              {index > 0 && separator}
-              
-              {finalHref && !isLast ? (
-                <Link
-                  href={finalHref}
-                  className={`flex items-center hover:text-primary-600 ${
-                    item.current ? 'text-primary-600 font-medium' : 'text-neutral-600'
-                  }`}
-                >
-                  {item.icon && <span className="mr-1">{item.icon}</span>}
-                  <span>{item.label}</span>
-                </Link>
-              ) : (
-                <span
-                  className={`flex items-center ${
-                    isLast
-                      ? 'text-neutral-900 font-medium'
-                      : item.current
-                      ? 'text-primary-600 font-medium'
-                      : 'text-neutral-600'
-                  }`}
-                  aria-current={isLast ? 'page' : undefined}
-                >
-                  {item.icon && <span className="mr-1">{item.icon}</span>}
-                  <span>{item.label}</span>
-                </span>
-              )}
-            </li>
-          )
-        })}
+    <nav className={`flex items-center text-sm ${className}`} aria-label="Breadcrumb">
+      <ol className="flex items-center space-x-2">
+        {items.map((item, index) => (
+          <li key={index} className="flex items-center">
+            {index > 0 && (
+              <ChevronRightIcon 
+                className="h-4 w-4 text-gray-400 flex-shrink-0 mx-1" 
+                aria-hidden="true" 
+              />
+            )}
+            
+            {index === 0 && !item.label.toLowerCase().includes('home') && (
+              <HomeIcon className="h-4 w-4 text-gray-500 mr-1" aria-hidden="true" />
+            )}
+            
+            {item.current ? (
+              <span className="font-medium text-gray-500" aria-current="page">
+                {item.label}
+              </span>
+            ) : (
+              <Link
+                href={getHref(item.href || '/')}
+                className="text-blue-600 hover:text-blue-800 hover:underline"
+              >
+                {item.label}
+              </Link>
+            )}
+          </li>
+        ))}
       </ol>
     </nav>
   )

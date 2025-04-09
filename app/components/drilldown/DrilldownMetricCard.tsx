@@ -1,89 +1,97 @@
 'use client'
 
 import React from 'react'
-import { useRouter } from 'next/navigation'
-import MetricCard, { MetricCardProps } from '../MetricCard'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Card, Metric, Text } from '@tremor/react'
+import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline'
 
-export interface DrilldownMetricCardProps extends MetricCardProps {
-  /**
-   * Where to navigate on click
-   */
+export type DrilldownMetricVariant = 'primary' | 'success' | 'warning' | 'error' | 'neutral'
+
+export interface DrilldownMetricCardProps {
+  title: string
+  value: string | number
+  subtext?: string
+  variant?: DrilldownMetricVariant
+  loading?: boolean
   drilldownHref?: string
-  
-  /**
-   * Simple filters to apply in the target view
-   */
-  drilldownFilters?: Record<string, string | number>
-  
-  /**
-   * Accessible label for the drilldown action
-   */
-  drilldownLabel?: string
-  
-  /**
-   * Optional onClick handler that will be called before navigation
-   */
-  onClick?: (e: React.MouseEvent) => void
+  onClick?: () => void
+  className?: string
+  preserveCurrentFilters?: boolean
 }
 
 /**
- * An enhanced version of MetricCard that supports navigation to drill-down pages
+ * A metric card component that can be clicked to drill down to more details
  */
-const DrilldownMetricCard: React.FC<DrilldownMetricCardProps> = ({ 
+const DrilldownMetricCard: React.FC<DrilldownMetricCardProps> = ({
+  title,
+  value,
+  subtext,
+  variant = 'primary',
+  loading = false,
   drilldownHref,
-  drilldownFilters,
-  drilldownLabel,
   onClick,
   className = '',
-  ...metricCardProps
+  preserveCurrentFilters = false
 }) => {
   const router = useRouter()
+  const searchParams = useSearchParams()
   
-  const handleClick = (e: React.MouseEvent) => {
-    if (onClick) {
-      onClick(e)
+  // Map variant to colors
+  const getColors = (variant: DrilldownMetricVariant) => {
+    switch (variant) {
+      case 'primary':
+        return { decoration: 'blue', hover: 'hover:bg-blue-50' }
+      case 'success':
+        return { decoration: 'emerald', hover: 'hover:bg-emerald-50' }
+      case 'warning':
+        return { decoration: 'amber', hover: 'hover:bg-amber-50' }
+      case 'error':
+        return { decoration: 'rose', hover: 'hover:bg-rose-50' }
+      case 'neutral':
+      default:
+        return { decoration: 'gray', hover: 'hover:bg-gray-50' }
     }
-    
-    if (!drilldownHref) return
-    
-    let url = drilldownHref
-    
-    // Add query parameters if provided
-    if (drilldownFilters && Object.keys(drilldownFilters).length > 0) {
-      const params = new URLSearchParams()
-      
-      Object.entries(drilldownFilters).forEach(([key, value]) => {
-        params.append(key, value.toString())
-      })
-      
-      url = `${url}?${params.toString()}`
-    }
-    
-    router.push(url)
   }
   
-  if (!drilldownHref) {
-    return <MetricCard {...metricCardProps} className={className} />
+  const { decoration, hover } = getColors(variant)
+  
+  const handleClick = () => {
+    if (onClick) {
+      onClick()
+    } else if (drilldownHref) {
+      // If we should preserve current filters, append them to the URL
+      if (preserveCurrentFilters) {
+        const params = new URLSearchParams(searchParams.toString())
+        const queryString = params.toString()
+        const separator = drilldownHref.includes('?') ? '&' : '?'
+        const url = queryString ? `${drilldownHref}${separator}${queryString}` : drilldownHref
+        router.push(url)
+      } else {
+        router.push(drilldownHref)
+      }
+    }
   }
   
   return (
-    <div 
+    <Card
+      decoration="top"
+      decorationColor={decoration}
+      className={`transform transition-all ${
+        (drilldownHref || onClick) ? `cursor-pointer ${hover}` : ''
+      } ${className}`}
       onClick={handleClick}
-      className="cursor-pointer transition-transform duration-200 hover:-translate-y-1"
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          handleClick(e as unknown as React.MouseEvent)
-        }
-      }}
-      aria-label={drilldownLabel || `View details for ${metricCardProps.title}`}
     >
-      <MetricCard
-        {...metricCardProps}
-        className={`${className}`}
-      />
-    </div>
+      <div className="flex justify-between items-start">
+        <Text>{title}</Text>
+        {(drilldownHref || onClick) && (
+          <ArrowTopRightOnSquareIcon 
+            className="h-4 w-4 text-gray-400 hover:text-gray-600" 
+          />
+        )}
+      </div>
+      <Metric className="mt-2">{loading ? '...' : value}</Metric>
+      {subtext && <Text className="text-gray-500 mt-1">{subtext}</Text>}
+    </Card>
   )
 }
 
