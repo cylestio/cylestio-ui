@@ -64,7 +64,7 @@ import MetricCard from './MetricCard'
 import DashboardCard from './DashboardCard'
 import Link from 'next/link'
 import { fetchAPI, buildQueryParams } from '../lib/api'
-import { DASHBOARD, AGENTS, METRICS } from '../lib/api-endpoints'
+import { DASHBOARD, AGENTS, METRICS, SECURITY } from '../lib/api-endpoints'
 import { colors } from './DesignSystem'
 import LoadingState from './LoadingState'
 import EmptyState from './EmptyState'
@@ -221,19 +221,22 @@ export default function OverviewDashboard({ timeRange }: OverviewDashboardProps)
       let receivedAnyData = false;
 
       // Fetch top-level metrics
+      let currentMetrics: DashboardMetric[] = [];
       try {
         const params = { time_range: timeRange };
         console.log(`Fetching dashboard metrics from: ${DASHBOARD.METRICS}${buildQueryParams(params)}`);
         
         const metricsData = await fetchAPI<MetricsResponse>(`${DASHBOARD.METRICS}${buildQueryParams(params)}`);
         if (metricsData && metricsData.metrics && metricsData.metrics.length > 0) {
-          setMetrics(metricsData.metrics);
+          currentMetrics = metricsData.metrics;
+          setMetrics(currentMetrics);
           // Calculate health score
-          setHealthScore(calculateHealthScore(metricsData.metrics));
+          setHealthScore(calculateHealthScore(currentMetrics));
           receivedAnyData = true;
         } else {
           console.log('No metrics data received from API');
           // If we don't have metrics data, set empty array rather than leaving previous data
+          currentMetrics = [];
           setMetrics([]);
         }
       } catch (error) {
@@ -258,24 +261,24 @@ export default function OverviewDashboard({ timeRange }: OverviewDashboardProps)
           const activeAgents = agentsData.items.filter(agent => agent.status === 'active');
           
           // Add active agents count to metrics if not already there
-          const activeAgentMetric = metrics.find(m => m.metric === 'active_agents');
+          const activeAgentMetric = currentMetrics.find(m => m.metric === 'active_agents');
           if (!activeAgentMetric) {
             // Here we can try to calculate a trend based on historical data
-            const previousActiveAgentsCount = metrics.find(m => m.metric === 'active_agents_previous')?.value || activeAgents.length;
+            const previousActiveAgentsCount = currentMetrics.find(m => m.metric === 'active_agents_previous')?.value || activeAgents.length;
             const change = previousActiveAgentsCount > 0 
               ? ((activeAgents.length - previousActiveAgentsCount) / previousActiveAgentsCount) * 100 
               : 0;
             const trend = change > 0 ? 'up' : (change < 0 ? 'down' : 'stable');
             
-            setMetrics(prevMetrics => [
-              ...prevMetrics,
+            currentMetrics = [
+              ...currentMetrics,
               {
                 metric: 'active_agents',
                 value: activeAgents.length,
                 change: Math.abs(change),
                 trend: trend
               }
-            ]);
+            ];
           }
           
           receivedAnyData = true;
@@ -284,75 +287,103 @@ export default function OverviewDashboard({ timeRange }: OverviewDashboardProps)
         console.warn('Failed to fetch top agents:', error);
       }
       
-      // Add security alerts metric if not present in API response
-      if (!metrics.find(m => m.metric === 'security_alerts')) {
-        // Fetch security alerts data
-        try {
-          const alertsResponse = await fetchAPI<{ total?: number }>(`${METRICS.ALERTS}?time_range=${timeRange}`);
-          const alertsCount = alertsResponse?.total || 0;
-          
-          // For comparison, get alerts from previous period
-          const previousPeriod = timeRange === '24h' ? '48h' : (timeRange === '7d' ? '14d' : '60d');
-          const previousAlertsResponse = await fetchAPI<{ total?: number }>(`${METRICS.ALERTS}?time_range=${previousPeriod}`);
-          const previousAlertsCount = previousAlertsResponse?.total || 0;
-          
-          // Calculate change percentage
-          const previousCount = previousAlertsCount > alertsCount ? previousAlertsCount : alertsCount;
-          const change = previousCount > 0 
-            ? ((alertsCount - previousAlertsCount) / previousCount) * 100 
-            : 0;
-          const trend = change > 0 ? 'up' : (change < 0 ? 'down' : 'stable');
-          
-          setMetrics(prevMetrics => [
-            ...prevMetrics,
+      // Always fetch security alerts data regardless of metrics state
+      try {
+        console.log('Fetching security alerts...');
+        const alertsResponse = await fetchAPI<{ count: number; time_range: { from: string; to: string; description: string } }>(`${SECURITY.ALERT_COUNT}?time_range=${timeRange}`);
+        const alertsCount = alertsResponse?.count || 0;
+        console.log('Received security alerts count:', alertsCount);
+        
+        // For comparison, calculate change without fetching previous period if it would be invalid
+        let previousAlertsCount = 0;
+        let change = 0;
+        let trend: 'up' | 'down' | 'stable' = 'stable';
+        
+        // Only fetch previous period for valid time ranges
+        if (timeRange === '24h' || timeRange === '7d' || timeRange === '30d') {
+          const previousPeriod = timeRange === '24h' ? '48h' : (timeRange === '7d' ? '14d' : '30d');
+          try {
+            const previousAlertsResponse = await fetchAPI<{ count: number }>(`${SECURITY.ALERT_COUNT}?time_range=${previousPeriod}`);
+            previousAlertsCount = previousAlertsResponse?.count || 0;
+            console.log('Previous period alerts count:', previousAlertsCount);
+            
+            // Calculate change percentage
+            if (previousAlertsCount > 0 || alertsCount > 0) {
+              const baseCount = Math.max(previousAlertsCount, 1); // Avoid division by zero
+              change = ((alertsCount - previousAlertsCount) / baseCount) * 100;
+              trend = change > 0 ? 'up' : (change < 0 ? 'down' : 'stable');
+            }
+          } catch (error) {
+            console.warn('Failed to fetch previous period alerts, skipping trend calculation');
+          }
+        }
+        
+        // Update metrics with security alerts
+        setMetrics(prevMetrics => {
+          const metricsWithoutAlerts = prevMetrics.filter(m => m.metric !== 'security_alerts');
+          const updatedMetrics = [
+            ...metricsWithoutAlerts,
             {
               metric: 'security_alerts',
               value: alertsCount,
               change: Math.abs(change),
               trend: trend
             }
-          ]);
-        } catch (error) {
-          console.warn('Failed to fetch security alerts count:', error);
-          setMetrics(prevMetrics => [
-            ...prevMetrics,
+          ];
+          console.log('Updated metrics with security alerts:', updatedMetrics);
+          return updatedMetrics;
+        });
+        
+        receivedAnyData = true;
+      } catch (error) {
+        console.error('Failed to fetch security alerts count:', error);
+        // Don't reset to 0 on error, keep existing value if any
+        setMetrics(prevMetrics => {
+          const existingAlertMetric = prevMetrics.find(m => m.metric === 'security_alerts');
+          if (existingAlertMetric) {
+            return prevMetrics; // Keep existing metrics unchanged
+          }
+          // Only add a zero metric if there wasn't one before
+          const metricsWithoutAlerts = prevMetrics.filter(m => m.metric !== 'security_alerts');
+          return [
+            ...metricsWithoutAlerts,
             {
               metric: 'security_alerts',
               value: 0,
               change: 0,
               trend: 'stable'
             }
-          ]);
-        }
+          ];
+        });
       }
       
       // Add estimated cost metric if not present in API response
-      if (!metrics.find(m => m.metric === 'token_usage_cost')) {
+      if (!currentMetrics.find(m => m.metric === 'token_usage_cost')) {
         // Fetch token usage cost data
         try {
           const costResponse = await fetchAPI<{ total?: number }>(`${METRICS.TOKEN_USAGE_COST}?time_range=${timeRange}`);
           const cost = costResponse?.total || 0;
           
-          setMetrics(prevMetrics => [
-            ...prevMetrics,
+          currentMetrics = [
+            ...currentMetrics,
             {
               metric: 'token_usage_cost',
               value: cost,
               change: 0,
               trend: 'stable'
             }
-          ]);
+          ];
         } catch (error) {
           console.warn('Failed to fetch token usage cost:', error);
-          setMetrics(prevMetrics => [
-            ...prevMetrics,
+          currentMetrics = [
+            ...currentMetrics,
             {
               metric: 'token_usage_cost',
               value: 0,
               change: 0,
               trend: 'stable'
             }
-          ]);
+          ];
         }
       }
       
@@ -370,16 +401,16 @@ export default function OverviewDashboard({ timeRange }: OverviewDashboardProps)
           });
           
           // Add tools count to metrics
-          if (!metrics.find(m => m.metric === 'tools_count')) {
-            setMetrics(prevMetrics => [
-              ...prevMetrics,
+          if (!currentMetrics.find(m => m.metric === 'tools_count')) {
+            currentMetrics = [
+              ...currentMetrics,
               {
                 metric: 'tools_count',
                 value: uniqueTools.size,
                 change: 0,
                 trend: 'stable'
               }
-            ]);
+            ];
           }
         }
       } catch (error) {
@@ -653,15 +684,6 @@ export default function OverviewDashboard({ timeRange }: OverviewDashboardProps)
     return categories;
   }
 
-  const getAgentComparisonData = () => {
-    return topAgents.map(agent => ({
-      name: agent.name,
-      requests: agent.request_count,
-      tokens: agent.token_usage,
-      errors: agent.error_count
-    }));
-  }
-  
   const formatNumber = (value: number): string => {
     if (value >= 1000000) {
       return `${(value / 1000000).toFixed(1)}M`;
@@ -754,6 +776,10 @@ export default function OverviewDashboard({ timeRange }: OverviewDashboardProps)
   const summaryMetrics = getSummaryMetrics();
   const healthStatus = getHealthStatus(healthScore);
   
+  // In the render section, add debug logging for the security alerts metric
+  const securityAlertsMetric = metrics.find(m => m.metric === 'security_alerts');
+  console.log('Current security alerts metric:', securityAlertsMetric);
+  
   return (
     <div className="p-4 sm:p-6 pt-0">
       <div>
@@ -788,7 +814,13 @@ export default function OverviewDashboard({ timeRange }: OverviewDashboardProps)
             
             <MetricCard
               title="Security Alerts"
-              value={metrics.find(m => m.metric === 'security_alerts')?.value || 0}
+              value={(() => {
+                const alertValue = metrics.find(m => m.metric === 'security_alerts')?.value;
+                console.log('Security Alerts MetricCard - Full metrics array:', metrics);
+                console.log('Security Alerts MetricCard - Found metric:', metrics.find(m => m.metric === 'security_alerts'));
+                console.log('Security Alerts MetricCard - Final value:', alertValue);
+                return alertValue || 0;
+              })()}
               icon={<ShieldExclamationIcon className="w-7 h-7 text-red-600" />}
               variant="error"
               valueClassName="text-2xl"
@@ -871,63 +903,6 @@ export default function OverviewDashboard({ timeRange }: OverviewDashboardProps)
             timeRange={timeRange}
             className="h-full"
           />
-        </div>
-        
-        {/* Top Agents Section */}
-        <div className="mb-6 md:mb-8">
-          <ResponsiveContainer
-            defaultLayout="grid"
-            columns={{ default: 1, lg: 2 }}
-            spacing="md"
-          >
-            {/* Agent Table */}
-            <DashboardCard title="Top Agents by Request Count">
-              <div className={`overflow-x-auto ${isMobileView ? 'max-h-60' : ''}`}>
-                <Table className="mt-4">
-                  <TableHead>
-                    <TableRow>
-                      <TableHeaderCell>Agent Name</TableHeaderCell>
-                      <TableHeaderCell className={isMobileView ? 'hidden' : ''}>Type</TableHeaderCell>
-                      <TableHeaderCell>Requests</TableHeaderCell>
-                      <TableHeaderCell className={isMobileView ? 'hidden' : ''}>Tokens</TableHeaderCell>
-                      <TableHeaderCell>Errors</TableHeaderCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {topAgents.map((agent) => (
-                      <TableRow key={agent.agent_id}>
-                        <TableCell>{agent.name}</TableCell>
-                        <TableCell className={isMobileView ? 'hidden' : ''}>{agent.type}</TableCell>
-                        <TableCell>{agent.request_count}</TableCell>
-                        <TableCell className={isMobileView ? 'hidden' : ''}>{agent.token_usage}</TableCell>
-                        <TableCell>{agent.error_count}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-              {isMobileView && (
-                <div className="mt-2 text-center">
-                  <Text className="text-xs text-neutral-500">Swipe to see more data</Text>
-                </div>
-              )}
-            </DashboardCard>
-            
-            {/* Agent Chart */}
-            <DashboardCard title="Agent Comparison">
-              <BarChart
-                className="h-64 mt-4"
-                data={getAgentComparisonData()}
-                index="name"
-                categories={["requests"]}
-                colors={["blue"]}
-                valueFormatter={(value) => `${value} requests`}
-                layout={isMobileView ? "vertical" : "horizontal"}
-                showLegend={false}
-                showGridLines={!isMobileView}
-              />
-            </DashboardCard>
-          </ResponsiveContainer>
         </div>
         
         {/* Continue with the rest of the dashboard ... */}

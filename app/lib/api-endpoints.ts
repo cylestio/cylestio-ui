@@ -23,7 +23,7 @@ export const DASHBOARD = {
 export const SECURITY = {
   ALERTS: '/v1/security/alerts',
   ALERT_DETAIL: (id: string) => `/v1/security/alerts/${id}`,
-  ALERT_COUNT: '/v1/metrics/security/alert_count',
+  ALERT_COUNT: '/v1/alerts/count',
   SEVERITY: '/v1/metrics/security/severity',
   TYPES: '/v1/metrics/security/types',
   STATUS: '/v1/metrics/security/status',
