@@ -2,14 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import { Card, Title, Text, Select, SelectItem } from '@tremor/react';
-import BreadcrumbNavigation from '@/app/components/drilldown/BreadcrumbNavigation';
+import BreadcrumbNavigation from '../drilldown/BreadcrumbNavigation';
 import { AgentHeader } from './AgentHeader';
 import { AgentMetricsDashboard } from './AgentMetricsDashboard';
 import { AgentSessionsTable } from './AgentSessionsTable';
 import { AgentToolUsage } from './AgentToolUsage';
 import { AgentLLMUsage } from './AgentLLMUsage';
-import LoadingState from '@/app/components/LoadingState';
-import ErrorMessage from '@/app/components/ErrorMessage';
+import LoadingState from '../LoadingState';
+import ErrorMessage from '../ErrorMessage';
 
 // Types from the API
 type Agent = {

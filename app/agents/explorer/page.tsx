@@ -26,6 +26,7 @@ import FilterBar from '../../components/FilterBar'
 import EnhancedBreadcrumbs from '../../components/EnhancedBreadcrumbs'
 import DrilldownMetricCard from '../../components/DrilldownMetricCard'
 import InteractiveChart from '../../components/InteractiveChart'
+import appSettings from '../../config/app-settings'
 
 // Mock data for demonstration
 const mockAgentData = {
@@ -195,31 +196,33 @@ const AgentExplorerPage = () => {
           </InteractiveChart>
         </Card>
         
-        <Card>
-          <Flex className="items-center justify-between mb-4">
-            <Title>Agents by Type</Title>
-            <Button variant="light" size="xs">View All</Button>
-          </Flex>
-          
-          <InteractiveChart
-            baseUrl="/agents/explorer"
-            getQueryParams={(dataPoint) => ({
-              agentType: dataPoint.name
-            })}
-            renderTooltip={(dataPoint) => (
-              <div>
-                <div className="font-medium">{dataPoint.name}</div>
-                <div>Count: {dataPoint.value}</div>
-              </div>
-            )}
-          >
-            <BarList
-              data={mockAgentData.agentsByType}
-              className="h-72"
-              showAnimation={true}
-            />
-          </InteractiveChart>
-        </Card>
+        {appSettings.agents.charts.showAgentTypeDistribution && (
+          <Card>
+            <Flex className="items-center justify-between mb-4">
+              <Title>Agents by Type</Title>
+              <Button variant="light" size="xs">View All</Button>
+            </Flex>
+            
+            <InteractiveChart
+              baseUrl="/agents/explorer"
+              getQueryParams={(dataPoint) => ({
+                agentType: dataPoint.name
+              })}
+              renderTooltip={(dataPoint) => (
+                <div>
+                  <div className="font-medium">{dataPoint.name}</div>
+                  <div>Count: {dataPoint.value}</div>
+                </div>
+              )}
+            >
+              <BarList
+                data={mockAgentData.agentsByType}
+                className="h-72"
+                showAnimation={true}
+              />
+            </InteractiveChart>
+          </Card>
+        )}
       </Grid>
       
       {/* Recent Agents Table */}

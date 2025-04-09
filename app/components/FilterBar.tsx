@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import { 
   Button, 
@@ -51,9 +51,17 @@ const FilterBar: React.FC<FilterBarProps> = ({
   
   const [expanded, setExpanded] = useState(defaultExpanded)
   const [filterValues, setFilterValues] = useState<Record<string, any>>({})
+  const isInitialMount = useRef(true)
+  const isUpdatingFromUrl = useRef(false)
+  const didInitialize = useRef(false)
+  const lastUrlUpdateTime = useRef(0)
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const pendingSearchValue = useRef<string | null>(null)
   
-  // Initialize filter values from URL parameters or defaults
+  // Initialize filter values from URL parameters or defaults - only once
   useEffect(() => {
+    if (didInitialize.current) return
+    
     const initialValues: Record<string, any> = {}
     
     filters.forEach(filter => {
@@ -79,20 +87,54 @@ const FilterBar: React.FC<FilterBarProps> = ({
     })
     
     setFilterValues(initialValues)
+    didInitialize.current = true
   }, [filters, preserveFiltersInUrl, searchParams])
   
-  // Update URL parameters and call onFilterChange when filters change
-  useEffect(() => {
-    if (Object.keys(filterValues).length === 0) return
+  // Debounced search handler to prevent too many updates
+  const debouncedSearchChange = useCallback((id: string, value: string) => {
+    pendingSearchValue.current = value
     
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current)
+    }
+    
+    debounceTimerRef.current = setTimeout(() => {
+      if (pendingSearchValue.current !== null) {
+        setFilterValues(prev => ({
+          ...prev,
+          [id]: pendingSearchValue.current
+        }))
+        pendingSearchValue.current = null
+      }
+      debounceTimerRef.current = null
+    }, 300) // 300ms debounce
+  }, [])
+  
+  // Update URL and call onChange handler
+  const updateUrl = useCallback(() => {
+    if (!didInitialize.current || isUpdatingFromUrl.current) return
+    
+    // Rate limiting - don't update URL more than once every 500ms
+    const now = Date.now()
+    if (now - lastUrlUpdateTime.current < 500) return
+    lastUrlUpdateTime.current = now
+
     if (onFilterChange) {
       onFilterChange(filterValues)
     }
     
     if (preserveFiltersInUrl) {
-      const params = new URLSearchParams(searchParams.toString())
+      const params = new URLSearchParams()
       
-      // Update URL parameters
+      // Get all existing non-filter params
+      searchParams.forEach((value, key) => {
+        const isFilterKey = filters.some(filter => filter.id === key)
+        if (!isFilterKey) {
+          params.set(key, value)
+        }
+      })
+      
+      // Add our filter values
       Object.entries(filterValues).forEach(([key, value]) => {
         if (value === undefined || value === null || value === '') {
           params.delete(key)
@@ -104,23 +146,89 @@ const FilterBar: React.FC<FilterBarProps> = ({
       })
       
       const newUrl = `${pathname}?${params.toString()}`
-      router.push(newUrl)
+      router.replace(newUrl, { scroll: false })
     }
-  }, [filterValues, onFilterChange, preserveFiltersInUrl, pathname, router, searchParams])
+  }, [filterValues, onFilterChange, preserveFiltersInUrl, pathname, router, searchParams, filters])
   
+  // Update URL when filter values change, with debouncing
+  useEffect(() => {
+    if (!didInitialize.current) return
+    
+    // Skip first render
+    if (isInitialMount.current) {
+      isInitialMount.current = false
+      return
+    }
+    
+    if (isUpdatingFromUrl.current) {
+      isUpdatingFromUrl.current = false
+      return
+    }
+    
+    updateUrl()
+  }, [filterValues, updateUrl])
+  
+  // Check if URL params have changed externally
+  useEffect(() => {
+    if (!didInitialize.current) return
+    
+    const newValues: Record<string, any> = {...filterValues}
+    let hasChanges = false
+    
+    filters.forEach(filter => {
+      if (searchParams.has(filter.id)) {
+        const paramValue = searchParams.get(filter.id)
+        
+        if (filter.type === 'dateRange' && paramValue) {
+          try {
+            const parsed = JSON.parse(paramValue)
+            if (JSON.stringify(filterValues[filter.id]) !== JSON.stringify(parsed)) {
+              newValues[filter.id] = parsed
+              hasChanges = true
+            }
+          } catch (e) {
+            // Invalid JSON
+          }
+        } else if (filterValues[filter.id] !== paramValue) {
+          newValues[filter.id] = paramValue
+          hasChanges = true
+        }
+      } else if (filterValues[filter.id]) {
+        newValues[filter.id] = ''
+        hasChanges = true
+      }
+    })
+    
+    if (hasChanges) {
+      isUpdatingFromUrl.current = true
+      setFilterValues(newValues)
+    }
+  }, [searchParams, filters, filterValues])
+  
+  // Handle filter changes
   const handleFilterChange = (id: string, value: any) => {
+    // For search inputs, use debouncing
+    if (filters.find(f => f.id === id)?.type === 'search') {
+      debouncedSearchChange(id, value)
+      return
+    }
+    
+    // For other inputs, update immediately
     setFilterValues(prev => ({
       ...prev,
       [id]: value
     }))
   }
   
+  // Handle clearing filters
   const handleClearFilters = () => {
     const defaultValues: Record<string, any> = {}
     
     filters.forEach(filter => {
       if (filter.defaultValue !== undefined) {
         defaultValues[filter.id] = filter.defaultValue
+      } else {
+        defaultValues[filter.id] = ''
       }
     })
     
@@ -184,7 +292,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
               <Select
                 id={filter.id}
                 placeholder={filter.placeholder || 'Select...'}
-                value={filterValues[filter.id] || ''}
+                value={filterValues[filter.id] !== undefined ? filterValues[filter.id] : ''}
                 onValueChange={(value) => handleFilterChange(filter.id, value)}
               >
                 {filter.options?.map(option => (
@@ -199,7 +307,9 @@ const FilterBar: React.FC<FilterBarProps> = ({
               <TextInput
                 id={filter.id}
                 placeholder={filter.placeholder || 'Search...'}
-                value={filterValues[filter.id] || ''}
+                value={pendingSearchValue.current !== null ? 
+                  pendingSearchValue.current : 
+                  (filterValues[filter.id] || '')}
                 onChange={(e) => handleFilterChange(filter.id, e.target.value)}
                 icon={MagnifyingGlassIcon}
               />

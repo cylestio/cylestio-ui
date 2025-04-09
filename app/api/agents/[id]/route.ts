@@ -21,7 +21,14 @@ export async function GET(
     const dbUtils = new DbUtils(dbConnection);
     
     let agent = null;
-    let metrics = null;
+    let metrics = {
+      total_sessions: 0,
+      total_conversations: 0,
+      total_events: 0,
+      llm_calls: 0,
+      tool_calls: 0,
+      security_alerts: 0
+    };
     let recentEvents = [];
     let responseTimeData = [];
     let eventTypeDistribution = [];
@@ -52,7 +59,10 @@ export async function GET(
       agent = dbUtils.queryOne(query, { agentId });
       
       if (!agent) {
-        throw new Error("Agent not found in database");
+        return NextResponse.json(
+          { error: 'Agent not found' },
+          { status: 404 }
+        );
       }
       
       // Ensure agent has all needed properties
@@ -76,7 +86,7 @@ export async function GET(
           metrics = agentRepository.getAgentMetrics(agentId);
         } catch (err) {
           console.error('Error getting agent metrics:', err);
-          // Metrics will be handled by fallback below
+          // Unable to get metrics, will use empty metrics object defined above
         }
         
         // Get recent events if possible
@@ -126,84 +136,15 @@ export async function GET(
           }
         } catch (err) {
           console.error('Error getting event data:', err);
-          // These will be handled by fallbacks below
+          // Will use empty arrays defined above
         }
       }
     } catch (dbError) {
-      console.error('Database query failed, using fallback data:', dbError);
-      
-      // Provide fallback data based on agent ID
-      const fallbackAgents = [
-        { id: 1, name: 'Customer Service Bot', status: 'active', type: 'chat', last_active: new Date().toISOString(), event_count: 2435, description: 'AI assistant that helps customers with inquiries and support issues.' },
-        { id: 2, name: 'Data Analyzer', status: 'active', type: 'analysis', last_active: new Date().toISOString(), event_count: 1526, description: 'Processes and analyzes large datasets to extract insights.' },
-        { id: 3, name: 'Security Monitor', status: 'active', type: 'security', last_active: new Date().toISOString(), event_count: 892, description: 'Monitors system access and detects suspicious activities.' },
-        { id: 4, name: 'Legacy Integration', status: 'inactive', type: 'integration', last_active: new Date(Date.now() - 86400000).toISOString(), event_count: 421, description: 'Connects modern systems with legacy databases and applications.' },
-        { id: 5, name: 'Inventory Assistant', status: 'error', type: 'assistant', last_active: new Date(Date.now() - 3600000).toISOString(), event_count: 198, description: 'Manages inventory and helps with stock predictions.' },
-      ];
-      
-      // Find the agent with matching ID
-      agent = fallbackAgents.find(a => a.id === agentId);
-      
-      if (!agent) {
-        return NextResponse.json(
-          { error: 'Agent not found' },
-          { status: 404 }
-        );
-      }
-    }
-    
-    // Use fallback metrics if none were retrieved
-    if (!metrics) {
-      metrics = {
-        total_sessions: Math.floor(Math.random() * 100) + 50,
-        total_conversations: Math.floor(Math.random() * 500) + 100,
-        total_events: agent.event_count,
-        llm_calls: Math.floor(agent.event_count * 0.6),
-        tool_calls: Math.floor(agent.event_count * 0.3),
-        security_alerts: Math.floor(Math.random() * 10)
-      };
-    }
-    
-    // Use fallback event data if none were retrieved
-    if (recentEvents.length === 0) {
-      const eventTypes = ['llm_request', 'llm_response', 'tool_call', 'tool_response', 'user_message', 'agent_message'];
-      const statusTypes = ['success', 'error', 'warning'];
-      
-      for (let i = 0; i < 10; i++) {
-        recentEvents.push({
-          id: i + 1,
-          timestamp: new Date(Date.now() - i * 600000).toISOString(),
-          event_type: eventTypes[Math.floor(Math.random() * eventTypes.length)],
-          agent_id: agentId,
-          session_id: Math.floor(Math.random() * 10) + 1,
-          conversation_id: Math.floor(Math.random() * 20) + 1,
-          status: statusTypes[Math.floor(Math.random() * statusTypes.length)]
-        });
-      }
-    }
-    
-    // Use fallback response time data if none were retrieved
-    if (responseTimeData.length === 0) {
-      for (let i = 0; i < 24; i++) {
-        const date = new Date();
-        date.setHours(date.getHours() - i);
-        const hour = date.toISOString().substring(0, 13) + ':00:00';
-        responseTimeData.push({
-          hour,
-          avg_response_time: Math.floor(Math.random() * 500) + 100
-        });
-      }
-    }
-    
-    // Use fallback event type distribution if none were retrieved
-    if (eventTypeDistribution.length === 0) {
-      const eventTypes = ['llm_request', 'llm_response', 'tool_call', 'tool_response', 'user_message', 'agent_message'];
-      eventTypes.forEach(type => {
-        eventTypeDistribution.push({
-          type,
-          count: Math.floor(Math.random() * 200) + 50
-        });
-      });
+      console.error('Database query failed:', dbError);
+      return NextResponse.json(
+        { error: 'Agent not found or database error' },
+        { status: 404 }
+      );
     }
     
     const response = {
