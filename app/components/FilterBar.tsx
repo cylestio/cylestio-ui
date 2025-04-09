@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import { 
   TextInput, 
@@ -52,74 +52,166 @@ const FilterBar: React.FC<FilterBarProps> = ({
   const [showFilters, setShowFilters] = useState(false)
   
   // Initialize filter values from URL params or defaults on component mount
+  const filterStateInitialized = useRef(false);
+  
   useEffect(() => {
-    const initialState: Record<string, any> = {}
+    // Only initialize once
+    if (filterStateInitialized.current) return;
     
-    filters.forEach(filter => {
-      // First try to get value from URL if preserveFiltersInUrl is true
+    const initialState: Record<string, any> = {};
+    
+    // Process each filter option
+    for (const filter of filters) {
+      let valueFound = false;
+      
+      // Try to get from URL first
       if (preserveFiltersInUrl) {
-        const urlValue = searchParams.get(filter.id)
+        const urlValue = searchParams.get(filter.id);
         if (urlValue !== null) {
-          initialState[filter.id] = urlValue
-          return
+          initialState[filter.id] = urlValue;
+          valueFound = true;
         }
       }
       
-      // Otherwise use the default value from filter definition
-      if (filter.defaultValue !== undefined) {
-        initialState[filter.id] = filter.defaultValue
+      // If no value found yet, use default from filter definition
+      if (!valueFound && filter.defaultValue !== undefined) {
+        initialState[filter.id] = filter.defaultValue;
       }
-    })
-    
-    setFilterState(initialState)
-    
-    // Only trigger onFilterChange if we have any values
-    if (Object.keys(initialState).length > 0) {
-      onFilterChange(initialState)
     }
-  }, [filters, searchParams, preserveFiltersInUrl, onFilterChange])
+    
+    // Update state if we have values
+    if (Object.keys(initialState).length > 0) {
+      setFilterState(initialState);
+      
+      // Only notify parent if values differ from current URL
+      if (!preserveFiltersInUrl) {
+        onFilterChange(initialState);
+      }
+    }
+    
+    // Mark as initialized
+    filterStateInitialized.current = true;
+  }, [filters]); // Only depend on filters array
   
   // Update URL with filter values if preserveFiltersInUrl is true
+  const urlUpdateInProgress = useRef(false);
+  
   useEffect(() => {
-    if (!preserveFiltersInUrl) return
+    if (!preserveFiltersInUrl || urlUpdateInProgress.current) return;
     
-    const params = new URLSearchParams(searchParams.toString())
+    // Check if URL params match current filter state 
+    let needsUpdate = false;
+    const currentParams = new URLSearchParams(searchParams.toString());
     
-    // Update params with filter state
+    // Compare current URL params with filter state
     Object.entries(filterState).forEach(([key, value]) => {
-      if (value !== undefined && value !== null && value !== '') {
-        params.set(key, String(value))
-      } else {
-        params.delete(key)
+      const stringValue = value !== undefined && value !== null && value !== '' 
+        ? String(value) 
+        : '';
+      const paramValue = currentParams.get(key) || '';
+      
+      if (stringValue !== paramValue) {
+        needsUpdate = true;
       }
-    })
+    });
     
-    const queryString = params.toString()
-    const newPath = queryString ? `${pathname}?${queryString}` : pathname
+    // Check for params in URL that aren't in filter state
+    currentParams.forEach((value, key) => {
+      if (filterState[key] === undefined && key !== 'page' && key !== 'time_range') {
+        needsUpdate = true;
+      }
+    });
     
-    router.replace(newPath, { scroll: false })
-  }, [filterState, pathname, router, searchParams, preserveFiltersInUrl])
+    // Only update if there's an actual change
+    if (needsUpdate) {
+      urlUpdateInProgress.current = true;
+      
+      try {
+        const params = new URLSearchParams();
+        
+        // Only add non-empty values to URL
+        Object.entries(filterState).forEach(([key, value]) => {
+          if (value !== undefined && value !== null && value !== '') {
+            params.set(key, String(value));
+          }
+        });
+        
+        // Preserve page and time_range params individually
+        const pageValue = currentParams.get('page');
+        if (pageValue) {
+          params.set('page', pageValue);
+        }
+        
+        const timeRangeValue = currentParams.get('time_range');
+        if (timeRangeValue) {
+          params.set('time_range', timeRangeValue);
+        }
+        
+        const queryString = params.toString();
+        const newPath = queryString ? `${pathname}?${queryString}` : pathname;
+        
+        router.replace(newPath, { scroll: false });
+      } finally {
+        // Reset flag in next tick
+        setTimeout(() => {
+          urlUpdateInProgress.current = false;
+        }, 0);
+      }
+    }
+  }, [filterState, pathname, router, searchParams, preserveFiltersInUrl]);
   
   const handleFilterChange = (id: string, value: any) => {
-    const newState = {
-      ...filterState,
-      [id]: value
-    }
+    // Create a complete new state object with all current filters
+    const newState = { ...filterState }
     
-    // Remove empty values
+    // Remove empty values or add new value
     if (value === '' || value === null || value === undefined) {
       delete newState[id]
+    } else {
+      newState[id] = value
     }
     
+    // Update local state
     setFilterState(newState)
-    onFilterChange({ [id]: value })
+    
+    // Pass the FULL updated filter state to parent, not just the changed field
+    onFilterChange(newState)
   }
   
   const handleClearAll = () => {
+    // Force reset the filter state in the UI
     setFilterState({})
+    
+    // Reset URL immediately if needed to avoid flashing of old values
+    if (preserveFiltersInUrl) {
+      // Create new params object
+      const params = new URLSearchParams()
+      const currentParams = new URLSearchParams(searchParams.toString())
+      
+      // Preserve page param if it exists
+      const pageValue = currentParams.get('page')
+      if (pageValue) {
+        params.set('page', pageValue)
+      }
+      
+      // Preserve time_range param if it exists
+      const timeRangeValue = currentParams.get('time_range')
+      if (timeRangeValue) {
+        params.set('time_range', timeRangeValue)
+      }
+      
+      // Update URL without filter params
+      const queryString = params.toString()
+      const newPath = queryString ? `${pathname}?${queryString}` : pathname
+      router.replace(newPath, { scroll: false })
+    }
+    
+    // Use custom handler if provided
     if (onClearAll) {
       onClearAll()
     } else {
+      // Explicitly pass an empty object to parent
+      // This is important for components that need to know filters were cleared
       onFilterChange({})
     }
   }

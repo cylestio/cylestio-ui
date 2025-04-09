@@ -11,7 +11,6 @@ import BreadcrumbNavigation from '../drilldown/BreadcrumbNavigation';
 import FilterBar from '../FilterBar';
 import LoadingState from '../LoadingState';
 import ErrorMessage from '../ErrorMessage';
-import { SimpleDonutChart } from '../SimpleDonutChart';
 import DrilldownMetricCard from '../drilldown/DrilldownMetricCard';
 import appSettings from '../../config/app-settings';
 import { fetchAPI, buildQueryParams } from '../../lib/api';
@@ -28,6 +27,31 @@ const isAgentActive = (agent: Agent): boolean => {
   const threshold = new Date(now.getTime() - thresholdHours * 60 * 60 * 1000);
   
   return lastActive >= threshold;
+};
+
+// Helper to filter agents based on time range
+const isAgentInTimeRange = (agent: Agent, timeRange: TimeRangeOption): boolean => {
+  const lastActive = new Date(agent.updated_at);
+  const now = new Date();
+  
+  let timeThreshold: Date;
+  
+  // Calculate threshold date based on time range
+  switch (timeRange) {
+    case '24h':
+      timeThreshold = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      break;
+    case '7d':
+      timeThreshold = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      break;
+    case '30d':
+      timeThreshold = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      break;
+    default:
+      timeThreshold = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); // Default to 7 days
+  }
+  
+  return lastActive >= timeThreshold;
 };
 
 export function AgentsExplorerContainer() {
@@ -79,25 +103,37 @@ export function AgentsExplorerContainer() {
   }, [searchParams, timeRange]); // Only run when searchParams change
 
   // Update URL with current filters
+  const updatingUrl = useRef(false);
+  
   useEffect(() => {
-    // Only update URL after initial load
-    if (!didInitializeFromUrl.current) return;
+    // Only update URL after initial load and not during an existing update
+    if (!didInitializeFromUrl.current || updatingUrl.current) return;
     
-    const queryParams = new URLSearchParams();
+    // Set flag to indicate we're updating
+    updatingUrl.current = true;
     
-    // Add all non-empty filters to URL
-    Object.entries(filters).forEach(([key, value]) => {
-      if (value !== undefined && value !== null && value !== '') {
-        queryParams.set(key, String(value));
-      }
-    });
-    
-    // Update URL with new query params
-    const queryString = queryParams.toString();
-    const newUrl = queryString ? `${pathname}?${queryString}` : pathname;
-    
-    // Use replace to avoid adding to browser history
-    router.replace(newUrl, { scroll: false });
+    try {
+      const queryParams = new URLSearchParams();
+      
+      // Add all non-empty filters to URL
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          queryParams.set(key, String(value));
+        }
+      });
+      
+      // Update URL with new query params
+      const queryString = queryParams.toString();
+      const newUrl = queryString ? `${pathname}?${queryString}` : pathname;
+      
+      // Use replace to avoid adding to browser history
+      router.replace(newUrl, { scroll: false });
+    } finally {
+      // Reset flag once update is complete (in next tick)
+      setTimeout(() => {
+        updatingUrl.current = false;
+      }, 0);
+    }
   }, [filters, pathname, router]);
 
   // Fetch agent data
@@ -106,21 +142,19 @@ export function AgentsExplorerContainer() {
       setLoading(true);
       setError(null);
       
-      // Build query parameters
-      const params: Record<string, any> = {
-        page: filters.page,
-        page_size: 10, // Fixed page size for MVP
-        sort_by: filters.sort_by,
-        sort_dir: filters.sort_dir,
-        search: filters.search,
-        time_range: filters.time_range
-      };
+      // Create a clean params object excluding undefined/empty values
+      const params: Record<string, any> = {};
       
-      // Add status filter - note we'll apply active/inactive client-side
-      // based on our time threshold logic
-      if (filters.status) {
-        params.status = filters.status;
-      }
+      // Only add defined values
+      if (filters.page) params.page = filters.page;
+      params.page_size = 10; // Fixed page size for MVP
+      if (filters.sort_by) params.sort_by = filters.sort_by;
+      if (filters.sort_dir) params.sort_dir = filters.sort_dir;
+      if (filters.search) params.search = filters.search;
+      if (filters.time_range) params.time_range = filters.time_range;
+      
+      // Don't send status in API call - we'll filter client side
+      // to ensure our active/inactive logic is consistent
       
       console.log('Fetching agents with params:', params);
       
@@ -131,26 +165,34 @@ export function AgentsExplorerContainer() {
       
       // Process agents data
       let filteredAgents = data.items || [];
+      const currentStatus = filters.status;
+      const currentTimeRange = filters.time_range as TimeRangeOption;
       
-      // Apply active/inactive filter client-side if needed
-      if (filters.status === 'active') {
+      console.log('Current filters - status:', currentStatus, 'time_range:', currentTimeRange);
+      
+      // Apply time range filter first - this affects all data including active/inactive status
+      if (currentTimeRange) {
+        console.log(`Filtering for agents active in the last ${currentTimeRange}`);
+        filteredAgents = filteredAgents.filter(agent => isAgentInTimeRange(agent, currentTimeRange));
+      }
+      
+      // Then apply active/inactive filter on top of the time range filtered results
+      if (currentStatus === 'active') {
+        console.log('Filtering for active agents');
         filteredAgents = filteredAgents.filter(agent => isAgentActive(agent));
-      } else if (filters.status === 'inactive') {
+      } else if (currentStatus === 'inactive') {
+        console.log('Filtering for inactive agents');
         filteredAgents = filteredAgents.filter(agent => !isAgentActive(agent));
       }
       
       setAgents(filteredAgents);
       
       // Adjust pagination for client-side filtered results
-      if (filters.status === 'active' || filters.status === 'inactive') {
-        setPagination({
-          ...data.pagination,
-          total: filteredAgents.length,
-          total_pages: Math.max(1, Math.ceil(filteredAgents.length / data.pagination.page_size))
-        });
-      } else {
-        setPagination(data.pagination);
-      }
+      setPagination({
+        ...data.pagination,
+        total: filteredAgents.length,
+        total_pages: Math.max(1, Math.ceil(filteredAgents.length / data.pagination.page_size))
+      });
     } catch (err: any) {
       console.error('Error fetching agents:', err);
       setError(err.message || 'An error occurred while fetching agents');
@@ -184,22 +226,117 @@ export function AgentsExplorerContainer() {
   };
   
   // Handle filter changes
-  const handleFilterChange = (newFilters: Record<string, any>) => {
-    setFilters(prev => {
-      const updated = {
-        ...prev,
-        ...newFilters,
-        page: 1 // Reset to page 1 when filters change
-      };
+  const processingFilterChange = useRef(false);
+  
+  const handleFilterChange = useCallback((newFilters: Record<string, any>) => {
+    // Prevent re-entrancy
+    if (processingFilterChange.current) return;
+    processingFilterChange.current = true;
+    
+    try {
+      // Check if there are actual changes
+      const currentFilters = { ...filters };
+      let hasChanges = false;
       
-      // Only update if there are actual changes
-      if (JSON.stringify(updated) === JSON.stringify(prev)) {
-        return prev; // No changes, return previous state to avoid re-render
+      // Handle clearing all filters - special case for empty object
+      if (Object.keys(newFilters).length === 0) {
+        const updatedFilters = {
+          // Only preserve pagination and time range
+          page: 1, // Reset to page 1 when clearing filters
+          time_range: filters.time_range
+        };
+        
+        // If any filter fields were removed, mark as changed
+        if (Object.keys(filters).some(key => 
+          key !== 'page' && key !== 'time_range' && filters[key] !== undefined)) {
+          hasChanges = true;
+        }
+        
+        if (hasChanges) {
+          console.log("Clearing all filters:", updatedFilters);
+          setFilters(updatedFilters);
+        }
+        return;
       }
       
-      return updated;
-    });
-  };
+      // Handle incoming filter changes from FilterBar
+      const fullFilterUpdate = Object.keys(newFilters).length > 1 || 
+        (Object.keys(newFilters).length === 1 && !('page' in newFilters));
+      
+      // Check for different types of updates
+      if (fullFilterUpdate) {
+        // Full filter state update (from FilterBar)
+        const updatedFilters = { 
+          // Preserve pagination and time range
+          page: filters.page, 
+          time_range: filters.time_range
+        };
+        
+        // Add all non-empty new filters
+        Object.entries(newFilters).forEach(([key, value]) => {
+          if (value !== undefined && value !== null && value !== '') {
+            updatedFilters[key] = value;
+            
+            // Check if this is a change
+            if (filters[key] !== value) {
+              hasChanges = true;
+            }
+          }
+        });
+        
+        // Check if filters were removed
+        Object.keys(filters).forEach(key => {
+          if (key !== 'page' && key !== 'time_range' && 
+              !(key in updatedFilters) && filters[key] !== undefined) {
+            hasChanges = true;
+          }
+        });
+        
+        // Reset to page 1 if filters changed
+        if (hasChanges) {
+          updatedFilters.page = 1;
+        }
+        
+        // Only update if there are changes
+        if (hasChanges) {
+          console.log("Updating filters:", updatedFilters);
+          setFilters(updatedFilters);
+        }
+      } else {
+        // Individual filter change
+        const updatedFilters = { ...filters };
+        
+        // Apply changes
+        Object.entries(newFilters).forEach(([key, value]) => {
+          if (value === undefined || value === null || value === '') {
+            if (key in updatedFilters) {
+              delete updatedFilters[key];
+              hasChanges = true;
+            }
+          } else if (updatedFilters[key] !== value) {
+            updatedFilters[key] = value;
+            hasChanges = true;
+          }
+        });
+        
+        // Reset page to 1 if filter changed (except for page changes)
+        if (hasChanges && !('page' in newFilters)) {
+          updatedFilters.page = 1;
+        }
+        
+        // Only update if there are changes
+        if (hasChanges) {
+          console.log("Updating filters:", updatedFilters);
+          setFilters(updatedFilters);
+        }
+      }
+    } finally {
+      // Reset processing flag in next tick
+      setTimeout(() => {
+        processingFilterChange.current = false;
+      }, 0);
+    }
+  }, [filters]);
   
   // Handle pagination
   const handlePageChange = (newPage: number) => {
@@ -224,16 +361,16 @@ export function AgentsExplorerContainer() {
         { value: 'active', label: `Active (last ${appSettings.agents.activeThresholdHours}h)` },
         { value: 'inactive', label: 'Inactive' }
       ],
-      defaultValue: filters.status || ''
+      defaultValue: '' // Don't derive from filters to avoid circular dependency
     },
     {
       id: 'search',
       label: 'Search',
       type: 'search' as const,
       placeholder: 'Search agent name...',
-      defaultValue: filters.search || ''
+      defaultValue: '' // Don't derive from filters to avoid circular dependency
     }
-  ], [filters.status, filters.search]);
+  ], [appSettings.agents.activeThresholdHours]); // Only depends on app settings
 
   if (loading && agents.length === 0) {
     return <LoadingState message="Loading agents..." />;
@@ -285,69 +422,55 @@ export function AgentsExplorerContainer() {
 
 // Inline AgentsOverview component
 function AgentsOverview({ agents, timeRange }: { agents: Agent[], timeRange: string }) {
-  // Calculate metrics
+  // Calculate metrics based on filtered agents
   const totalAgents = agents.length;
+  
+  // Active agents in the selected time range
   const activeAgents = agents.filter(agent => isAgentActive(agent)).length;
+  
+  // Inactive agents in the selected time range
   const inactiveAgents = totalAgents - activeAgents;
+  
+  // Agents with errors
   const errorAgents = agents.filter(a => a.error_count > 0).length;
   
   // Total request count & errors
   const totalRequests = agents.reduce((sum, agent) => sum + (agent.request_count || 0), 0);
   const totalErrors = agents.reduce((sum, agent) => sum + (agent.error_count || 0), 0);
   
-  // Format status data for chart
-  const statusChartData = [
-    { name: 'Active', count: activeAgents },
-    { name: 'Inactive', count: inactiveAgents }
-  ];
+  // Get human-readable time range for display
+  const timeRangeDisplay = timeRange === '24h' ? '24 hours' : 
+                         timeRange === '7d' ? '7 days' : 
+                         timeRange === '30d' ? '30 days' : 
+                         '7 days';
 
   return (
     <div>
       <Grid numItems={1} numItemsMd={2} numItemsLg={4} className="gap-4 mb-6">
         <DrilldownMetricCard
-          title="Total Agents"
+          title={`Total Agents (last ${timeRangeDisplay})`}
           value={totalAgents.toString()}
           variant="primary"
-          drilldownHref="/agents"
-          preserveCurrentFilters={true}
         />
         
         <DrilldownMetricCard
           title={`Active (last ${appSettings.agents.activeThresholdHours}h)`}
           value={activeAgents.toString()}
           variant="success"
-          drilldownHref={`/agents?status=active&time_range=${timeRange}`}
         />
         
         <DrilldownMetricCard
           title="Error State"
           value={errorAgents.toString()}
           variant="error"
-          drilldownHref={errorAgents > 0 ? `/agents?error_count=1&time_range=${timeRange}` : undefined}
         />
         
         <DrilldownMetricCard
           title="Inactive"
           value={inactiveAgents.toString()}
           variant="neutral"
-          drilldownHref={inactiveAgents > 0 ? `/agents?status=inactive&time_range=${timeRange}` : undefined}
         />
       </Grid>
-      
-      <div className="mb-6">
-        <Card>
-          <Title>Agent Status Distribution</Title>
-          <SimpleDonutChart
-            data={statusChartData}
-            showLegend={true}
-            showTotal={true}
-            className="mt-6"
-            valueFormatter={(value) => value.toString()}
-            colors={['emerald', 'gray']}
-            emptyMessage="No agent status data available"
-          />
-        </Card>
-      </div>
     </div>
   );
 }
