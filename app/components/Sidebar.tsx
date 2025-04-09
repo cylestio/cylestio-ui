@@ -15,11 +15,6 @@ import { useEffect, useState } from 'react'
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: HomeIcon },
-  { name: 'Agents', href: '/agents', icon: UserGroupIcon },
-  { name: 'Events', href: '/events', icon: ClockIcon },
-  { name: 'Alerts', href: '/alerts', icon: ExclamationTriangleIcon },
-  { name: 'Analytics', href: '/analytics', icon: ChartBarIcon },
-  { name: 'Settings', href: '/settings', icon: Cog6ToothIcon },
 ]
 
 // Define and export props interface
