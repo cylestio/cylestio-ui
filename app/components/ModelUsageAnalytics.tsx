@@ -669,12 +669,19 @@ function CostAnalysisComboChart({ data, perTokenData }: {
   );
 }
 
-// Add the new AgentModelBarChart component
-function AgentModelBarChart({ data, categories, colors, valueFormatter }: {
+// Modify the AgentModelBarChart component to include cost data as a line
+function AgentModelBarChart({ 
+  data, 
+  categories, 
+  colors, 
+  valueFormatter,
+  costData, // Add cost data parameter
+}: {
   data: Record<string, any>[];
   categories: string[];
   colors: string[];
   valueFormatter: (value: number) => string;
+  costData?: Array<{agent: string, cost: number}>; // Optional cost data for line
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -683,9 +690,11 @@ function AgentModelBarChart({ data, categories, colors, valueFormatter }: {
     x: number;
     y: number;
     agent: string;
-    category: string;
+    category?: string;
     value: number;
+    cost?: number;
     color: string;
+    isCost?: boolean;
   } | null>(null);
   
   // Function to draw the entire chart
@@ -719,7 +728,7 @@ function AgentModelBarChart({ data, categories, colors, valueFormatter }: {
     // Set up chart dimensions with better spacing
     const chartPadding = {
       top: 50, // More space for legend
-      right: 30,
+      right: 70, // More space for cost axis
       bottom: 50, // More space for agent names
       left: 70 // Space for numbers
     };
@@ -732,6 +741,12 @@ function AgentModelBarChart({ data, categories, colors, valueFormatter }: {
       return categories.reduce((sum, category) => sum + (agent[category] || 0), 0);
     })) || 1; // Ensure not zero
     
+    // Find max cost if cost data is provided
+    let maxCost = 0;
+    if (costData && costData.length > 0) {
+      maxCost = Math.max(...costData.map(item => item.cost)) || 0.1;
+    }
+    
     // Round up the max value to a nice number
     const roundUpToNice = (num: number) => {
       const magnitude = Math.pow(10, Math.floor(Math.log10(num)));
@@ -739,6 +754,8 @@ function AgentModelBarChart({ data, categories, colors, valueFormatter }: {
     };
     
     const niceMaxTotal = roundUpToNice(maxTotal);
+    // For cost, we want to round to a nice decimal for dollars
+    const niceMaxCost = maxCost <= 0.1 ? 0.1 : Math.ceil(maxCost * 10) / 10;
     
     // Set up bar dimensions
     const barCount = data.length;
@@ -750,7 +767,7 @@ function AgentModelBarChart({ data, categories, colors, valueFormatter }: {
     ctx.strokeStyle = '#E5E7EB'; // Light gray
     ctx.lineWidth = 1;
     
-    // Draw y-axis ticks and grid lines
+    // Draw y-axis ticks and grid lines for requests
     const tickCount = 5;
     ctx.fillStyle = '#6B7280'; // Text color
     ctx.font = '12px Inter, system-ui, sans-serif';
@@ -770,6 +787,40 @@ function AgentModelBarChart({ data, categories, colors, valueFormatter }: {
       ctx.fillText(valueFormatter(value), chartPadding.left - 8, y + 4);
     }
     
+    // Draw y-axis ticks for cost (right side)
+    if (costData && costData.length > 0) {
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#6B7280';
+      
+      for (let i = 0; i <= tickCount; i++) {
+        const value = niceMaxCost * (i / tickCount);
+        const y = chartHeight - (value / niceMaxCost * chartHeight) + chartPadding.top;
+        
+        // Draw cost tick label
+        ctx.fillText(`$${value.toFixed(2)}`, width - chartPadding.right + 8, y + 4);
+      }
+      
+      // Draw cost axis label
+      ctx.save();
+      ctx.translate(width - chartPadding.right / 3, chartHeight / 2 + chartPadding.top);
+      ctx.rotate(-Math.PI / 2);
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#4B5563';
+      ctx.font = 'bold 12px Inter, system-ui, sans-serif';
+      ctx.fillText('Cost ($)', 0, 0);
+      ctx.restore();
+      
+      // Draw requests axis label
+      ctx.save();
+      ctx.translate(chartPadding.left / 3, chartHeight / 2 + chartPadding.top);
+      ctx.rotate(-Math.PI / 2);
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#4B5563';
+      ctx.font = 'bold 12px Inter, system-ui, sans-serif';
+      ctx.fillText('Requests', 0, 0);
+      ctx.restore();
+    }
+    
     // Track segment positions for tooltip detection
     const segmentPositions: Array<{
       x: number;
@@ -780,6 +831,14 @@ function AgentModelBarChart({ data, categories, colors, valueFormatter }: {
       category: string;
       value: number;
       color: string;
+    }> = [];
+    
+    // Track cost points for line and tooltip
+    const costPoints: Array<{
+      x: number;
+      y: number;
+      agent: string;
+      cost: number;
     }> = [];
     
     // Draw each agent's stacked bar
@@ -840,31 +899,74 @@ function AgentModelBarChart({ data, categories, colors, valueFormatter }: {
       
       // Draw the agent name
       ctx.fillText(agentName, x + barWidth / 2, chartHeight + chartPadding.top + 20);
+      
+      // Store cost point if cost data exists
+      if (costData) {
+        const costItem = costData.find(c => c.agent === agent.agent);
+        if (costItem) {
+          const costY = chartHeight - (costItem.cost / niceMaxCost * chartHeight) + chartPadding.top;
+          costPoints.push({
+            x: x + barWidth / 2,
+            y: costY,
+            agent: agent.agent,
+            cost: costItem.cost
+          });
+        }
+      }
     });
     
-    // Draw legend with better styling
-    const legendItemWidth = Math.min(100, width / Math.min(categories.length, 6));
-    const legendFullWidth = legendItemWidth * Math.min(categories.length, 6);
-    const legendX = (width - legendFullWidth) / 2;
-    const legendY = 15;
+    // Draw cost line if we have cost data
+    if (costData && costData.length > 0 && costPoints.length > 0) {
+      // Draw the line connecting cost points
+      ctx.beginPath();
+      ctx.moveTo(costPoints[0].x, costPoints[0].y);
+      for (let i = 1; i < costPoints.length; i++) {
+        ctx.lineTo(costPoints[i].x, costPoints[i].y);
+      }
+      ctx.strokeStyle = '#EF4444'; // Red line
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      
+      // Draw points
+      costPoints.forEach(point => {
+        // Outer stroke
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, 6, 0, Math.PI * 2);
+        ctx.fillStyle = 'white';
+        ctx.fill();
+        
+        // Inner dot
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, 4, 0, Math.PI * 2);
+        ctx.fillStyle = '#EF4444'; // Red dot
+        ctx.fill();
+      });
+    }
     
-    // Draw legend background
+    // Draw legend with better styling
+    const modelLegendItemWidth = Math.min(100, width / Math.min(categories.length, 6));
+    const modelLegendFullWidth = modelLegendItemWidth * Math.min(categories.length, 6);
+    const modelLegendX = (width - modelLegendFullWidth) / 2;
+    const modelLegendY = 15;
+    
+    // Draw models legend background
     ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
     ctx.strokeStyle = '#E5E7EB';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.roundRect(legendX - 10, legendY - 5, legendFullWidth + 20, 30, 6);
+    ctx.roundRect(modelLegendX - 10, modelLegendY - 5, modelLegendFullWidth + 20, 30, 6);
     ctx.fill();
     ctx.stroke();
     
+    // Draw model colors in legend
     categories.forEach((category, index) => {
       if (index < 6) { // Show at most 6 in the first row
-        const itemX = legendX + (index * legendItemWidth);
+        const itemX = modelLegendX + (index * modelLegendItemWidth);
         
         // Draw color box
         ctx.fillStyle = colors[index % colors.length];
         ctx.beginPath();
-        ctx.rect(itemX, legendY + 5, 12, 12);
+        ctx.rect(itemX, modelLegendY + 5, 12, 12);
         ctx.fill();
         
         // Add stroke around color box
@@ -882,16 +984,49 @@ function AgentModelBarChart({ data, categories, colors, valueFormatter }: {
           displayName = displayName.substring(0, 8) + '...';
         }
         
-        ctx.fillText(displayName, itemX + 18, legendY + 15);
+        ctx.fillText(displayName, itemX + 18, modelLegendY + 15);
       }
     });
     
-    // Draw tooltip if hovering over a segment
+    // Add cost line to legend if we have cost data
+    if (costData && costData.length > 0) {
+      const costLegendX = width - 90;
+      const costLegendY = 50;
+      
+      // Draw cost legend background
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+      ctx.beginPath();
+      ctx.roundRect(costLegendX - 10, costLegendY - 5, 80, 30, 6);
+      ctx.fill();
+      ctx.stroke();
+      
+      // Draw line sample
+      ctx.beginPath();
+      ctx.moveTo(costLegendX, costLegendY + 10);
+      ctx.lineTo(costLegendX + 20, costLegendY + 10);
+      ctx.strokeStyle = '#EF4444';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      
+      // Draw point sample
+      ctx.beginPath();
+      ctx.arc(costLegendX + 10, costLegendY + 10, 4, 0, Math.PI * 2);
+      ctx.fillStyle = '#EF4444';
+      ctx.fill();
+      
+      // Draw cost label
+      ctx.fillStyle = '#374151';
+      ctx.font = '11px Inter, system-ui, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('Cost ($)', costLegendX + 25, costLegendY + 13);
+    }
+    
+    // Draw tooltip if hovering over a segment or cost point
     if (hoveredItem) {
       // Calculate tooltip dimensions and position
       const tooltipPadding = 10;
       const tooltipWidth = 200;
-      const tooltipHeight = 70;
+      const tooltipHeight = hoveredItem.isCost ? 60 : 70;
       const tooltipX = Math.min(Math.max(hoveredItem.x, 10), width - tooltipWidth - 10);
       const tooltipY = Math.max(10, hoveredItem.y - tooltipHeight - 10);
       
@@ -930,20 +1065,30 @@ function AgentModelBarChart({ data, categories, colors, valueFormatter }: {
       // Draw agent name
       ctx.fillText(hoveredItem.agent, tooltipX + tooltipPadding + 20, tooltipY + tooltipPadding + 10);
       
-      // Draw model name and value
-      ctx.font = '12px Inter, system-ui, sans-serif';
-      ctx.fillText(
-        `Model: ${hoveredItem.category}`, 
-        tooltipX + tooltipPadding, 
-        tooltipY + tooltipPadding + 30
-      );
-      
-      // Draw value
-      ctx.fillText(
-        `Requests: ${valueFormatter(hoveredItem.value)}`,
-        tooltipX + tooltipPadding, 
-        tooltipY + tooltipPadding + 50
-      );
+      if (hoveredItem.isCost) {
+        // Draw cost value
+        ctx.font = '12px Inter, system-ui, sans-serif';
+        ctx.fillText(
+          `Cost: $${hoveredItem.value.toFixed(2)}`,
+          tooltipX + tooltipPadding, 
+          tooltipY + tooltipPadding + 30
+        );
+      } else {
+        // Draw model name and value
+        ctx.font = '12px Inter, system-ui, sans-serif';
+        ctx.fillText(
+          `Model: ${hoveredItem.category}`, 
+          tooltipX + tooltipPadding, 
+          tooltipY + tooltipPadding + 30
+        );
+        
+        // Draw value
+        ctx.fillText(
+          `Requests: ${valueFormatter(hoveredItem.value)}`,
+          tooltipX + tooltipPadding, 
+          tooltipY + tooltipPadding + 50
+        );
+      }
     }
     
     // Mark as rendered
@@ -966,7 +1111,7 @@ function AgentModelBarChart({ data, categories, colors, valueFormatter }: {
     
     const chartPadding = {
       top: 50,
-      right: 30,
+      right: 70,
       bottom: 50,
       left: 70
     };
@@ -979,12 +1124,19 @@ function AgentModelBarChart({ data, categories, colors, valueFormatter }: {
       return categories.reduce((sum, category) => sum + (agent[category] || 0), 0);
     })) || 1;
     
+    // Find max cost if cost data is provided
+    let maxCost = 0;
+    if (costData && costData.length > 0) {
+      maxCost = Math.max(...costData.map(item => item.cost)) || 0.1;
+    }
+    
     const roundUpToNice = (num: number) => {
       const magnitude = Math.pow(10, Math.floor(Math.log10(num)));
       return Math.ceil(num / magnitude) * magnitude;
     };
     
     const niceMaxTotal = roundUpToNice(maxTotal);
+    const niceMaxCost = maxCost <= 0.1 ? 0.1 : Math.ceil(maxCost * 10) / 10;
     
     // Set up bar dimensions
     const barCount = data.length;
@@ -992,50 +1144,81 @@ function AgentModelBarChart({ data, categories, colors, valueFormatter }: {
     const totalBarSpace = barWidth * barCount;
     const barSpacing = (chartWidth - totalBarSpace) / (barCount + 1);
     
-    // Check if mouse is over any segment
+    // Variables to track what we hover over
     let foundSegment = false;
     let newHoveredItem = null;
     
-    // Check each agent bar
-    data.forEach((agent, agentIndex) => {
-      const x = chartPadding.left + barSpacing + (agentIndex * (barWidth + barSpacing));
-      let currentHeight = 0;
-      
-      // Check each category segment
-      for (let categoryIndex = 0; categoryIndex < categories.length; categoryIndex++) {
-        const category = categories[categoryIndex];
-        const value = agent[category] || 0;
-        const segmentHeight = (value / niceMaxTotal) * chartHeight;
+    // First check if we're hovering over a cost point (take precedence)
+    if (costData && costData.length > 0) {
+      for (let agentIndex = 0; agentIndex < data.length; agentIndex++) {
+        const agent = data[agentIndex].agent;
+        const costItem = costData.find(c => c.agent === agent);
         
-        if (segmentHeight > 0) {
-          const segY = chartHeight + chartPadding.top - currentHeight - segmentHeight;
+        if (costItem) {
+          const x = chartPadding.left + barSpacing + (agentIndex * (barWidth + barSpacing)) + barWidth / 2;
+          const y = chartHeight - (costItem.cost / niceMaxCost * chartHeight) + chartPadding.top;
           
-          // Check if mouse is over this segment
-          if (
-            mouseX >= x && 
-            mouseX <= x + barWidth &&
-            mouseY >= segY &&
-            mouseY <= segY + segmentHeight
-          ) {
+          // Check if mouse is near the cost point (within 8px radius)
+          const distance = Math.sqrt(Math.pow(mouseX - x, 2) + Math.pow(mouseY - y, 2));
+          if (distance <= 8) {
             foundSegment = true;
-            const colorIndex = categoryIndex % colors.length;
             newHoveredItem = {
               x: mouseX,
               y: mouseY,
-              agent: agent.agent,
-              category,
-              value,
-              color: colors[colorIndex]
+              agent,
+              value: costItem.cost,
+              color: '#EF4444',
+              isCost: true
             };
             break;
           }
-          
-          currentHeight += segmentHeight;
         }
       }
-      
-      if (foundSegment) return; // Exit the loop early if we found a segment
-    });
+    }
+    
+    // If we didn't find a cost point, check for bar segments
+    if (!foundSegment) {
+      // Check each agent bar
+      data.forEach((agent, agentIndex) => {
+        const x = chartPadding.left + barSpacing + (agentIndex * (barWidth + barSpacing));
+        let currentHeight = 0;
+        
+        // Check each category segment
+        for (let categoryIndex = 0; categoryIndex < categories.length; categoryIndex++) {
+          const category = categories[categoryIndex];
+          const value = agent[category] || 0;
+          const segmentHeight = (value / niceMaxTotal) * chartHeight;
+          
+          if (segmentHeight > 0) {
+            const segY = chartHeight + chartPadding.top - currentHeight - segmentHeight;
+            
+            // Check if mouse is over this segment
+            if (
+              mouseX >= x && 
+              mouseX <= x + barWidth &&
+              mouseY >= segY &&
+              mouseY <= segY + segmentHeight
+            ) {
+              foundSegment = true;
+              const colorIndex = categoryIndex % colors.length;
+              newHoveredItem = {
+                x: mouseX,
+                y: mouseY,
+                agent: agent.agent,
+                category,
+                value,
+                color: colors[colorIndex]
+              };
+              break;
+            }
+            
+            currentHeight += segmentHeight;
+          }
+        }
+        
+        if (foundSegment) return; // Exit the loop early if we found a segment
+      });
+    }
     
     // Update hoveredItem state if needed
     if (JSON.stringify(newHoveredItem) !== JSON.stringify(hoveredItem)) {
@@ -1097,7 +1280,7 @@ function AgentModelBarChart({ data, categories, colors, valueFormatter }: {
       resizeObserver.disconnect();
       window.removeEventListener('resize', drawChart);
     };
-  }, [data, categories, colors, valueFormatter, isRendered, hoveredItem]);
+  }, [data, categories, colors, valueFormatter, costData, isRendered, hoveredItem]);
   
   return (
     <div ref={containerRef} className="w-full h-full relative min-h-[320px]">
@@ -1426,7 +1609,32 @@ export default function ModelUsageAnalytics({ className = '', timeRange = '30d' 
       MODEL_DISPLAY_NAMES[model.toLowerCase()] || model
     );
   };
-  
+
+  // Function to get agent model costs - moved inside component to access relationshipData
+  const getAgentModelCosts = () => {
+    if (!relationshipData) return [];
+    
+    // Calculate total cost per agent
+    const agentCosts: Record<string, number> = {};
+    
+    relationshipData.forEach(item => {
+      const parts = item.key.split(':');
+      const agentId = parts[0];
+      
+      if (!agentCosts[agentId]) {
+        agentCosts[agentId] = 0;
+      }
+      
+      agentCosts[agentId] += item.metrics.estimated_cost_usd || 0;
+    });
+    
+    // Format for the chart
+    return Object.entries(agentCosts).map(([agent, cost]) => ({
+      agent,
+      cost
+    }));
+  };
+
   if (isLoading) {
     return (
       <DashboardCard className={className}>
@@ -1594,53 +1802,17 @@ export default function ModelUsageAnalytics({ className = '', timeRange = '30d' 
           
           {/* Agent Usage Tab */}
           <TabPanel>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+            <div className="grid grid-cols-1 mt-6">
               <Card>
-                <Title>Top Agent-Model Relationships</Title>
-                <Text>Most frequently used models by agent</Text>
-                <Table className="mt-4">
-                  <TableHead>
-                    <TableRow>
-                      <TableHeaderCell className="font-semibold">Agent</TableHeaderCell>
-                      <TableHeaderCell className="font-semibold">Model</TableHeaderCell>
-                      <TableHeaderCell className="font-semibold text-right">Requests</TableHeaderCell>
-                      <TableHeaderCell className="font-semibold text-right">Tokens</TableHeaderCell>
-                      <TableHeaderCell className="font-semibold text-right">Cost</TableHeaderCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {getTopAgentModels().map((item, index) => (
-                      <TableRow key={index}>
-                        <TableCell className="font-medium">
-                          {item.agent}
-                          {index < 3 && (
-                            <Badge size="xs" color={index === 0 ? "amber" : index === 1 ? "blue" : "emerald"} className="ml-2">
-                              {index === 0 ? "High" : index === 1 ? "Medium" : "Moderate"}
-                            </Badge>
-                          )}
-                        </TableCell>
-                        <TableCell>{item.model}</TableCell>
-                        <TableCell className="text-right">{formatNumber(item.requests)}</TableCell>
-                        <TableCell className="text-right">{formatNumber(item.tokens)}</TableCell>
-                        <TableCell className="text-right">
-                          {formatCost(item.cost)}
-                          {item.cost > 5 && <Badge size="xs" color="red" className="ml-1">High</Badge>}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </Card>
-              
-              <Card>
-                <Title>Model Usage by Agent</Title>
-                <Text>Distribution of requests by agent with model breakdown</Text>
-                <div className="mt-6 h-72">
+                <Title>Model Usage & Cost by Agent</Title>
+                <Text>Distribution of requests by agent with model breakdown and associated costs</Text>
+                <div className="mt-6 h-80">
                   <AgentModelBarChart
                     data={getAgentModelBreakdown()}
                     categories={getModelCategories()}
                     colors={chartColors}
                     valueFormatter={(value) => `${formatNumber(Number(value))}`}
+                    costData={getAgentModelCosts()}
                   />
                 </div>
               </Card>
