@@ -43,7 +43,6 @@ import ErrorMessage from './ErrorMessage'
 import { colors } from './DesignSystem'
 import { SimpleDonutChart } from './SimpleDonutChart'
 import { ModelDistributionChart } from './ModelDistributionChart'
-import { ResponseTimeComparisonChart } from './ResponseTimeComparisonChart'
 
 // Define types for the API responses
 type LLMAnalyticsResponse = {
@@ -167,7 +166,7 @@ type ModelUsageAnalyticsProps = {
   timeRange?: string;
 };
 
-// Refined pastel colors matching Tool Execution graph reference
+// Define chart colors
 const chartColors = [
   "#818cf8", // Primary soft blue (similar to get_forecast)
   "#a78bfa", // Soft purple (similar to get_alerts)
@@ -183,6 +182,11 @@ const chartColors = [
   "#e879f9"  // Fuchsia
 ];
 
+// Colors for the Response Time chart
+const responseTimeColors = ["rgba(59, 130, 246, 1)", "rgba(139, 92, 246, 1)"];
+
+// Colors for the Response Time chart - using Tremor's built-in colors
+
 export default function ModelUsageAnalytics({ className = '', timeRange = '30d' }: ModelUsageAnalyticsProps) {
   const [activeTab, setActiveTab] = useState<number>(0);
   const [modelData, setModelData] = useState<LLMAnalyticsResponse | null>(null);
@@ -191,6 +195,19 @@ export default function ModelUsageAnalytics({ className = '', timeRange = '30d' 
   const [trendData, setTrendData] = useState<UsageTrendsResponse | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Force chart styling
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.innerHTML = `
+      .performance-chart [data-testid="tremor-bar-0"] rect { fill: #3b82f6 !important; }
+      .performance-chart [data-testid="tremor-bar-1"] rect { fill: #8b5cf6 !important; }
+    `;
+    document.head.appendChild(style);
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
 
   useEffect(() => {
     fetchModelData();
@@ -561,13 +578,19 @@ export default function ModelUsageAnalytics({ className = '', timeRange = '30d' 
               <Card>
                 <Title>Response Time Comparison</Title>
                 <Text>Average and P95 response times by model</Text>
-                <div className="mt-4 h-80 min-h-[320px]">
-                  <ResponseTimeComparisonChart
-                    data={getModelResponseTimeData()}
-                    formatValue={(value) => `${value.toFixed(0)} ms`}
-                    colors={["rgba(59, 130, 246, 0.7)", "rgba(139, 92, 246, 0.7)"]}
-                  />
-                </div>
+                <BarChart
+                  className="mt-4 h-80 performance-chart"
+                  data={getModelResponseTimeData()}
+                  index="name"
+                  categories={['Response Time (ms)', 'p95 Response Time (ms)']}
+                  colors={["blue", "violet"]}
+                  stack={false}
+                  valueFormatter={(value) => `${value.toFixed(0)} ms`}
+                  yAxisWidth={64}
+                  showAnimation={true}
+                  showLegend={true}
+                  showGridLines={false}
+                />
               </Card>
             </div>
           </TabPanel>
