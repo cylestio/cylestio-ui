@@ -167,13 +167,13 @@ type ModelUsageAnalyticsProps = {
   timeRange?: string;
 };
 
-// Refined pastel colors matching Tool Execution graph reference
+// Redefine pastel chart colors with better contrast for bar segments
 const chartColors = [
-  "#818cf8", // Primary soft blue (similar to get_forecast)
-  "#a78bfa", // Soft purple (similar to get_alerts)
+  "#818cf8", // Primary soft blue 
+  "#a78bfa", // Soft purple
   "#60a5fa", // Lighter blue
-  "#34d399", // Soft green (similar to unknown)
-  "#fbbf24", // Amber (similar to get_forecast2)
+  "#34d399", // Soft green
+  "#fbbf24", // Amber
   "#f472b6", // Pink
   "#4ade80", // Light green
   "#38bdf8", // Sky blue
@@ -669,6 +669,443 @@ function CostAnalysisComboChart({ data, perTokenData }: {
   );
 }
 
+// Add the new AgentModelBarChart component
+function AgentModelBarChart({ data, categories, colors, valueFormatter }: {
+  data: Record<string, any>[];
+  categories: string[];
+  colors: string[];
+  valueFormatter: (value: number) => string;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [isRendered, setIsRendered] = useState<boolean>(false);
+  const [hoveredItem, setHoveredItem] = useState<{
+    x: number;
+    y: number;
+    agent: string;
+    category: string;
+    value: number;
+    color: string;
+  } | null>(null);
+  
+  // Function to draw the entire chart
+  const drawChart = () => {
+    const canvas = canvasRef.current;
+    const container = containerRef.current;
+    if (!canvas || !container) return;
+    
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    // Update canvas size to match container
+    const { width, height } = container.getBoundingClientRect();
+    
+    // If container dimensions are not ready yet, don't continue
+    if (width === 0 || height === 0) {
+      return;
+    }
+    
+    canvas.width = width * window.devicePixelRatio;
+    canvas.height = height * window.devicePixelRatio;
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+    
+    // Scale everything to account for device pixel ratio
+    ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+    
+    // Clear the canvas
+    ctx.clearRect(0, 0, width, height);
+    
+    // Set up chart dimensions with better spacing
+    const chartPadding = {
+      top: 50, // More space for legend
+      right: 30,
+      bottom: 50, // More space for agent names
+      left: 70 // Space for numbers
+    };
+    
+    const chartWidth = width - chartPadding.left - chartPadding.right;
+    const chartHeight = height - chartPadding.top - chartPadding.bottom;
+    
+    // Find max total for each agent
+    const maxTotal = Math.max(...data.map(agent => {
+      return categories.reduce((sum, category) => sum + (agent[category] || 0), 0);
+    })) || 1; // Ensure not zero
+    
+    // Round up the max value to a nice number
+    const roundUpToNice = (num: number) => {
+      const magnitude = Math.pow(10, Math.floor(Math.log10(num)));
+      return Math.ceil(num / magnitude) * magnitude;
+    };
+    
+    const niceMaxTotal = roundUpToNice(maxTotal);
+    
+    // Set up bar dimensions
+    const barCount = data.length;
+    const barWidth = Math.min(80, chartWidth / (barCount * 1.5)); // Cap width at 80px
+    const totalBarSpace = barWidth * barCount;
+    const barSpacing = (chartWidth - totalBarSpace) / (barCount + 1);
+    
+    // Draw background grid
+    ctx.strokeStyle = '#E5E7EB'; // Light gray
+    ctx.lineWidth = 1;
+    
+    // Draw y-axis ticks and grid lines
+    const tickCount = 5;
+    ctx.fillStyle = '#6B7280'; // Text color
+    ctx.font = '12px Inter, system-ui, sans-serif';
+    ctx.textAlign = 'right';
+    
+    for (let i = 0; i <= tickCount; i++) {
+      const value = niceMaxTotal * (i / tickCount);
+      const y = chartHeight - (value / niceMaxTotal * chartHeight) + chartPadding.top;
+      
+      // Draw gridline
+      ctx.beginPath();
+      ctx.moveTo(chartPadding.left, y);
+      ctx.lineTo(width - chartPadding.right, y);
+      ctx.stroke();
+      
+      // Draw tick label
+      ctx.fillText(valueFormatter(value), chartPadding.left - 8, y + 4);
+    }
+    
+    // Track segment positions for tooltip detection
+    const segmentPositions: Array<{
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      agent: string;
+      category: string;
+      value: number;
+      color: string;
+    }> = [];
+    
+    // Draw each agent's stacked bar
+    data.forEach((agent, agentIndex) => {
+      const x = chartPadding.left + barSpacing + (agentIndex * (barWidth + barSpacing));
+      let currentHeight = 0;
+      
+      // Draw each category as a segment in the stack
+      categories.forEach((category, categoryIndex) => {
+        const value = agent[category] || 0;
+        const segmentHeight = (value / niceMaxTotal) * chartHeight;
+        
+        if (segmentHeight > 0) { // Only draw if there's a value
+          // Pick color from the colors array (cycle if needed)
+          const colorIndex = categoryIndex % colors.length;
+          const color = colors[colorIndex];
+          ctx.fillStyle = color;
+          
+          // Calculate segment position
+          const segY = chartHeight + chartPadding.top - currentHeight - segmentHeight;
+          
+          // Draw segment
+          ctx.beginPath();
+          ctx.rect(x, segY, barWidth, segmentHeight);
+          ctx.fill();
+          
+          // Add stroke around segment
+          ctx.strokeStyle = 'white';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+          
+          // Store segment position for tooltip
+          segmentPositions.push({
+            x,
+            y: segY,
+            width: barWidth,
+            height: segmentHeight,
+            agent: agent.agent,
+            category,
+            value,
+            color
+          });
+          
+          currentHeight += segmentHeight;
+        }
+      });
+      
+      // Draw agent name (x-axis label)
+      ctx.fillStyle = '#374151'; // Dark text color
+      ctx.font = '12px Inter, system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      
+      // Format agent name
+      let agentName = agent.agent || '';
+      if (agentName.length > 16) {
+        agentName = agentName.substring(0, 14) + '...';
+      }
+      
+      // Draw the agent name
+      ctx.fillText(agentName, x + barWidth / 2, chartHeight + chartPadding.top + 20);
+    });
+    
+    // Draw legend with better styling
+    const legendItemWidth = Math.min(100, width / Math.min(categories.length, 6));
+    const legendFullWidth = legendItemWidth * Math.min(categories.length, 6);
+    const legendX = (width - legendFullWidth) / 2;
+    const legendY = 15;
+    
+    // Draw legend background
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.strokeStyle = '#E5E7EB';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(legendX - 10, legendY - 5, legendFullWidth + 20, 30, 6);
+    ctx.fill();
+    ctx.stroke();
+    
+    categories.forEach((category, index) => {
+      if (index < 6) { // Show at most 6 in the first row
+        const itemX = legendX + (index * legendItemWidth);
+        
+        // Draw color box
+        ctx.fillStyle = colors[index % colors.length];
+        ctx.beginPath();
+        ctx.rect(itemX, legendY + 5, 12, 12);
+        ctx.fill();
+        
+        // Add stroke around color box
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        
+        // Draw category name
+        ctx.fillStyle = '#374151';
+        ctx.font = '11px Inter, system-ui, sans-serif';
+        ctx.textAlign = 'left';
+        
+        let displayName = category;
+        if (displayName.length > 10) {
+          displayName = displayName.substring(0, 8) + '...';
+        }
+        
+        ctx.fillText(displayName, itemX + 18, legendY + 15);
+      }
+    });
+    
+    // Draw tooltip if hovering over a segment
+    if (hoveredItem) {
+      // Calculate tooltip dimensions and position
+      const tooltipPadding = 10;
+      const tooltipWidth = 200;
+      const tooltipHeight = 70;
+      const tooltipX = Math.min(Math.max(hoveredItem.x, 10), width - tooltipWidth - 10);
+      const tooltipY = Math.max(10, hoveredItem.y - tooltipHeight - 10);
+      
+      // Draw tooltip background with shadow
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.15)';
+      ctx.shadowBlur = 8;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 3;
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.98)';
+      ctx.beginPath();
+      ctx.roundRect(tooltipX, tooltipY, tooltipWidth, tooltipHeight, 8);
+      ctx.fill();
+      ctx.shadowColor = 'transparent'; // Reset shadow
+      
+      // Draw tooltip border
+      ctx.strokeStyle = '#E5E7EB';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      
+      // Draw color indicator in tooltip
+      ctx.fillStyle = hoveredItem.color;
+      ctx.beginPath();
+      ctx.rect(tooltipX + tooltipPadding, tooltipY + tooltipPadding, 12, 12);
+      ctx.fill();
+      
+      // Add border to color indicator
+      ctx.strokeStyle = 'white';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      
+      // Draw tooltip content
+      ctx.fillStyle = '#111827';
+      ctx.textAlign = 'left';
+      ctx.font = 'bold 13px Inter, system-ui, sans-serif';
+      
+      // Draw agent name
+      ctx.fillText(hoveredItem.agent, tooltipX + tooltipPadding + 20, tooltipY + tooltipPadding + 10);
+      
+      // Draw model name and value
+      ctx.font = '12px Inter, system-ui, sans-serif';
+      ctx.fillText(
+        `Model: ${hoveredItem.category}`, 
+        tooltipX + tooltipPadding, 
+        tooltipY + tooltipPadding + 30
+      );
+      
+      // Draw value
+      ctx.fillText(
+        `Requests: ${valueFormatter(hoveredItem.value)}`,
+        tooltipX + tooltipPadding, 
+        tooltipY + tooltipPadding + 50
+      );
+    }
+    
+    // Mark as rendered
+    setIsRendered(true);
+  };
+  
+  // Handle mouse movements for tooltips
+  const handleMouseMove = (e: MouseEvent) => {
+    const canvas = canvasRef.current;
+    const container = containerRef.current;
+    if (!canvas || !container || !data?.length || !categories?.length) return;
+    
+    // Get mouse position
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    
+    // Set up chart dimensions (must match the ones in drawChart)
+    const { width, height } = container.getBoundingClientRect();
+    
+    const chartPadding = {
+      top: 50,
+      right: 30,
+      bottom: 50,
+      left: 70
+    };
+    
+    const chartWidth = width - chartPadding.left - chartPadding.right;
+    const chartHeight = height - chartPadding.top - chartPadding.bottom;
+    
+    // Find max total for each agent
+    const maxTotal = Math.max(...data.map(agent => {
+      return categories.reduce((sum, category) => sum + (agent[category] || 0), 0);
+    })) || 1;
+    
+    const roundUpToNice = (num: number) => {
+      const magnitude = Math.pow(10, Math.floor(Math.log10(num)));
+      return Math.ceil(num / magnitude) * magnitude;
+    };
+    
+    const niceMaxTotal = roundUpToNice(maxTotal);
+    
+    // Set up bar dimensions
+    const barCount = data.length;
+    const barWidth = Math.min(80, chartWidth / (barCount * 1.5));
+    const totalBarSpace = barWidth * barCount;
+    const barSpacing = (chartWidth - totalBarSpace) / (barCount + 1);
+    
+    // Check if mouse is over any segment
+    let foundSegment = false;
+    let newHoveredItem = null;
+    
+    // Check each agent bar
+    data.forEach((agent, agentIndex) => {
+      const x = chartPadding.left + barSpacing + (agentIndex * (barWidth + barSpacing));
+      let currentHeight = 0;
+      
+      // Check each category segment
+      for (let categoryIndex = 0; categoryIndex < categories.length; categoryIndex++) {
+        const category = categories[categoryIndex];
+        const value = agent[category] || 0;
+        const segmentHeight = (value / niceMaxTotal) * chartHeight;
+        
+        if (segmentHeight > 0) {
+          const segY = chartHeight + chartPadding.top - currentHeight - segmentHeight;
+          
+          // Check if mouse is over this segment
+          if (
+            mouseX >= x && 
+            mouseX <= x + barWidth &&
+            mouseY >= segY &&
+            mouseY <= segY + segmentHeight
+          ) {
+            foundSegment = true;
+            const colorIndex = categoryIndex % colors.length;
+            newHoveredItem = {
+              x: mouseX,
+              y: mouseY,
+              agent: agent.agent,
+              category,
+              value,
+              color: colors[colorIndex]
+            };
+            break;
+          }
+          
+          currentHeight += segmentHeight;
+        }
+      }
+      
+      if (foundSegment) return; // Exit the loop early if we found a segment
+    });
+    
+    // Update hoveredItem state if needed
+    if (JSON.stringify(newHoveredItem) !== JSON.stringify(hoveredItem)) {
+      setHoveredItem(newHoveredItem);
+      // Redraw with the new hover state
+      drawChart();
+    }
+  };
+  
+  // Handle mouse leave
+  const handleMouseLeave = () => {
+    if (hoveredItem) {
+      setHoveredItem(null);
+      drawChart();
+    }
+  };
+  
+  useEffect(() => {
+    if (!data || data.length === 0 || !categories || categories.length === 0) return;
+    
+    // Initial draw attempt
+    drawChart();
+    
+    // If the chart didn't render on first try (container size issues),
+    // try again after a short delay
+    if (!isRendered) {
+      const timer = setTimeout(() => {
+        drawChart();
+      }, 200);
+      
+      return () => clearTimeout(timer);
+    }
+    
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    // Set up event listeners for interactivity
+    canvas.addEventListener('mousemove', handleMouseMove);
+    canvas.addEventListener('mouseleave', handleMouseLeave);
+    
+    // Add a resize observer to redraw on container size changes
+    const resizeObserver = new ResizeObserver(() => {
+      drawChart();
+    });
+    
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current);
+    }
+    
+    // Handle window resize
+    window.addEventListener('resize', drawChart);
+    
+    // Clean up event listeners on unmount
+    return () => {
+      if (canvas) {
+        canvas.removeEventListener('mousemove', handleMouseMove);
+        canvas.removeEventListener('mouseleave', handleMouseLeave);
+      }
+      resizeObserver.disconnect();
+      window.removeEventListener('resize', drawChart);
+    };
+  }, [data, categories, colors, valueFormatter, isRendered, hoveredItem]);
+  
+  return (
+    <div ref={containerRef} className="w-full h-full relative min-h-[320px]">
+      <canvas ref={canvasRef} className="w-full h-full" />
+    </div>
+  );
+}
+
 export default function ModelUsageAnalytics({ className = '', timeRange = '30d' }: ModelUsageAnalyticsProps) {
   const [activeTab, setActiveTab] = useState<number>(0);
   const [modelData, setModelData] = useState<LLMAnalyticsResponse | null>(null);
@@ -712,11 +1149,11 @@ export default function ModelUsageAnalytics({ className = '', timeRange = '30d' 
         // Don't set error as this is secondary data
       }
 
-      // Fetch agent-model relationships
+      // Fetch agent-model relationships - FIXED: removed include_distributions parameter
       try {
         const relationshipParams = buildQueryParams({ 
           time_range: timeRange,
-          include_distributions: 'true'
+          granularity: 'day'
         });
         const relationshipsResponse = await fetchAPI<{ breakdown: AgentModelRelationship[] }>(`${METRICS.LLM_AGENT_MODEL_RELATIONSHIPS}${relationshipParams}`);
         setRelationshipData(relationshipsResponse.breakdown);
@@ -850,7 +1287,11 @@ export default function ModelUsageAnalytics({ className = '', timeRange = '30d' 
       .sort((a, b) => b.metrics.request_count - a.metrics.request_count)
       .slice(0, 10)
       .map(item => {
-        const [agentId, modelName] = item.key.split(':');
+        // Split the key into agent and model parts
+        const parts = item.key.split(':');
+        const agentId = parts[0];
+        // If there's a model part, use it, otherwise use 'unknown'
+        const modelName = parts.length > 1 ? parts[1] : 'unknown';
         const displayModelName = MODEL_DISPLAY_NAMES[modelName.toLowerCase()] || modelName;
         
         return {
@@ -910,6 +1351,80 @@ export default function ModelUsageAnalytics({ className = '', timeRange = '30d' 
         'Cost per 1K tokens ($)': costPer1KTokens
       };
     });
+  };
+
+  const getAgentModelBreakdown = () => {
+    if (!relationshipData) return [];
+    
+    // First get all unique agents and models
+    const agents = new Set<string>();
+    const models = new Set<string>();
+    
+    relationshipData.forEach(item => {
+      const parts = item.key.split(':');
+      const agentId = parts[0]; 
+      const modelName = parts.length > 1 ? parts[1] : 'unknown';
+      agents.add(agentId);
+      models.add(modelName);
+    });
+    
+    // Create a map of agent to model usage
+    const agentModelData: Record<string, Record<string, number>> = {};
+    
+    // Initialize data structure
+    agents.forEach(agent => {
+      agentModelData[agent] = {};
+      models.forEach(model => {
+        agentModelData[agent][model] = 0;
+      });
+    });
+    
+    // Fill in the data
+    relationshipData.forEach(item => {
+      const parts = item.key.split(':');
+      const agentId = parts[0];
+      const modelName = parts.length > 1 ? parts[1] : 'unknown';
+      agentModelData[agentId][modelName] = item.metrics.request_count;
+    });
+    
+    // Convert to array format needed for the chart
+    return Array.from(agents).map(agent => {
+      const result: Record<string, any> = { agent };
+      models.forEach(model => {
+        // Create a display-friendly version of the model name for the chart
+        const displayName = MODEL_DISPLAY_NAMES[model.toLowerCase()] || model;
+        result[displayName] = agentModelData[agent][model];
+      });
+      return result;
+    }).sort((a, b) => {
+      // Sort by total requests (descending)
+      const totalA = Object.entries(a)
+        .filter(([key]) => key !== 'agent')
+        .reduce((sum, [, value]) => sum + (value as number), 0);
+        
+      const totalB = Object.entries(b)
+        .filter(([key]) => key !== 'agent')
+        .reduce((sum, [, value]) => sum + (value as number), 0);
+        
+      return totalB - totalA;
+    }).slice(0, 6); // Show top 6 agents
+  };
+
+  const getModelCategories = () => {
+    if (!relationshipData) return [];
+    
+    const models = new Set<string>();
+    
+    relationshipData.forEach(item => {
+      const parts = item.key.split(':');
+      const modelName = parts.length > 1 ? parts[1] : 'unknown';
+      models.add(modelName);
+    });
+    
+    // Return model display names for the categories
+    return Array.from(models).map(model => 
+      MODEL_DISPLAY_NAMES[model.toLowerCase()] || model
+    );
   };
   
   if (isLoading) {
@@ -1096,11 +1611,21 @@ export default function ModelUsageAnalytics({ className = '', timeRange = '30d' 
                   <TableBody>
                     {getTopAgentModels().map((item, index) => (
                       <TableRow key={index}>
-                        <TableCell className="font-medium">{item.agent}</TableCell>
+                        <TableCell className="font-medium">
+                          {item.agent}
+                          {index < 3 && (
+                            <Badge size="xs" color={index === 0 ? "amber" : index === 1 ? "blue" : "emerald"} className="ml-2">
+                              {index === 0 ? "High" : index === 1 ? "Medium" : "Moderate"}
+                            </Badge>
+                          )}
+                        </TableCell>
                         <TableCell>{item.model}</TableCell>
                         <TableCell className="text-right">{formatNumber(item.requests)}</TableCell>
                         <TableCell className="text-right">{formatNumber(item.tokens)}</TableCell>
-                        <TableCell className="text-right">{formatCost(item.cost)}</TableCell>
+                        <TableCell className="text-right">
+                          {formatCost(item.cost)}
+                          {item.cost > 5 && <Badge size="xs" color="red" className="ml-1">High</Badge>}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -1109,15 +1634,13 @@ export default function ModelUsageAnalytics({ className = '', timeRange = '30d' 
               
               <Card>
                 <Title>Model Usage by Agent</Title>
-                <Text>Distribution of requests by agent</Text>
-                <div className="mt-4 flex justify-center items-center">
-                  <ModelDistributionChart
-                    data={getAgentModelDistribution().map(item => ({
-                      name: item.name,
-                      count: item.value
-                    }))}
-                    valueFormatter={(value) => `${formatNumber(value)}`}
-                    className="w-full"
+                <Text>Distribution of requests by agent with model breakdown</Text>
+                <div className="mt-6 h-72">
+                  <AgentModelBarChart
+                    data={getAgentModelBreakdown()}
+                    categories={getModelCategories()}
+                    colors={chartColors}
+                    valueFormatter={(value) => `${formatNumber(Number(value))}`}
                   />
                 </div>
               </Card>
