@@ -52,9 +52,22 @@ export function AgentSessionsTable({ agentId, timeRange }: AgentSessionsTablePro
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Track if we should fetch data to avoid unnecessary API calls
+  const [shouldFetch, setShouldFetch] = useState(true);
 
   // Fetch sessions data
   useEffect(() => {
+    // Skip API call if we don't have an agent ID
+    if (!agentId) {
+      setLoading(false);
+      setError("No agent ID provided");
+      return;
+    }
+
+    // Only fetch data when needed
+    if (!shouldFetch) return;
+
+    let isMounted = true;
     const fetchSessions = async () => {
       try {
         setLoading(true);
@@ -70,6 +83,9 @@ export function AgentSessionsTable({ agentId, timeRange }: AgentSessionsTablePro
           `${AGENTS.SESSIONS(agentId)}?time_range=${timeRange}&page=${pagination.page}&page_size=${pagination.page_size}`
         );
         
+        // Check if component is still mounted before updating state
+        if (!isMounted) return;
+        
         setSessions(data.items || []);
         setPagination({
           page: data.page || 1,
@@ -77,15 +93,27 @@ export function AgentSessionsTable({ agentId, timeRange }: AgentSessionsTablePro
           total_items: data.total_items || 0,
           total_pages: data.total_pages || 0
         });
+        // Reset the fetch flag
+        setShouldFetch(false);
       } catch (err: any) {
-        setError(err.message || 'An error occurred while fetching sessions');
+        console.error('Error fetching sessions:', err);
+        if (isMounted) {
+          setError(err.message || 'An error occurred while fetching sessions');
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
     fetchSessions();
-  }, [agentId, timeRange, pagination.page, pagination.page_size]);
+    
+    // Cleanup function to handle component unmounting
+    return () => {
+      isMounted = false;
+    };
+  }, [agentId, timeRange, pagination.page, pagination.page_size, shouldFetch]);
 
   // Format duration
   const formatDuration = (seconds: number): string => {
@@ -151,12 +179,14 @@ export function AgentSessionsTable({ agentId, timeRange }: AgentSessionsTablePro
   const handlePrevPage = () => {
     if (pagination.page > 1) {
       setPagination({ ...pagination, page: pagination.page - 1 });
+      setShouldFetch(true);
     }
   };
 
   const handleNextPage = () => {
     if (pagination.page < pagination.total_pages) {
       setPagination({ ...pagination, page: pagination.page + 1 });
+      setShouldFetch(true);
     }
   };
 

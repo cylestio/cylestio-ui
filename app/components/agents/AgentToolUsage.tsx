@@ -33,6 +33,14 @@ export function AgentToolUsage({ agentId, timeRange }: AgentToolUsageProps) {
 
   // Fetch tool usage data
   useEffect(() => {
+    // Skip API call if we don't have an agent ID
+    if (!agentId) {
+      setLoading(false);
+      setError("No agent ID provided");
+      return;
+    }
+
+    let isMounted = true;
     const fetchToolUsage = async () => {
       try {
         setLoading(true);
@@ -42,15 +50,28 @@ export function AgentToolUsage({ agentId, timeRange }: AgentToolUsageProps) {
           `${AGENTS.TOOL_USAGE(agentId)}?time_range=${timeRange}`
         );
         
+        // Check if component is still mounted before updating state
+        if (!isMounted) return;
+        
         setToolUsage(data.items || []);
       } catch (err: any) {
-        setError(err.message || 'An error occurred while fetching tool usage');
+        console.error('Error fetching tool usage:', err);
+        if (isMounted) {
+          setError(err.message || 'An error occurred while fetching tool usage');
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
     fetchToolUsage();
+    
+    // Cleanup function to handle component unmounting
+    return () => {
+      isMounted = false;
+    };
   }, [agentId, timeRange]);
 
   // Calculate the total executions

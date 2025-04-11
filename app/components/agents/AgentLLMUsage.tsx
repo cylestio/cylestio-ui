@@ -33,6 +33,14 @@ export function AgentLLMUsage({ agentId, timeRange }: AgentLLMUsageProps) {
 
   // Fetch LLM usage data
   useEffect(() => {
+    // Skip API call if we don't have an agent ID
+    if (!agentId) {
+      setLoading(false);
+      setError("No agent ID provided");
+      return;
+    }
+
+    let isMounted = true;
     const fetchLLMUsage = async () => {
       try {
         setLoading(true);
@@ -42,15 +50,28 @@ export function AgentLLMUsage({ agentId, timeRange }: AgentLLMUsageProps) {
           `${AGENTS.LLM_USAGE(agentId)}?time_range=${timeRange}`
         );
         
+        // Check if component is still mounted before updating state
+        if (!isMounted) return;
+        
         setLlmUsage(data.items || []);
       } catch (err: any) {
-        setError(err.message || 'An error occurred while fetching LLM usage');
+        console.error('Error fetching LLM usage:', err);
+        if (isMounted) {
+          setError(err.message || 'An error occurred while fetching LLM usage');
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
     fetchLLMUsage();
+    
+    // Cleanup function to handle component unmounting
+    return () => {
+      isMounted = false;
+    };
   }, [agentId, timeRange]);
 
   // Calculate totals

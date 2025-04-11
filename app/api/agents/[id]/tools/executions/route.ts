@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { fetchAPI } from '../../../../src/lib/api';
+import { fetchAPI } from '../../../../../../src/lib/api';
 
 export async function GET(
   request: NextRequest,
@@ -11,14 +11,14 @@ export async function GET(
     const queryString = searchParams.toString();
     
     // Forward the request to the real backend API
-    const apiUrl = `/agents/${agentId}${queryString ? `?${queryString}` : ''}`;
-    const agentData = await fetchAPI(apiUrl);
+    const apiUrl = `/agents/${agentId}/tools/executions${queryString ? `?${queryString}` : ''}`;
+    const executionsData = await fetchAPI(apiUrl);
     
-    return NextResponse.json(agentData);
+    return NextResponse.json(executionsData);
   } catch (error: any) {
-    console.error('Error fetching agent details:', error);
+    console.error('Error fetching tool executions data:', error);
     return NextResponse.json(
-      { error: error.error || 'Failed to fetch agent details' },
+      { error: error.error || 'Failed to fetch tool executions data' },
       { status: error.status || 500 }
     );
   }

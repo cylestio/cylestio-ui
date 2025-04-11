@@ -13,9 +13,9 @@ type PaginationData = {
 };
 
 type AlertsResponse = {
-  items: any[];
-  pagination: PaginationData;
-  meta: {
+  alerts: any[];
+  pagination?: PaginationData;
+  meta?: {
     timestamp: string;
   };
 };
@@ -28,12 +28,9 @@ export async function GET(request: NextRequest) {
     const pageSize = searchParams.get('pageSize') || '25';
     const search = searchParams.get('search') || '';
     const severity = searchParams.get('severity') || '';
-    const alertType = searchParams.get('type') || '';
+    const category = searchParams.get('category') || '';
     const agentId = searchParams.get('agentId') || '';
-    const from = searchParams.get('from') || '';
-    const to = searchParams.get('to') || '';
-    const sort = searchParams.get('sort') || 'timestamp';
-    const order = searchParams.get('order') || 'desc';
+    const timeRange = searchParams.get('time_range') || '7d';
     
     // Build query parameters for the real API call
     const params: Record<string, any> = {
@@ -41,26 +38,28 @@ export async function GET(request: NextRequest) {
       page_size: pageSize,
       search,
       severity: severity !== 'all' ? severity : undefined,
-      alert_type: alertType !== 'all' ? alertType : undefined,
+      category: category !== 'all' ? category : undefined,
       agent_id: agentId !== 'all' ? agentId : undefined,
-      from_time: from || undefined,
-      to_time: to || undefined,
-      sort_by: sort || 'timestamp',
-      sort_dir: order || 'desc'
+      time_range: timeRange
     };
     
     // Call the real backend API
     const endpoint = `${SECURITY.ALERTS}${buildQueryParams(params)}`;
     const response = await fetchAPI<AlertsResponse>(endpoint);
     
-    // Map response to expected format if needed
+    // Map response to expected format
     const mappedResponse = {
-      alerts: response.items || [],
-      pagination: {
-        currentPage: response.pagination?.page || 1,
-        pageSize: response.pagination?.page_size || Number(pageSize),
-        totalPages: response.pagination?.total_pages || 1,
-        totalItems: response.pagination?.total || 0
+      alerts: response.alerts || [],
+      pagination: response.pagination ? {
+        currentPage: response.pagination.page || 1,
+        pageSize: response.pagination.page_size || Number(pageSize),
+        totalPages: response.pagination.total_pages || 1,
+        totalItems: response.pagination.total || 0
+      } : {
+        currentPage: 1,
+        pageSize: Number(pageSize),
+        totalPages: 1,
+        totalItems: 0
       },
       meta: response.meta || {
         timestamp: new Date().toISOString()

@@ -4,9 +4,9 @@ import { useState, useEffect } from 'react';
 import { Card, Title, Text, BarChart, DonutChart, Grid, Flex, Metric, Badge, Table, TableHead, TableRow, TableHeaderCell, TableBody, TableCell } from '@tremor/react';
 import { ChatBubbleBottomCenterTextIcon, ArrowLeftIcon, CurrencyDollarIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 import Link from 'next/link';
-import BreadcrumbNavigation from '@/app/components/drilldown/BreadcrumbNavigation';
-import LoadingState from '@/app/components/LoadingState';
-import ErrorMessage from '@/app/components/ErrorMessage';
+import BreadcrumbNavigation from '../../../components/drilldown/BreadcrumbNavigation';
+import LoadingState from '../../../components/LoadingState';
+import ErrorMessage from '../../../components/ErrorMessage';
 
 // Types
 type LLMUsage = {

@@ -57,9 +57,14 @@ export function AgentDetailContainer({ agentId }: AgentDetailContainerProps) {
   };
 
   useEffect(() => {
-    const fetchAgentData = async () => {
-      if (!agentId) return;
+    if (!agentId) {
+      setLoading(false);
+      setError("No agent ID provided");
+      return;
+    }
 
+    let isMounted = true;
+    const fetchAgentData = async () => {
       setLoading(true);
       try {
         // Include time range in request
@@ -68,6 +73,9 @@ export function AgentDetailContainer({ agentId }: AgentDetailContainerProps) {
         const endpoint = `${AGENTS.DETAIL(agentId)}${queryString ? `?${queryString}` : ''}`;
         
         const data = await fetchAPI<Agent>(endpoint);
+        
+        // Check if component is still mounted before updating state
+        if (!isMounted) return;
         
         // Normalize agent data structure for consistent usage
         // Ensure metrics properties are accessible directly if needed
@@ -79,13 +87,22 @@ export function AgentDetailContainer({ agentId }: AgentDetailContainerProps) {
         });
       } catch (err: any) {
         console.error('Error fetching agent details:', err);
-        setError(err.message || 'Failed to load agent details');
+        if (isMounted) {
+          setError(err.message || 'Failed to load agent details');
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
     fetchAgentData();
+    
+    // Cleanup function to handle component unmounting
+    return () => {
+      isMounted = false;
+    };
   }, [agentId, timeRange]);
 
   if (loading) {

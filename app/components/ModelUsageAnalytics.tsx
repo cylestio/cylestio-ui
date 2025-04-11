@@ -152,14 +152,337 @@ type UsageTrendsResponse = {
   breakdown_by: string;
 };
 
-// Friendly model name mapping
-const MODEL_DISPLAY_NAMES: Record<string, string> = {
-  'gpt-4': 'GPT-4',
-  'gpt-4-turbo': 'GPT-4 Turbo',
-  'gpt-3.5-turbo': 'GPT-3.5 Turbo',
-  'claude-3-opus': 'Claude 3 Opus',
-  'claude-3-sonnet': 'Claude 3 Sonnet',
-  'claude-3-haiku': 'Claude 3 Haiku'
+// Add type definition for TokenUsageCostData after the UsageTrendsResponse type
+
+type TokenUsageCostData = {
+  token_usage_cost: {
+    breakdown: {
+      model: string;
+      vendor: string;
+      input_tokens: number;
+      output_tokens: number;
+      total_tokens: number;
+      input_price_per_1k: number;
+      output_price_per_1k: number;
+      input_cost: number;
+      output_cost: number;
+      total_cost: number;
+    }[];
+    totals: {
+      input_tokens: number;
+      output_tokens: number;
+      total_tokens: number;
+      input_cost: number;
+      output_cost: number;
+      total_cost: number;
+    };
+  };
+  pricing_note: string;
+  update_date: string;
+};
+
+// Add after other type definitions
+
+type LLMModelPricingData = {
+  models: {
+    Provider: string;
+    Model: string;
+    Version: string;
+    "Input Price": number | string;
+    "Output Price": number | string;
+    "Context Window": string;
+    Availability: string;
+    Notes: string;
+  }[];
+  total_count: number;
+  update_date: string;
+};
+
+// Helper function to find a model in the pricing data
+const findModelInPricingData = (modelName: string, modelPricingData: LLMModelPricingData | null): any | null => {
+  if (!modelPricingData?.models?.length) return null;
+  
+  // Simplify the model name for more lenient matching
+  const simplifiedName = modelName.toLowerCase()
+    .replace(/[-_\.]/g, '') // Remove hyphens, underscores, periods
+    .replace(/\s+/g, '')    // Remove spaces
+    .replace(/\d{8}$/, '')  // Remove date suffix
+    .replace(/latest$/, ''); // Remove 'latest' suffix
+  
+  // Super simplified version - just extract the core model name
+  const coreModelName = simplifiedName
+    .replace(/claude|gpt|llama|mistral|gemini|mixtral|command|jamba|embed/, match => match) // Keep model family names
+    .replace(/\d+/g, ''); // Remove all numbers
+  
+  // Get base family name
+  let modelFamily = '';
+  if (simplifiedName.includes('claude')) modelFamily = 'claude';
+  else if (simplifiedName.includes('gpt')) modelFamily = 'gpt';
+  else if (simplifiedName.includes('llama')) modelFamily = 'llama';
+  else if (simplifiedName.includes('mistral')) modelFamily = 'mistral';
+  else if (simplifiedName.includes('gemini')) modelFamily = 'gemini';
+  else if (simplifiedName.includes('mixtral')) modelFamily = 'mixtral';
+  
+  // Determine model version/variant
+  let modelVariant = '';
+  if (simplifiedName.includes('3.5') || simplifiedName.includes('35')) modelVariant = '3.5';
+  else if (simplifiedName.includes('3.7') || simplifiedName.includes('37')) modelVariant = '3.7';
+  else if (simplifiedName.includes('3') && !simplifiedName.includes('3.')) modelVariant = '3';
+  else if (simplifiedName.includes('4')) modelVariant = '4';
+  
+  // Get model size/type
+  let modelType = '';
+  if (simplifiedName.includes('sonnet')) modelType = 'sonnet';
+  else if (simplifiedName.includes('haiku')) modelType = 'haiku';
+  else if (simplifiedName.includes('opus')) modelType = 'opus';
+  else if (simplifiedName.includes('turbo')) modelType = 'turbo';
+  
+  console.log(`Model matching for: ${modelName} → Family: ${modelFamily}, Variant: ${modelVariant}, Type: ${modelType}`);
+  
+  // Try different matching strategies in order of specificity
+  
+  // 1. Most specific match - try to match all three components if they exist
+  if (modelFamily && modelVariant && modelType) {
+    const fullMatch = modelPricingData.models.find(m => {
+      const mSimple = m.Model.toLowerCase().replace(/[-_\.]/g, '').replace(/\s+/g, '');
+      return mSimple.includes(modelFamily) && 
+             mSimple.includes(modelVariant) && 
+             mSimple.includes(modelType);
+    });
+    if (fullMatch) return fullMatch;
+  }
+  
+  // 2. Try family + variant
+  if (modelFamily && modelVariant) {
+    const variantMatch = modelPricingData.models.find(m => {
+      const mSimple = m.Model.toLowerCase().replace(/[-_\.]/g, '').replace(/\s+/g, '');
+      return mSimple.includes(modelFamily) && mSimple.includes(modelVariant);
+    });
+    if (variantMatch) return variantMatch;
+  }
+  
+  // 3. Try family + type
+  if (modelFamily && modelType) {
+    const typeMatch = modelPricingData.models.find(m => {
+      const mSimple = m.Model.toLowerCase().replace(/[-_\.]/g, '').replace(/\s+/g, '');
+      return mSimple.includes(modelFamily) && mSimple.includes(modelType);
+    });
+    if (typeMatch) return typeMatch;
+  }
+  
+  // 4. Fall back to just family
+  if (modelFamily) {
+    const familyMatch = modelPricingData.models.find(m => {
+      const mSimple = m.Model.toLowerCase().replace(/[-_\.]/g, '').replace(/\s+/g, '');
+      return mSimple.includes(modelFamily);
+    });
+    if (familyMatch) return familyMatch;
+  }
+  
+  // No matches found with our special logic, fall back to simple string matching
+  // This helps with models we didn't explicitly account for
+  const exactMatch = modelPricingData.models.find(
+    m => m.Model.toLowerCase().replace(/[-_\.]/g, '').replace(/\s+/g, '') === simplifiedName
+  );
+  if (exactMatch) return exactMatch;
+  
+  const partialMatches = modelPricingData.models.filter(
+    m => simplifiedName.includes(m.Model.toLowerCase().replace(/[-_\.]/g, '').replace(/\s+/g, ''))
+  );
+  
+  if (partialMatches.length === 1) return partialMatches[0];
+  if (partialMatches.length > 1) return partialMatches[0]; // Just take the first one
+  
+  // Still no match, last resort - try to match by provider
+  if (modelName.includes('openai') || modelName.includes('gpt')) {
+    return modelPricingData.models.find(m => m.Provider === 'OpenAI');
+  }
+  if (modelName.includes('anthropic') || modelName.includes('claude')) {
+    return modelPricingData.models.find(m => m.Provider === 'Anthropic');
+  }
+  
+  // No matches found
+  return null;
+};
+
+// Get the display name for a model using the pricing data
+const getModelDisplayName = (modelName: string, modelPricingData: LLMModelPricingData | null, includeVersion = false): string => {
+  if (!modelName) return 'Unknown';
+  
+  // Try to find the model in the pricing data
+  const modelInfo = findModelInPricingData(modelName, modelPricingData);
+  
+  if (modelInfo) {
+    if (includeVersion && modelInfo.Version && modelInfo.Version !== '-' && modelInfo.Version !== 'N/A') {
+      return `${modelInfo.Model} (${modelInfo.Version})`;
+    }
+    return modelInfo.Model;
+  }
+  
+  // Fallback to basic name formatting if not found in pricing data
+  const baseName = getBaseModelName(modelName);
+  if (!includeVersion) return baseName;
+  
+  const version = getModelVersion(modelName);
+  return version ? `${baseName} (${version})` : baseName;
+};
+
+// Extract the base model name without version (fallback function)
+const getBaseModelName = (modelName: string): string => {
+  // Extract the core model name for better grouping
+  const simplified = modelName.toLowerCase()
+    .replace(/-\d{8}$/, '') // Remove date (YYYYMMDD)
+    .replace(/-latest$/, ''); // Remove 'latest' suffix
+
+  // Extract core model family
+  let family = '';
+  if (simplified.includes('claude')) {
+    family = 'Claude';
+    // Add version info to family name
+    if (simplified.includes('3.5') || simplified.includes('-3-5') || simplified.includes('35')) {
+      family += ' 3.5';
+    } else if (simplified.includes('3.7') || simplified.includes('-3-7') || simplified.includes('37')) {
+      family += ' 3.7';
+    } else if (simplified.includes('3')) {
+      family += ' 3';
+    }
+    
+    // Add model type to family name
+    if (simplified.includes('sonnet')) {
+      family += ' Sonnet';
+    } else if (simplified.includes('haiku')) {
+      family += ' Haiku';
+    } else if (simplified.includes('opus')) {
+      family += ' Opus';
+    }
+  } else if (simplified.includes('gpt')) {
+    family = 'GPT';
+    if (simplified.includes('3.5') || simplified.includes('-3-5') || simplified.includes('35')) {
+      family += '-3.5';
+    } else if (simplified.includes('4o')) {
+      family += '-4o';
+    } else if (simplified.includes('4')) {
+      family += '-4';
+    }
+    
+    if (simplified.includes('turbo')) {
+      family += ' Turbo';
+    }
+  } else {
+    // For other models, just use the original name cleaned up a bit
+    return modelName.replace(/-\d{8}$/, '').replace(/-latest$/, '');
+  }
+  
+  return family;
+};
+
+// Extract version information if present (fallback function)
+const getModelVersion = (modelName: string): string => {
+  // Try to match date suffix
+  const dateMatch = modelName.match(/-(\d{8})$/);
+  if (dateMatch) {
+    const dateStr = dateMatch[1];
+    // Format as YYYY-MM-DD
+    return `${dateStr.substring(0, 4)}-${dateStr.substring(4, 6)}-${dateStr.substring(6, 8)}`;
+  }
+  
+  // Check for 'latest' suffix
+  if (modelName.includes('-latest')) {
+    return 'latest';
+  }
+  
+  return '';
+};
+
+// Normalize model name for grouping (removes versions, hyphens, etc.)
+const normalizeModelName = (modelName: string): string => {
+  return modelName.toLowerCase()
+    .replace(/[-_]/g, '') // Remove hyphens and underscores
+    .replace(/\./g, '') // Remove periods (to handle 3.5 vs 3-5)
+    .replace(/\d{8}$/, '') // Remove date suffix
+    .replace(/latest$/, '') // Remove 'latest' suffix
+    .replace(/\s+/g, ''); // Remove spaces
+};
+
+// Get model pricing information
+const getModelPricing = (modelName: string, modelPricingData: LLMModelPricingData | null): { input: number, output: number } => {
+  const defaultPricing = { input: 0, output: 0 };
+  
+  if (!modelPricingData?.models?.length) return defaultPricing;
+  
+  // Try to find a matching model in pricing data
+  const modelInfo = findModelInPricingData(modelName, modelPricingData);
+  
+  if (!modelInfo) {
+    console.warn(`No pricing data found for model: ${modelName}`);
+    return defaultPricing; // Return zeros if no match found, never mock data
+  }
+  
+  // Handle pricing data from API
+  let inputPrice = 0;
+  let outputPrice = 0;
+  
+  // Convert price strings to numbers
+  if (typeof modelInfo["Input Price"] === 'string') {
+    const inputStr = modelInfo["Input Price"].toString();
+    // Handle ranges like "0.00125–0.0025" by taking the first value
+    if (inputStr.includes('–') || inputStr.includes('-')) {
+      inputPrice = parseFloat(inputStr.split(/[–-]/)[0]);
+    } else {
+      inputPrice = parseFloat(inputStr.replace(/[^0-9.]/g, '')) || 0;
+    }
+  } else {
+    inputPrice = modelInfo["Input Price"] || 0;
+  }
+  
+  if (typeof modelInfo["Output Price"] === 'string') {
+    const outputStr = modelInfo["Output Price"].toString();
+    // Handle ranges
+    if (outputStr.includes('–') || outputStr.includes('-')) {
+      outputPrice = parseFloat(outputStr.split(/[–-]/)[0]);
+    } else if (outputStr.toLowerCase() === 'n/a') {
+      outputPrice = 0; // Handle N/A cases
+    } else {
+      outputPrice = parseFloat(outputStr.replace(/[^0-9.]/g, '')) || 0;
+    }
+  } else {
+    outputPrice = modelInfo["Output Price"] || 0;
+  }
+  
+  console.log(`Pricing for ${modelName}: Input=${inputPrice}, Output=${outputPrice}`);
+  
+  return {
+    input: inputPrice,
+    output: outputPrice
+  };
+};
+
+// Group models by family
+const groupModelsByFamily = (models: string[], modelPricingData: LLMModelPricingData | null): Map<string, string[]> => {
+  const modelGroups = new Map<string, string[]>();
+  
+  models.forEach(model => {
+    // Use a simpler, more aggressive grouping strategy
+    let baseModelName = getBaseModelName(model);
+    
+    // Additional simplifications to ensure proper grouping
+    if (baseModelName.includes('Claude')) {
+      // Ensure consistent capitalization
+      baseModelName = baseModelName.replace(/claude/i, 'Claude');
+      // Remove any leftover version numbers in specific formats
+      baseModelName = baseModelName.replace(/-\d+$/, '');
+    } else if (baseModelName.includes('GPT')) {
+      baseModelName = baseModelName.replace(/gpt/i, 'GPT');
+      baseModelName = baseModelName.replace(/-\d+$/, '');
+    }
+    
+    if (!modelGroups.has(baseModelName)) {
+      modelGroups.set(baseModelName, []);
+    }
+    modelGroups.get(baseModelName)?.push(model);
+  });
+  
+  return modelGroups;
 };
 
 type ModelUsageAnalyticsProps = {
@@ -186,7 +509,14 @@ const chartColors = [
 // Define a new component for the cost analysis charts
 function CostAnalysisComboChart({ data, perTokenData }: { 
   data: { name: string; 'Cost ($)': number }[];
-  perTokenData: { name: string; 'Cost per 1K tokens ($)': number }[];
+  perTokenData: { 
+    name: string; 
+    baseModelName: string;
+    versions?: string[];
+    'Cost per 1K tokens ($)': number;
+    originalData?: any;
+    models?: string[];
+  }[];
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -197,6 +527,8 @@ function CostAnalysisComboChart({ data, perTokenData }: {
     model: string;
     cost: number;
     costPerToken: number;
+    versions?: string[];
+    originalData?: any;
   } | null>(null);
   
   // Enhanced colors with better contrast
@@ -242,17 +574,16 @@ function CostAnalysisComboChart({ data, perTokenData }: {
     const chartWidth = width - chartPadding.left - chartPadding.right;
     const chartHeight = height - chartPadding.top - chartPadding.bottom;
     
-    // Find the max values for scaling
-    const totalCosts = data.map(d => d['Cost ($)']);
-    const costPerTokens = perTokenData.map(d => d['Cost per 1K tokens ($)']);
+    // Calculate maximum values for scaling with minimums for better scaling
+    let maxTotalCost = Math.max(0.01, ...data.map(d => d['Cost ($)']));
     
-    let maxTotalCost = Math.max(...totalCosts);
-    maxTotalCost = maxTotalCost <= 0 ? 1 : maxTotalCost;
+    // Handle case where all costs might be zero
+    let maxCostPerToken = Math.max(
+      0.0001, // Minimum for scale
+      ...perTokenData.map(d => d['Cost per 1K tokens ($)'])
+    );
     
-    let maxCostPerToken = Math.max(...costPerTokens);
-    maxCostPerToken = maxCostPerToken <= 0 ? 0.001 : maxCostPerToken;
-    
-    // Round up the max values for cleaner scales
+    // Round up the max values for cleaner scale ticks (not used in original code)
     maxTotalCost = Math.ceil(maxTotalCost * 1.1);
     maxCostPerToken = Math.ceil(maxCostPerToken * 100) / 100;
     
@@ -356,6 +687,8 @@ function CostAnalysisComboChart({ data, perTokenData }: {
       // Draw cost per token as a line point
       const linePointY = chartHeight - (costPerToken / maxCostPerToken * chartHeight) + chartPadding.top;
       
+      // Skip drawing the point if the cost per token is exactly zero
+      if (costPerToken > 0) {
       // Add a subtle glow to the point
       ctx.fillStyle = COST_PER_TOKEN_COLOR;
       ctx.beginPath();
@@ -367,6 +700,14 @@ function CostAnalysisComboChart({ data, perTokenData }: {
       ctx.beginPath();
       ctx.arc(x + barWidth/2, linePointY, 5, 0, Math.PI * 2);
       ctx.fill();
+      } else {
+        // For zero cost, draw a small hollow circle
+        ctx.strokeStyle = COST_PER_TOKEN_COLOR;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(x + barWidth/2, linePointY, 3, 0, Math.PI * 2);
+        ctx.stroke();
+      }
       
       // Draw model name (x-axis label) with better placement
       ctx.fillStyle = '#374151';
@@ -486,9 +827,9 @@ function CostAnalysisComboChart({ data, perTokenData }: {
     
     // Draw hover tooltip if there's a hovered item
     if (hoveredItem) {
-      // Draw tooltip with detailed info
-      const tooltipWidth = 220;
-      const tooltipHeight = 80;
+      // Draw tooltip with more detailed info
+      const tooltipWidth = 240;
+      const tooltipHeight = hoveredItem.versions && hoveredItem.versions.length > 0 ? 110 : 80;
       const tooltipX = Math.min(Math.max(hoveredItem.x, 10), width - tooltipWidth - 10);
       const tooltipY = Math.max(10, hoveredItem.y - tooltipHeight - 10);
       
@@ -518,8 +859,25 @@ function CostAnalysisComboChart({ data, perTokenData }: {
       
       // Cost values with appropriate formatting
       ctx.font = '12px Inter, system-ui, sans-serif';
-      ctx.fillText(`Total Cost: $${hoveredItem.cost.toFixed(2)}`, tooltipX + 12, tooltipY + 45);
-      ctx.fillText(`Cost per 1K tokens: $${hoveredItem.costPerToken.toFixed(4)}`, tooltipX + 12, tooltipY + 65);
+      // Ensure we always show at least $0.00 instead of empty value
+      const costStr = hoveredItem.cost >= 0 
+        ? `$${hoveredItem.cost.toFixed(4)}`
+        : '$0.0000';
+      
+      const costPerTokenStr = hoveredItem.costPerToken >= 0 
+        ? `$${hoveredItem.costPerToken.toFixed(4)}`
+        : '$0.0000';
+      
+      ctx.fillText(`Total Cost: ${costStr}`, tooltipX + 12, tooltipY + 45);
+      ctx.fillText(`Cost per 1K tokens: ${costPerTokenStr}`, tooltipX + 12, tooltipY + 65);
+      
+      // If we have version info, show it
+      if (hoveredItem.versions && hoveredItem.versions.length > 0) {
+        const versionStr = hoveredItem.versions.join(', ');
+        ctx.fillStyle = '#6B7280';
+        ctx.font = '11px Inter, system-ui, sans-serif';
+        ctx.fillText(`Version${hoveredItem.versions.length > 1 ? 's' : ''}: ${versionStr}`, tooltipX + 12, tooltipY + 85);
+      }
     }
     
     // Mark as rendered successfully
@@ -567,6 +925,13 @@ function CostAnalysisComboChart({ data, perTokenData }: {
       const perTokenItem = perTokenData.find(d => d.name === modelName);
       const costPerToken = perTokenItem ? perTokenItem['Cost per 1K tokens ($)'] : 0;
       
+      // Extra data from the token item if available
+      const modelVersions = perTokenItem && perTokenItem.versions 
+        ? perTokenItem.versions 
+        : [];
+        
+      const originalData = perTokenItem && perTokenItem.originalData;
+      
       // Bar position
       const x = chartPadding.left + barSpacing + (index * (barWidth + barSpacing));
       
@@ -582,7 +947,9 @@ function CostAnalysisComboChart({ data, perTokenData }: {
           y: mouseY,
           model: modelName,
           cost: totalCost,
-          costPerToken
+          costPerToken,
+          versions: modelVersions,
+          originalData
         };
       }
       
@@ -597,7 +964,9 @@ function CostAnalysisComboChart({ data, perTokenData }: {
           y: mouseY,
           model: modelName,
           cost: totalCost,
-          costPerToken
+          costPerToken,
+          versions: modelVersions,
+          originalData
         };
       }
     });
@@ -1295,6 +1664,8 @@ export default function ModelUsageAnalytics({ className = '', timeRange = '30d' 
   const [agentData, setAgentData] = useState<LLMAnalyticsResponse | null>(null);
   const [relationshipData, setRelationshipData] = useState<AgentModelRelationship[] | null>(null);
   const [trendData, setTrendData] = useState<UsageTrendsResponse | null>(null);
+  const [tokenPricingData, setTokenPricingData] = useState<TokenUsageCostData | null>(null);
+  const [modelPricingData, setModelPricingData] = useState<LLMModelPricingData | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -1332,7 +1703,7 @@ export default function ModelUsageAnalytics({ className = '', timeRange = '30d' 
         // Don't set error as this is secondary data
       }
 
-      // Fetch agent-model relationships - FIXED: removed include_distributions parameter
+      // Fetch agent-model relationships
       try {
         const relationshipParams = buildQueryParams({ 
           time_range: timeRange,
@@ -1355,6 +1726,31 @@ export default function ModelUsageAnalytics({ className = '', timeRange = '30d' 
         setTrendData(trendsResponse);
       } catch (err) {
         console.error('Failed to fetch usage trends data:', err);
+        // Don't set error as this is secondary data
+      }
+      
+      // Fetch token pricing data from dedicated endpoint
+      try {
+        const pricingParams = buildQueryParams({ 
+          time_range: timeRange
+        });
+        console.log(`Fetching token pricing data from: ${METRICS.TOKEN_USAGE_COST}${pricingParams}`);
+        const pricingResponse = await fetchAPI<TokenUsageCostData>(`${METRICS.TOKEN_USAGE_COST}${pricingParams}`);
+        console.log('Token pricing data received:', pricingResponse);
+        setTokenPricingData(pricingResponse);
+      } catch (err) {
+        console.error('Failed to fetch token pricing data:', err);
+        // Don't set error as this is secondary data
+      }
+      
+      // Fetch model pricing data
+      try {
+        console.log('Fetching model pricing data from:', METRICS.LLM_MODELS_PRICING);
+        const modelPricingResponse = await fetchAPI<LLMModelPricingData>(METRICS.LLM_MODELS_PRICING);
+        console.log('Model pricing data received:', modelPricingResponse);
+        setModelPricingData(modelPricingResponse);
+      } catch (err) {
+        console.error('Failed to fetch model pricing data:', err);
         // Don't set error as this is secondary data
       }
     } catch (error) {
@@ -1407,7 +1803,7 @@ export default function ModelUsageAnalytics({ className = '', timeRange = '30d' 
     );
     
     return topModels.map((item) => {
-      const displayName = MODEL_DISPLAY_NAMES[item.key.toLowerCase()] || item.key;
+      const displayName = getModelDisplayName(item.key, modelPricingData, false);
       const percentage = totalRequests > 0 
         ? ((item.metrics.request_count / totalRequests) * 100).toFixed(1) 
         : '0';
@@ -1423,7 +1819,7 @@ export default function ModelUsageAnalytics({ className = '', timeRange = '30d' 
     if (!modelData?.breakdown) return [];
     
     return modelData.breakdown.map((item) => {
-      const displayName = MODEL_DISPLAY_NAMES[item.key.toLowerCase()] || item.key;
+      const displayName = getModelDisplayName(item.key, modelPricingData, false);
       return {
         name: displayName,
         'Response Time (ms)': item.metrics.response_time_avg,
@@ -1435,16 +1831,103 @@ export default function ModelUsageAnalytics({ className = '', timeRange = '30d' 
   const getModelComparisonData = () => {
     if (!modelData?.breakdown) return [];
     
-    return modelData.breakdown.map((item) => {
-      const displayName = MODEL_DISPLAY_NAMES[item.key.toLowerCase()] || item.key;
+    // Group models by family for the chart
+    const modelFamilies = new Map<string, {
+      displayName: string,
+      models: { 
+        key: string,
+        version: string,
+        metrics: typeof modelData.breakdown[0]['metrics']
+      }[],
+      aggregatedMetrics: {
+        request_count: number,
+        token_count_total: number,
+        token_count_input: number,
+        token_count_output: number,
+        estimated_cost_usd: number,
+        response_time_avg: number,
+        response_time_p95: number,
+        success_rate: number,
+        error_rate: number
+      }
+    }>();
+    
+    // Process each model in the breakdown
+    modelData.breakdown.forEach(item => {
+      const baseModelName = getBaseModelName(item.key);
+      const version = getModelVersion(item.key);
+      
+      // If this model family doesn't exist yet, create it
+      if (!modelFamilies.has(baseModelName)) {
+        modelFamilies.set(baseModelName, {
+          displayName: baseModelName,
+          models: [],
+          aggregatedMetrics: {
+            request_count: 0,
+            token_count_total: 0,
+            token_count_input: 0,
+            token_count_output: 0,
+            estimated_cost_usd: 0,
+            response_time_avg: 0,
+            response_time_p95: 0,
+            success_rate: 0,
+            error_rate: 0
+          }
+        });
+      }
+      
+      // Add this model's data to its family
+      const family = modelFamilies.get(baseModelName)!;
+      family.models.push({
+        key: item.key,
+        version: version,
+        metrics: item.metrics
+      });
+      
+      // Aggregate metrics
+      family.aggregatedMetrics.request_count += item.metrics.request_count;
+      family.aggregatedMetrics.token_count_total += item.metrics.token_count_total;
+      family.aggregatedMetrics.token_count_input += item.metrics.token_count_input;
+      family.aggregatedMetrics.token_count_output += item.metrics.token_count_output;
+      family.aggregatedMetrics.estimated_cost_usd += item.metrics.estimated_cost_usd;
+      
+      // For averages, we'll need to calculate weighted averages later
+      family.aggregatedMetrics.response_time_avg += item.metrics.response_time_avg * item.metrics.request_count;
+      family.aggregatedMetrics.response_time_p95 += item.metrics.response_time_p95 * item.metrics.request_count;
+      family.aggregatedMetrics.success_rate += item.metrics.success_rate * item.metrics.request_count;
+      family.aggregatedMetrics.error_rate += item.metrics.error_rate * item.metrics.request_count;
+    });
+    
+    // Convert map to array and finalize calculations
+    return Array.from(modelFamilies.entries()).map(([baseModelName, family]) => {
+      // Calculate weighted averages
+      if (family.aggregatedMetrics.request_count > 0) {
+        family.aggregatedMetrics.response_time_avg /= family.aggregatedMetrics.request_count;
+        family.aggregatedMetrics.response_time_p95 /= family.aggregatedMetrics.request_count;
+        family.aggregatedMetrics.success_rate /= family.aggregatedMetrics.request_count;
+        family.aggregatedMetrics.error_rate /= family.aggregatedMetrics.request_count;
+      }
+      
+      // Get the versions string for display if needed
+      const versionsString = family.models
+        .map(m => m.version)
+        .filter(v => v) // Filter out empty versions
+        .join(', ');
+      
+      // For the table we just want the family name without versions
       return {
-        name: displayName,
-        requests: item.metrics.request_count,
-        tokens: item.metrics.token_count_total,
-        responseTime: item.metrics.response_time_avg,
-        'cost': item.metrics.estimated_cost_usd,
-        'Cost ($)': item.metrics.estimated_cost_usd,
-        successRate: item.metrics.success_rate
+        name: family.displayName,
+        baseModelName: baseModelName,
+        originalModels: family.models.map(m => m.key),
+        versions: versionsString,
+        requests: family.aggregatedMetrics.request_count,
+        tokens: family.aggregatedMetrics.token_count_total,
+        inputTokens: family.aggregatedMetrics.token_count_input,
+        outputTokens: family.aggregatedMetrics.token_count_output,
+        responseTime: family.aggregatedMetrics.response_time_avg,
+        cost: family.aggregatedMetrics.estimated_cost_usd,
+        'Cost ($)': family.aggregatedMetrics.estimated_cost_usd,
+        successRate: family.aggregatedMetrics.success_rate
       };
     });
   };
@@ -1475,7 +1958,7 @@ export default function ModelUsageAnalytics({ className = '', timeRange = '30d' 
         const agentId = parts[0];
         // If there's a model part, use it, otherwise use 'unknown'
         const modelName = parts.length > 1 ? parts[1] : 'unknown';
-        const displayModelName = MODEL_DISPLAY_NAMES[modelName.toLowerCase()] || modelName;
+        const displayModelName = getModelDisplayName(modelName, modelPricingData, false);
         
         return {
           agent: agentId,
@@ -1521,16 +2004,122 @@ export default function ModelUsageAnalytics({ className = '', timeRange = '30d' 
   };
 
   const getCostPerTokenData = () => {
+    // Always prioritize token pricing data from token_usage_cost endpoint
+    if (tokenPricingData?.token_usage_cost?.breakdown) {
+      console.log('Using token pricing data for cost per token');
+      
+      // Group models by family for aggregation
+      const modelFamilies = new Map<string, {
+        displayName: string,
+        totalTokens: number,
+        totalCost: number,
+        versions: string[],
+        prices: { input: number, output: number }[]
+      }>();
+      
+      // Process each model in the breakdown
+      tokenPricingData.token_usage_cost.breakdown
+        .forEach(item => { // Include ALL models, even those with zero tokens
+          // Use the more robust model name handling
+          const modelName = item.model;
+          const displayName = getBaseModelName(modelName); // Use our simplified grouping
+          const version = getModelVersion(modelName);
+          
+          // If this model family doesn't exist yet, create it
+          if (!modelFamilies.has(displayName)) {
+            modelFamilies.set(displayName, {
+              displayName: displayName,
+              totalTokens: 0,
+              totalCost: 0,
+              versions: [],
+              prices: []
+            });
+          }
+          
+          // Add this model's data to its family
+          const family = modelFamilies.get(displayName)!;
+          family.totalTokens += item.total_tokens;
+          family.totalCost += item.total_cost;
+          
+          if (version && !family.versions.includes(version)) {
+            family.versions.push(version);
+          }
+          
+          // Prefer actual usage-based pricing from the API
+          const inputPrice = item.input_price_per_1k || 0;
+          const outputPrice = item.output_price_per_1k || 0;
+          
+          // Always add pricing info, even if total tokens is zero
+          family.prices.push({
+            input: inputPrice,
+            output: outputPrice
+          });
+        });
+      
+      // Convert map to array for the chart
+      return Array.from(modelFamilies.entries()).map(([familyName, family]) => {
+        // Calculate the average price (using max of input/output for each model)
+        const prices = family.prices.map(p => Math.max(p.input || 0, p.output || 0));
+        
+        // Filter out zero prices
+        const nonZeroPrices = prices.filter(p => p > 0);
+        
+        // Ensure we have at least one price entry, default to 0 if empty
+        const avgPrice = nonZeroPrices.length > 0 
+          ? nonZeroPrices.reduce((sum, price) => sum + price, 0) / nonZeroPrices.length 
+          : 0;
+        
+        return {
+          name: family.displayName,
+          baseModelName: family.displayName,
+          versions: family.versions,
+          'Cost per 1K tokens ($)': avgPrice,
+          originalData: family
+        };
+      });
+    }
+    
+    // Fallback to calculated cost from model data if no token pricing data available
     if (!modelData?.breakdown) return [];
     
-    return modelData.breakdown.map((item) => {
-      const displayName = MODEL_DISPLAY_NAMES[item.key.toLowerCase()] || item.key;
-      const costPer1KTokens = item.metrics.token_count_total > 0 
-        ? (item.metrics.estimated_cost_usd / (item.metrics.token_count_total / 1000)) 
+    console.log('Falling back to model data for cost per token');
+    
+    // Group models by family
+    const modelFamilies = new Map<string, {
+      displayName: string,
+      totalTokens: number,
+      totalCost: number,
+      models: string[]
+    }>();
+    
+    modelData.breakdown.forEach(item => {
+      const displayName = getBaseModelName(item.key);
+      
+      if (!modelFamilies.has(displayName)) {
+        modelFamilies.set(displayName, {
+          displayName: displayName,
+          totalTokens: 0,
+          totalCost: 0,
+          models: []
+        });
+      }
+      
+      const family = modelFamilies.get(displayName)!;
+      family.totalTokens += item.metrics.token_count_total;
+      family.totalCost += item.metrics.estimated_cost_usd;
+      family.models.push(item.key);
+    });
+    
+    return Array.from(modelFamilies.values()).map(family => {
+      // Calculate cost per token from usage data (no mock values)
+      const costPer1KTokens = family.totalTokens > 0 
+        ? (family.totalCost / (family.totalTokens / 1000))
         : 0;
         
       return {
-        name: displayName,
+        name: family.displayName,
+        baseModelName: family.displayName,
+        models: family.models,
         'Cost per 1K tokens ($)': costPer1KTokens
       };
     });
@@ -1574,8 +2163,8 @@ export default function ModelUsageAnalytics({ className = '', timeRange = '30d' 
     return Array.from(agents).map(agent => {
       const result: Record<string, any> = { agent };
       models.forEach(model => {
-        // Create a display-friendly version of the model name for the chart
-        const displayName = MODEL_DISPLAY_NAMES[model.toLowerCase()] || model;
+        // For agent usage, show model with version for better detail
+        const displayName = getModelDisplayName(model, modelPricingData, true);
         result[displayName] = agentModelData[agent][model];
       });
       return result;
@@ -1604,10 +2193,8 @@ export default function ModelUsageAnalytics({ className = '', timeRange = '30d' 
       models.add(modelName);
     });
     
-    // Return model display names for the categories
-    return Array.from(models).map(model => 
-      MODEL_DISPLAY_NAMES[model.toLowerCase()] || model
-    );
+    // Return model display names with versions for the agent chart
+    return Array.from(models).map(model => getModelDisplayName(model, modelPricingData, true));
   };
 
   // Function to get agent model costs - moved inside component to access relationshipData
@@ -1635,26 +2222,14 @@ export default function ModelUsageAnalytics({ className = '', timeRange = '30d' 
     }));
   };
 
-  if (isLoading) {
-    return (
-      <DashboardCard className={className}>
-        <Flex justifyContent="between" alignItems="center" className="mb-4">
-          <Title>Model Usage Analytics</Title>
-          <Button
-            icon={ArrowPathIcon}
-            variant="light"
-            onClick={fetchModelData}
-            disabled={isLoading}
-          >
-            Refresh
-          </Button>
-        </Flex>
-        <LoadingState className="py-8" />
-      </DashboardCard>
-    );
-  }
+  // Add a debug message if model pricing data is available
+  useEffect(() => {
+    if (modelPricingData) {
+      console.log('Model pricing data available:', modelPricingData.models.length, 'models');
+    }
+  }, [modelPricingData]);
 
-  if (error) {
+  // Return component JSX
     return (
       <DashboardCard className={className}>
         <Flex justifyContent="between" alignItems="center" className="mb-4">
@@ -1663,54 +2238,28 @@ export default function ModelUsageAnalytics({ className = '', timeRange = '30d' 
             icon={ArrowPathIcon}
             variant="light"
             onClick={fetchModelData}
+          disabled={isLoading}
           >
             Refresh
           </Button>
         </Flex>
-        <ErrorMessage message={error} />
-      </DashboardCard>
-    );
-  }
-
-  if (!modelData || (!modelData.breakdown || modelData.breakdown.length === 0)) {
-    return (
-      <DashboardCard className={className}>
-        <Flex justifyContent="between" alignItems="center" className="mb-4">
-          <Title>Model Usage Analytics</Title>
-          <Button
-            icon={ArrowPathIcon}
-            variant="light"
-            onClick={fetchModelData}
-          >
-            Refresh
-          </Button>
-        </Flex>
+      
+      {isLoading && <LoadingState className="py-8" />}
+      
+      {error && <ErrorMessage message={error} />}
+      
+      {!isLoading && !error && (!modelData || (!modelData.breakdown || modelData.breakdown.length === 0)) && (
         <EmptyState
           title="No Model Usage Data Available"
           description="There is no model usage data available for the selected time range."
-          icon={<ChartPieIcon className="h-16 w-16 text-neutral-400" />}
         />
-      </DashboardCard>
-    );
-  }
-
-  return (
-    <DashboardCard className={className}>
-      <Flex justifyContent="between" alignItems="center" className="mb-4">
-        <Title>Model Usage Analytics</Title>
-        <Button
-          icon={ArrowPathIcon}
-          variant="light"
-          onClick={fetchModelData}
-        >
-          Refresh
-        </Button>
-      </Flex>
-
+      )}
+      
+      {!isLoading && !error && modelData && modelData.breakdown && modelData.breakdown.length > 0 && (
       <TabGroup index={activeTab} onIndexChange={setActiveTab}>
         <TabList className="mt-4">
           <Tab icon={ChartPieIcon}>Overview</Tab>
-          <Tab icon={ClockIcon}>Performance</Tab>
+            <Tab icon={ChartBarIcon}>Performance</Tab>
           <Tab icon={CurrencyDollarIcon}>Cost Analysis</Tab>
           <Tab icon={UserGroupIcon}>Agent Usage</Tab>
           <Tab icon={ArrowTrendingUpIcon}>Trends</Tab>
@@ -1751,7 +2300,14 @@ export default function ModelUsageAnalytics({ className = '', timeRange = '30d' 
                   <TableBody>
                     {getModelComparisonData().map((item) => (
                       <TableRow key={item.name}>
-                        <TableCell className="font-medium">{item.name}</TableCell>
+                          <TableCell className="font-medium">
+                            {item.name}
+                            {item.versions && item.versions.length > 0 && (
+                              <span className="text-xs text-gray-500 ml-1">
+                                ({item.versions})
+                              </span>
+                            )}
+                          </TableCell>
                         <TableCell className="text-right">{formatNumber(item.requests)}</TableCell>
                         <TableCell className="text-right">{formatNumber(item.tokens)}</TableCell>
                         <TableCell className="text-right">{formatDuration(item.responseTime)}</TableCell>
@@ -1850,6 +2406,7 @@ export default function ModelUsageAnalytics({ className = '', timeRange = '30d' 
           </TabPanel>
         </TabPanels>
       </TabGroup>
+      )}
     </DashboardCard>
   );
 } 

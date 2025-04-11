@@ -49,37 +49,70 @@ export function AgentMetricsDashboard({ agent, metrics = [], agentId, timeRange 
   const [loading, setLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<DashboardMetric[]>([]);
   const [agentData, setAgentData] = useState<Agent | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   // Fetch dashboard data if not provided
   useEffect(() => {
-    if (!agent || metrics.length === 0) {
-      const fetchDashboardData = async () => {
-        try {
-          // Fetch dashboard metrics if not provided
-          const response = await fetchAPI<{ metrics: DashboardMetric[] }>(
-            `${AGENTS.DASHBOARD(agentId)}?time_range=${timeRange || '7d'}`
-          );
-          setDashboardData(response.metrics || []);
-          
-          // Fetch agent data if not provided
-          if (!agent) {
-            const agentResponse = await fetchAPI<Agent>(AGENTS.DETAIL(agentId));
-            setAgentData(agentResponse);
-          }
-        } catch (error) {
-          console.error('Error fetching dashboard data:', error);
-        } finally {
-          setLoading(false);
-        }
-      };
-      
-      fetchDashboardData();
-    } else {
+    // Skip the data fetching if we already have all the data we need
+    if (agent && metrics.length > 0) {
       setDashboardData(metrics);
       setAgentData(agent);
       setLoading(false);
+      return;
     }
-  }, [agent, metrics, agentId, timeRange]);
+
+    // Skip API call if we don't have an agent ID
+    if (!agentId) {
+      setLoading(false);
+      setError("No agent ID provided");
+      return;
+    }
+
+    let isMounted = true;
+    const fetchDashboardData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        // Fetch dashboard metrics if not provided
+        const response = await fetchAPI<{ metrics: DashboardMetric[] }>(
+          `${AGENTS.DASHBOARD(agentId)}?time_range=${timeRange || '7d'}`
+        );
+
+        // Check if component is still mounted before updating state
+        if (!isMounted) return;
+        
+        setDashboardData(response.metrics || []);
+        
+        // Only fetch agent data if agent prop wasn't provided
+        if (!agent) {
+          // Avoid an additional fetch if we already have agent data
+          if (!agentData) {
+            const agentResponse = await fetchAPI<Agent>(AGENTS.DETAIL(agentId));
+            if (isMounted) {
+              setAgentData(agentResponse);
+            }
+          }
+        }
+      } catch (error: any) {
+        console.error('Error fetching dashboard data:', error);
+        if (isMounted) {
+          setError(error.message || 'Failed to load dashboard data');
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+    
+    fetchDashboardData();
+    
+    // Cleanup function to handle component unmounting
+    return () => {
+      isMounted = false;
+    };
+  }, [agentId, timeRange]);  // Remove agent and metrics from dependencies
 
   if (loading) {
     return <div>Loading dashboard metrics...</div>;
