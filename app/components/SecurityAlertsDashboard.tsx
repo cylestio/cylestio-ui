@@ -32,6 +32,7 @@ import {
   ExclamationTriangleIcon,
   CheckBadgeIcon,
   EyeIcon,
+  ClockIcon,
 } from '@heroicons/react/24/outline';
 import Link from 'next/link';
 import { fetchAPI, buildQueryParams, PaginationParams, TimeRangeParams, SearchParams } from '../lib/api';
@@ -571,12 +572,24 @@ export function SecurityAlertsDashboard() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Link 
-                        href={`/alerts/${alert.id}`} 
-                        className="text-blue-500 hover:text-blue-700"
-                      >
-                        <EyeIcon className="h-5 w-5" />
-                      </Link>
+                      <Flex className="space-x-2">
+                        <Link 
+                          href={`/alerts/${alert.id}`} 
+                          className="text-blue-500 hover:text-blue-700"
+                          title="View alert details"
+                        >
+                          <EyeIcon className="h-5 w-5" />
+                        </Link>
+                        {alert.trace_id && (
+                          <Link 
+                            href={`/events/trace/${alert.trace_id}`}
+                            className="text-blue-500 hover:text-blue-700"
+                            title="View related events"
+                          >
+                            <ClockIcon className="h-5 w-5" />
+                          </Link>
+                        )}
+                      </Flex>
                     </TableCell>
                       </TableRow>
                 ))

@@ -20,6 +20,7 @@ export type MetricCardProps = {
   variant?: 'primary' | 'secondary' | 'success' | 'warning' | 'error' | 'neutral'
   size?: 'sm' | 'md' | 'lg'
   loading?: boolean
+  footer?: React.ReactNode
 }
 
 const getVariantStyles = (variant: MetricCardProps['variant'] = 'primary') => {
@@ -93,7 +94,8 @@ const MetricCard: React.FC<MetricCardProps> = ({
   valueClassName = '',
   variant = 'primary',
   size = 'md',
-  loading = false
+  loading = false,
+  footer
 }) => {
   const variantStyles = getVariantStyles(variant)
   const sizeStyles = getSizeStyles(size)
@@ -142,6 +144,12 @@ const MetricCard: React.FC<MetricCardProps> = ({
                 {trend.value}% {trend.label || (trend.direction === 'flat' ? 'flat' : trend.direction)}
               </Text>
             </Flex>
+          )}
+          
+          {footer && (
+            <div className="mt-2">
+              {footer}
+            </div>
           )}
         </div>
       </Flex>

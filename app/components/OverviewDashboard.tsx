@@ -856,6 +856,11 @@ export default function OverviewDashboard({ timeRange }: OverviewDashboardProps)
               valueClassName="text-2xl"
               size="md"
               trend={null}
+              footer={
+                <Link href="/events" className="text-xs text-blue-600 hover:text-blue-800 hover:underline flex items-center mt-2">
+                  <ClockIcon className="h-3 w-3 mr-1" /> View All Events
+                </Link>
+              }
             />
             
             <MetricCard

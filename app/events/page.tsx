@@ -1,7 +1,7 @@
 'use client';
 
-import { EventsDashboard } from '../components/EventsDashboard';
+import { EventsExplorerContainer } from '../components/events/EventsExplorerContainer';
 
 export default function Events() {
-  return <EventsDashboard />;
+  return <EventsExplorerContainer />;
 } 

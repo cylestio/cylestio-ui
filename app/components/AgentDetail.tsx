@@ -484,6 +484,7 @@ export function AgentDetail({ agentId }: AgentDetailProps) {
           <Tab>Tool Usage</Tab>
           <Tab>Sessions & Traces</Tab>
           <Tab>Security Alerts</Tab>
+          <Tab>Events</Tab>
           <Tab>Configuration</Tab>
         </TabList>
         <TabPanels>
@@ -914,6 +915,53 @@ export function AgentDetail({ agentId }: AgentDetailProps) {
                 </Link>
               </div>
             </Card>
+          </TabPanel>
+          
+          {/* Add a new Events tab after Security Alerts */}
+          <TabPanel>
+            <div className="mt-6">
+              <Flex justifyContent="between" className="mb-4">
+                <Title>Agent Events</Title>
+                <Link 
+                  href={`/events?agent_id=${agentId}`} 
+                  className="inline-flex items-center justify-center gap-1 py-2 px-4 text-sm font-medium border border-blue-600 rounded-md text-blue-600 hover:bg-blue-50 transition-colors"
+                >
+                  <ClockIcon className="h-5 w-5" />
+                  Open Events Explorer
+                </Link>
+              </Flex>
+              <Text className="mb-4">View all events related to this agent in the Events Explorer. This will take you to a dedicated view where you can analyze and filter all telemetry events.</Text>
+              
+              <Card>
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableHeaderCell>Type</TableHeaderCell>
+                      <TableHeaderCell>Level</TableHeaderCell>
+                      <TableHeaderCell>Time</TableHeaderCell>
+                      <TableHeaderCell>Trace ID</TableHeaderCell>
+                      <TableHeaderCell>Actions</TableHeaderCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center py-8">
+                        <div className="flex flex-col items-center justify-center space-y-3">
+                          <ClockIcon className="h-10 w-10 text-gray-400" />
+                          <Text>View detailed event logs in the Events Explorer</Text>
+                          <Link 
+                            href={`/events?agent_id=${agentId}`}
+                            className="inline-flex items-center justify-center gap-1 py-2 px-4 text-sm font-medium bg-blue-600 rounded-md text-white hover:bg-blue-700 transition-colors"
+                          >
+                            View Events
+                          </Link>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </Card>
+            </div>
           </TabPanel>
           
           {/* Configuration Tab */}

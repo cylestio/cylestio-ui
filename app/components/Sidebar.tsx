@@ -10,12 +10,15 @@ import {
   ChartBarIcon,
   Cog6ToothIcon,
   UserGroupIcon,
+  BeakerIcon,
+  DocumentTextIcon,
 } from '@heroicons/react/24/outline'
 import { useEffect, useState } from 'react'
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: HomeIcon },
   { name: 'Agents', href: '/agents', icon: UserGroupIcon },
+  { name: 'Events', href: '/events', icon: ClockIcon },
 ]
 
 // Define and export props interface
