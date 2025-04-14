@@ -1,0 +1,512 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { ReadonlyURLSearchParams } from 'next/navigation';
+import ToolsHeader from './ToolsHeader';
+import ToolsFilterBar from './ToolsFilterBar';
+import ToolsBreakdownCharts from './ToolsBreakdownCharts';
+import ToolExecutionsTable from './ToolExecutionsTable';
+import { fetchAPI, buildQueryParams } from '../../lib/api';
+import LoadingState from '../LoadingState';
+import ErrorMessage from '../ErrorMessage';
+
+// Types based on API response
+type ToolInteraction = {
+  id: number;
+  event_id: number;
+  tool_name: string;
+  interaction_type: string;
+  status: string;
+  status_code: number | null;
+  parameters: any;
+  result: any;
+  error: string | null;
+  request_timestamp: string;
+  response_timestamp: string | null;
+  duration_ms: number | null;
+  framework_name: string;
+  tool_version: string | null;
+  authorization_level: string | null;
+  execution_time_ms: number | null;
+  cache_hit: boolean | null;
+  api_version: string | null;
+  raw_attributes: Record<string, any>;
+  span_id: string;
+  trace_id: string;
+  agent_id: string;
+};
+
+type ToolInteractionsResponse = {
+  total: number;
+  page: number;
+  page_size: number;
+  from_time: string;
+  to_time: string;
+  interactions: ToolInteraction[];
+};
+
+// Adapt these types to work with our UI components
+type ToolExecutionSummary = {
+  id: string;
+  timestamp: string;
+  trace_id: string;
+  span_id: string;
+  agent_id: string;
+  tool_name: string;
+  tool_type: string;
+  status: string;
+  duration_ms: number;
+  input_summary: string;
+  output_summary: string;
+  error: string | null;
+};
+
+type ToolSummary = {
+  total_executions: number;
+  success_rate: number;
+  avg_duration_ms: number;
+  by_tool_type: Record<string, {
+    count: number;
+    success_rate: number;
+    avg_duration_ms: number;
+  }>;
+  by_status: Record<string, number>;
+  top_tools: Array<{
+    name: string;
+    count: number;
+    success_rate: number;
+    avg_duration_ms: number;
+  }>;
+};
+
+type ToolTimelinePoint = {
+  timestamp: string;
+  total: number;
+  by_type: Record<string, number>;
+  by_status: Record<string, number>;
+};
+
+type ToolAgentBreakdown = {
+  agent_id: string;
+  agent_name: string;
+  total_executions: number;
+  success_rate: number;
+  avg_duration_ms: number;
+  top_tools: Array<{
+    name: string;
+    count: number;
+    success_rate: number;
+  }>;
+};
+
+type ToolExplorerContainerProps = {
+  searchParams: ReadonlyURLSearchParams;
+};
+
+export default function ToolExplorerContainer({ searchParams }: ToolExplorerContainerProps) {
+  // State for API data
+  const [executions, setExecutions] = useState<ToolExecutionSummary[]>([]);
+  const [summary, setSummary] = useState<ToolSummary | null>(null);
+  const [timeline, setTimeline] = useState<ToolTimelinePoint[]>([]);
+  const [agentBreakdown, setAgentBreakdown] = useState<ToolAgentBreakdown[]>([]);
+  
+  // State for loading and errors
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
+  // Filters
+  const [timeRange, setTimeRange] = useState(searchParams.get('time_range') || '7d');
+  const [toolName, setToolName] = useState(searchParams.get('tool_name') || '');
+  const [toolType, setToolType] = useState(searchParams.get('tool_type') || '');
+  const [status, setStatus] = useState(searchParams.get('status') || '');
+  const [agentId, setAgentId] = useState(searchParams.get('agent_id') || '');
+  const [fromTime, setFromTime] = useState(searchParams.get('from_time') || '');
+  const [toTime, setToTime] = useState(searchParams.get('to_time') || '');
+  
+  // Fetch data based on filters
+  useEffect(() => {
+    const fetchData = async () => {
+      setIsLoading(true);
+      setError(null);
+      
+      try {
+        // Build query params
+        const params: Record<string, string> = {
+          page: '1',
+          page_size: '20',
+          sort_by: 'request_timestamp', 
+          sort_dir: 'desc'
+        };
+        
+        if (timeRange) params.time_range = timeRange;
+        if (toolName) params.tool_name = toolName;
+        if (toolType) params.tool_type = toolType;
+        if (status) params.status = status;
+        if (agentId) params.agent_id = agentId;
+        if (fromTime) params.from_time = fromTime;
+        if (toTime) params.to_time = toTime;
+        
+        console.log('Fetching tool data with params:', params);
+        
+        // Fetch tool interactions data
+        const toolInteractionsUrl = `/v1/metrics/tool_interactions${buildQueryParams(params)}`;
+        console.log('Fetching tool interactions from:', toolInteractionsUrl);
+        
+        const toolInteractionsResponse = await fetchAPI<ToolInteractionsResponse>(toolInteractionsUrl);
+        console.log('Tool interactions response:', toolInteractionsResponse);
+        
+        if (toolInteractionsResponse && toolInteractionsResponse.interactions) {
+          // Transform interactions to ToolExecutionSummary format that our UI expects
+          const executionSummaries = toolInteractionsResponse.interactions.map(interaction => ({
+            id: interaction.id.toString(),
+            timestamp: interaction.request_timestamp,
+            trace_id: interaction.trace_id,
+            span_id: interaction.span_id,
+            agent_id: interaction.agent_id,
+            tool_name: interaction.tool_name,
+            tool_type: interaction.framework_name || 'unknown',
+            status: interaction.status,
+            duration_ms: interaction.duration_ms || 0,
+            input_summary: Array.isArray(interaction.parameters) 
+              ? `Parameters: ${interaction.parameters.join(', ')}` 
+              : JSON.stringify(interaction.parameters),
+            output_summary: interaction.result ? JSON.stringify(interaction.result).substring(0, 100) : 'No result',
+            error: interaction.error
+          }));
+          
+          setExecutions(executionSummaries);
+          
+          // Calculate summary metrics from interactions
+          const successfulInteractions = toolInteractionsResponse.interactions.filter(i => i.status === 'success');
+          const totalExecutions = toolInteractionsResponse.total;
+          const successRate = totalExecutions > 0 ? successfulInteractions.length / totalExecutions : 0;
+          
+          // Calculate average duration from successful executions
+          const durations = successfulInteractions
+            .filter(i => i.duration_ms !== null)
+            .map(i => i.duration_ms as number);
+          
+          const avgDuration = durations.length > 0 
+            ? durations.reduce((sum, duration) => sum + duration, 0) / durations.length 
+            : 0;
+          
+          // Count by status
+          const statusCounts: Record<string, number> = {};
+          toolInteractionsResponse.interactions.forEach(i => {
+            if (!statusCounts[i.status]) statusCounts[i.status] = 0;
+            statusCounts[i.status]++;
+          });
+          
+          // Count by tool name and calculate metrics
+          const toolCounts: Record<string, {
+            count: number, 
+            success: number, 
+            durations: number[]
+          }> = {};
+          
+          toolInteractionsResponse.interactions.forEach(i => {
+            if (!toolCounts[i.tool_name]) {
+              toolCounts[i.tool_name] = { 
+                count: 0, 
+                success: 0, 
+                durations: [] 
+              };
+            }
+            
+            toolCounts[i.tool_name].count++;
+            
+            if (i.status === 'success') {
+              toolCounts[i.tool_name].success++;
+              if (i.duration_ms !== null) {
+                toolCounts[i.tool_name].durations.push(i.duration_ms);
+              }
+            }
+          });
+          
+          // Calculate top tools
+          const topTools = Object.entries(toolCounts)
+            .map(([name, data]) => ({
+              name,
+              count: data.count,
+              success_rate: data.count > 0 ? data.success / data.count : 0,
+              avg_duration_ms: data.durations.length > 0 
+                ? data.durations.reduce((sum, d) => sum + d, 0) / data.durations.length 
+                : 0
+            }))
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 5);
+          
+          // Count by tool type (framework_name here)
+          const typeData: Record<string, {
+            count: number,
+            success: number,
+            durations: number[]
+          }> = {};
+          
+          toolInteractionsResponse.interactions.forEach(i => {
+            const type = i.framework_name || 'unknown';
+            
+            if (!typeData[type]) {
+              typeData[type] = { 
+                count: 0, 
+                success: 0, 
+                durations: [] 
+              };
+            }
+            
+            typeData[type].count++;
+            
+            if (i.status === 'success') {
+              typeData[type].success++;
+              if (i.duration_ms !== null) {
+                typeData[type].durations.push(i.duration_ms);
+              }
+            }
+          });
+          
+          // Format by_tool_type for our UI
+          const byToolType: Record<string, {
+            count: number;
+            success_rate: number;
+            avg_duration_ms: number;
+          }> = {};
+          
+          Object.entries(typeData).forEach(([type, data]) => {
+            byToolType[type] = {
+              count: data.count,
+              success_rate: data.count > 0 ? data.success / data.count : 0,
+              avg_duration_ms: data.durations.length > 0 
+                ? data.durations.reduce((sum, d) => sum + d, 0) / data.durations.length 
+                : 0
+            };
+          });
+          
+          // Create summary data
+          const summaryData: ToolSummary = {
+            total_executions: totalExecutions,
+            success_rate: successRate,
+            avg_duration_ms: avgDuration,
+            by_tool_type: byToolType,
+            by_status: statusCounts,
+            top_tools: topTools
+          };
+          
+          setSummary(summaryData);
+          
+          // Create timeline data - group by day
+          const timelineMap = new Map<string, {
+            total: number,
+            by_type: Record<string, number>,
+            by_status: Record<string, number>
+          }>();
+          
+          toolInteractionsResponse.interactions.forEach(i => {
+            // Get date part only for the timestamp
+            const date = i.request_timestamp.split('T')[0];
+            
+            if (!timelineMap.has(date)) {
+              timelineMap.set(date, {
+                total: 0,
+                by_type: {},
+                by_status: {}
+              });
+            }
+            
+            const point = timelineMap.get(date)!;
+            point.total++;
+            
+            // Count by type
+            const type = i.framework_name || 'unknown';
+            if (!point.by_type[type]) point.by_type[type] = 0;
+            point.by_type[type]++;
+            
+            // Count by status
+            if (!point.by_status[i.status]) point.by_status[i.status] = 0;
+            point.by_status[i.status]++;
+          });
+          
+          // Convert to array and sort by date
+          const timelineData = Array.from(timelineMap.entries())
+            .map(([date, data]) => ({
+              timestamp: date,
+              ...data
+            }))
+            .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+          
+          setTimeline(timelineData);
+          
+          // Create agent breakdown
+          const agentData = new Map<string, {
+            agent_name: string,
+            total: number,
+            success: number,
+            durations: number[],
+            tool_counts: Record<string, { count: number, success: number }>
+          }>();
+          
+          toolInteractionsResponse.interactions.forEach(i => {
+            if (!agentData.has(i.agent_id)) {
+              agentData.set(i.agent_id, {
+                agent_name: i.agent_id,
+                total: 0,
+                success: 0,
+                durations: [],
+                tool_counts: {}
+              });
+            }
+            
+            const data = agentData.get(i.agent_id)!;
+            data.total++;
+            
+            if (i.status === 'success') {
+              data.success++;
+              if (i.duration_ms !== null) {
+                data.durations.push(i.duration_ms);
+              }
+            }
+            
+            // Count tools per agent
+            if (!data.tool_counts[i.tool_name]) {
+              data.tool_counts[i.tool_name] = { count: 0, success: 0 };
+            }
+            
+            data.tool_counts[i.tool_name].count++;
+            if (i.status === 'success') {
+              data.tool_counts[i.tool_name].success++;
+            }
+          });
+          
+          // Format for UI
+          const agentBreakdownData = Array.from(agentData.entries())
+            .map(([agent_id, data]) => {
+              // Get top tools for this agent
+              const topTools = Object.entries(data.tool_counts)
+                .map(([name, counts]) => ({
+                  name,
+                  count: counts.count,
+                  success_rate: counts.count > 0 ? counts.success / counts.count : 0
+                }))
+                .sort((a, b) => b.count - a.count)
+                .slice(0, 3);
+              
+              return {
+                agent_id,
+                agent_name: data.agent_name,
+                total_executions: data.total,
+                success_rate: data.total > 0 ? data.success / data.total : 0,
+                avg_duration_ms: data.durations.length > 0 
+                  ? data.durations.reduce((sum, d) => sum + d, 0) / data.durations.length 
+                  : 0,
+                top_tools: topTools
+              };
+            });
+          
+          setAgentBreakdown(agentBreakdownData);
+        } else {
+          // Handle empty or invalid response
+          setExecutions([]);
+          setSummary(null);
+          setTimeline([]);
+          setAgentBreakdown([]);
+        }
+      } catch (err) {
+        console.error('Fatal error in data fetching:', err);
+        setError(err instanceof Error ? err.message : 'Failed to fetch tool data');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    fetchData();
+  }, [timeRange, toolName, toolType, status, agentId, fromTime, toTime]);
+  
+  // Handle filter changes
+  const handleFilterChange = (filterName: string, value: string) => {
+    switch (filterName) {
+      case 'time_range':
+        setTimeRange(value);
+        break;
+      case 'tool_name':
+        setToolName(value);
+        break;
+      case 'tool_type':
+        setToolType(value);
+        break;
+      case 'status':
+        setStatus(value);
+        break;
+      case 'agent_id':
+        setAgentId(value);
+        break;
+      case 'from_time':
+        setFromTime(value);
+        break;
+      case 'to_time':
+        setToTime(value);
+        break;
+    }
+  };
+  
+  // Handle filter preset selection
+  const handleFilterPreset = (preset: 'all' | 'failed' | 'slow') => {
+    setStatus(preset === 'failed' ? 'error' : '');
+    // Set additional filters based on preset
+    if (preset === 'slow') {
+      // This would typically involve custom duration filtering
+      // which might be handled differently in the backend
+    }
+  };
+  
+  // Reset all filters
+  const handleResetFilters = () => {
+    setTimeRange('7d');
+    setToolName('');
+    setToolType('');
+    setStatus('');
+    setAgentId('');
+    setFromTime('');
+    setToTime('');
+  };
+  
+  // Content display
+  if (isLoading) {
+    return <LoadingState message="Loading tool execution data..." />;
+  }
+  
+  if (error) {
+    return <ErrorMessage message={error} onRetry={() => window.location.reload()} />;
+  }
+  
+  return (
+    <div className="w-full space-y-6">
+      <ToolsHeader 
+        summary={summary} 
+        onFilterPreset={handleFilterPreset}
+        timeRange={timeRange}
+        onTimeRangeChange={(value) => handleFilterChange('time_range', value)}
+      />
+      
+      <ToolsFilterBar
+        timeRange={timeRange}
+        toolName={toolName}
+        toolType={toolType}
+        status={status}
+        agentId={agentId}
+        fromTime={fromTime}
+        toTime={toTime}
+        onFilterChange={handleFilterChange}
+        onResetFilters={handleResetFilters}
+      />
+      
+      <ToolsBreakdownCharts 
+        summary={summary}
+        timeline={timeline}
+        agentBreakdown={agentBreakdown}
+      />
+      
+      <ToolExecutionsTable 
+        executions={executions} 
+      />
+    </div>
+  );
+} 

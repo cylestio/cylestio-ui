@@ -32,7 +32,8 @@ import {
   ChartBarIcon,
   ArrowPathIcon,
   XMarkIcon,
-  ArrowTrendingUpIcon
+  ArrowTrendingUpIcon,
+  ChevronRightIcon
 } from '@heroicons/react/24/outline'
 import { fetchAPI, buildQueryParams } from '../lib/api'
 import { METRICS } from '../lib/api-endpoints'
@@ -43,6 +44,10 @@ import ErrorMessage from './ErrorMessage'
 import { colors } from './DesignSystem'
 import SlowToolsTable from './SlowToolsTable'
 import React from 'react'
+import { formatDistanceToNow } from 'date-fns'
+import { Tooltip } from 'react-tooltip'
+import Link from 'next/link'
+import { cleanToolName, formatDuration } from '../lib/formatters'
 
 // Types
 type ToolInteraction = {
@@ -108,7 +113,7 @@ export type ToolUsageAnalysisProps = {
 };
 
 // Utility function
-function formatDuration(ms: number): string {
+function formatDurationMs(ms: number): string {
   if (ms < 1000) return `${ms.toFixed(0)}ms`;
   return `${(ms / 1000).toFixed(2)}s`;
 }
@@ -911,6 +916,10 @@ export default function ToolUsageAnalysis({
           <div>
             <Flex className="mb-4 items-center justify-between">
               <Text>Tool execution frequency by tool name</Text>
+              <Link href="/tools" className="text-indigo-600 hover:text-indigo-800 text-sm flex items-center gap-1">
+                <span>View in Tool Explorer</span>
+                <ChevronRightIcon className="h-4 w-4" />
+              </Link>
             </Flex>
             
             {histogramData.length > 0 ? (

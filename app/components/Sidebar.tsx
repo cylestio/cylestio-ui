@@ -12,6 +12,7 @@ import {
   UserGroupIcon,
   BeakerIcon,
   DocumentTextIcon,
+  WrenchScrewdriverIcon,
 } from '@heroicons/react/24/outline'
 import { useEffect, useState } from 'react'
 
@@ -19,6 +20,7 @@ const navigation = [
   { name: 'Dashboard', href: '/', icon: HomeIcon },
   { name: 'Agents', href: '/agents', icon: UserGroupIcon },
   { name: 'Events', href: '/events', icon: ClockIcon },
+  { name: 'Tools', href: '/tools', icon: WrenchScrewdriverIcon },
 ]
 
 // Define and export props interface
