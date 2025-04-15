@@ -137,6 +137,7 @@ const ResponsiveContainer: React.FC<ResponsiveContainerProps> = ({
         ${heightClasses}
         ${centerClasses}
         ${reducedContentOnMobile ? 'content-simplified-mobile' : ''}
+        w-full
         ${className}
       `}
     >
