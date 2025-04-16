@@ -25,6 +25,7 @@ import LoadingState from './LoadingState'
 import { SimpleDonutChart } from './SimpleDonutChart'
 import { colors } from './DesignSystem'
 import { TokenUsageByModelChart } from './TokenUsageByModelChart'
+import { ModelDistributionChart } from './ModelDistributionChart'
 
 // Define types
 type TokenBreakdownData = {
@@ -484,14 +485,26 @@ export default function TokenUsageBreakdown({ className = '', timeRange = '30d' 
                   <Card className="p-4 shadow-sm">
                     <Title>Input vs Output Tokens</Title>
                     <Text className="text-sm text-gray-500">Distribution of tokens by type</Text>
-                    <div className="h-72 mt-4 relative flex justify-center items-center">
-                      <SimpleDonutChart 
-                        data={inputOutputData}
-                        colors={["rgba(59, 130, 246, 0.4)", "rgba(139, 92, 246, 0.4)"]}
-                        valueFormatter={formatNumber}
-                        showLegend
-                        className="h-full w-full"
-                      />
+                    <div className="h-72 mt-4 relative flex flex-col justify-center items-center">
+                      <div className="w-64 h-64 relative">
+                        <ModelDistributionChart 
+                          data={inputOutputData}
+                          valueFormatter={formatNumber}
+                          className="h-full w-full"
+                          showLegend={false}
+                        />
+                      </div>
+                      
+                      <div className="flex justify-center items-center mt-6 space-x-8">
+                        <div className="flex items-center">
+                          <div className="w-3 h-3 rounded-full bg-blue-300 mr-2"></div>
+                          <span className="text-sm">Input Tokens {formatNumber(tokenData.input_tokens)}</span>
+                        </div>
+                        <div className="flex items-center">
+                          <div className="w-3 h-3 rounded-full bg-purple-300 mr-2"></div>
+                          <span className="text-sm">Output Tokens {formatNumber(tokenData.output_tokens)}</span>
+                        </div>
+                      </div>
                     </div>
                   </Card>
                   

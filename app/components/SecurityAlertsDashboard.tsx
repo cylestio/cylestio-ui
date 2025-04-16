@@ -32,6 +32,7 @@ import {
   ExclamationTriangleIcon,
   CheckBadgeIcon,
   EyeIcon,
+  ClockIcon,
 } from '@heroicons/react/24/outline';
 import Link from 'next/link';
 import { fetchAPI, buildQueryParams, PaginationParams, TimeRangeParams, SearchParams } from '../lib/api';
@@ -40,15 +41,24 @@ import { formatISOToLocalDisplay, formatChartDate as formatChartTimestamp } from
 
 // Define types based on new API
 type Alert = {
-  alert_id: string;
+  id: string;
   timestamp: string;
-  type: string;
+  schema_version: string;
+  trace_id: string;
+  span_id: string;
+  parent_span_id: string | null;
+  event_name: string;
+  log_level: string;
+  alert_level: string;
+  category: string;
   severity: string;
   description: string;
-  status: string;
-  related_event_id: string;
+  llm_vendor: string;
+  content_sample: string;
+  detection_time: string;
+  keywords: string[];
+  event_id: number;
   agent_id: string;
-  agent_name: string;
 };
 
 type PaginationInfo = {
@@ -59,12 +69,10 @@ type PaginationInfo = {
 };
 
 type AlertsResponse = {
-  items: Alert[];
-  pagination: PaginationInfo;
-  meta: {
-    time_period: string;
-    from_time: string;
-    to_time: string;
+  alerts: Alert[];
+  pagination?: PaginationInfo;
+  meta?: {
+    timestamp: string;
   };
 };
 
@@ -95,7 +103,7 @@ type MetricsResponse = {
 
 type AlertFilters = PaginationParams & TimeRangeParams & SearchParams & {
   severity?: string;
-  type?: string;
+  category?: string;
   status?: string;
 };
 
@@ -146,12 +154,11 @@ export function SecurityAlertsDashboard() {
           startDate.setDate(startDate.getDate() - 7);
       }
       
-      // Build query parameters
+      // Build query parameters for alerts
       const params: AlertFilters = {
         page: pagination.page,
         page_size: pagination.page_size,
-        from_time: startDate.toISOString(),
-        to_time: currentTime.toISOString()
+        time_range: timeRange
       };
 
       if (severityFilter !== 'all') {
@@ -159,7 +166,7 @@ export function SecurityAlertsDashboard() {
       }
 
       if (typeFilter !== 'all') {
-        params.type = typeFilter;
+        params.category = typeFilter;
       }
 
       if (statusFilter !== 'all') {
@@ -173,64 +180,46 @@ export function SecurityAlertsDashboard() {
       // Use API service to fetch alerts with centralized endpoint configuration
       const data = await fetchAPI<AlertsResponse>(`${SECURITY.ALERTS}${buildQueryParams(params)}`);
       
-      setAlerts(data.items);
-      setPagination(data.pagination);
+      setAlerts(data.alerts || []);
       
-      // Fetch alert trend data with ISO 8601 timestamps
-      const trendParams = {
-        from_time: startDate.toISOString(),
-        to_time: currentTime.toISOString(),
-        interval: getInterval(timeRange)
-      };
+      if (data.pagination) {
+        setPagination(data.pagination);
+      }
       
-      const trendData = await fetchAPI<MetricsResponse>(
-        `${SECURITY.ALERT_METRICS}${buildQueryParams(trendParams)}`
-      );
-      setAlertTrend(trendData.data || []);
+      // Fetch overview data with time range
+      const overviewParams = { time_range: timeRange };
+      const overviewData = await fetchAPI<any>(`${SECURITY.ALERTS_OVERVIEW}${buildQueryParams(overviewParams)}`);
       
-      // Fetch alerts by severity with ISO 8601 timestamps
-      const severityParams = {
-        from_time: startDate.toISOString(),
-        to_time: currentTime.toISOString(),
-        dimensions: 'severity'
-      };
-      
-      const severityData = await fetchAPI<MetricsResponse>(
-        `${SECURITY.ALERT_METRICS}${buildQueryParams(severityParams)}`
-      );
-      
-      // Transform to format for charts
-      const severityMetrics = Object.entries(
-        severityData.data.reduce((acc: Record<string, number>, item: ChartDataPoint) => {
-          const severity = item.dimensions?.severity || 'unknown';
-          acc[severity] = (acc[severity] || 0) + item.value;
-          return acc;
-        }, {})
-      ).map(([severity, count]) => ({ name: severity, value: count as number }));
-      
-      setAlertsBySeverity(severityMetrics);
-      
-      // Fetch alerts by type with ISO 8601 timestamps
-      const typeParams = {
-        from_time: startDate.toISOString(),
-        to_time: currentTime.toISOString(),
-        dimensions: 'type'
-      };
-      
-      const typeData = await fetchAPI<MetricsResponse>(
-        `${SECURITY.ALERT_METRICS}${buildQueryParams(typeParams)}`
-      );
-      
-      // Transform to format for charts
-      const typeMetrics = Object.entries(
-        typeData.data.reduce((acc: Record<string, number>, item: ChartDataPoint) => {
-          const type = item.dimensions?.type || 'unknown';
-          acc[type] = (acc[type] || 0) + item.value;
-          return acc;
-        }, {})
-      ).map(([type, count]) => ({ name: type, value: count as number }));
-      
-      setAlertsByType(typeMetrics);
+      if (overviewData && overviewData.metrics) {
+        // Set alert counts
+        setPagination(prev => ({
+          ...prev,
+          total_items: overviewData.metrics.total_count || 0
+        }));
+        
+        // Set severity metrics
+        if (overviewData.metrics.by_severity) {
+          const severityMetrics = Object.entries(overviewData.metrics.by_severity)
+            .map(([name, value]) => ({ name, value: value as number }));
+          setAlertsBySeverity(severityMetrics);
+        }
+        
+        // Set category/type metrics
+        if (overviewData.metrics.by_category) {
+          const typeMetrics = Object.entries(overviewData.metrics.by_category)
+            .map(([name, value]) => ({ name, value: value as number }));
+          setAlertsByType(typeMetrics);
+        }
+        
+        // Set time series data
+        if (overviewData.time_series) {
+          const timeSeriesData = overviewData.time_series.map((point: any) => ({
+            timestamp: point.timestamp,
+            value: point.count
+          }));
+          setAlertTrend(timeSeriesData);
+        }
+      }
       
       setLastUpdated(new Date());
       setError(null);
@@ -433,10 +422,12 @@ export function SecurityAlertsDashboard() {
           <Flex justifyContent="start" className="gap-2">
             <CheckBadgeIcon className="h-6 w-6 text-amber-500" />
             <div>
-              <Text>Active Alerts</Text>
-                  <Metric>
-                {alerts.filter(a => a.status.toLowerCase() === 'active').length}
-                  </Metric>
+              <Text>Alerts by Level</Text>
+              <Metric>
+                {alertsBySeverity
+                  .filter(a => ['high'].includes(a.name.toLowerCase()))
+                  .reduce((sum, item) => sum + item.value, 0)}
+              </Metric>
             </div>
           </Flex>
                 </Card>
@@ -557,18 +548,18 @@ export function SecurityAlertsDashboard() {
                 </TableRow>
               ) : (
                 alerts.map((alert) => (
-                  <TableRow key={alert.alert_id}>
-                    <TableCell>{alert.alert_id}</TableCell>
+                  <TableRow key={alert.id}>
+                    <TableCell>{alert.id}</TableCell>
                         <TableCell>{formatTimestamp(alert.timestamp)}</TableCell>
                     <TableCell>
                       <Link 
                         href={`/agents/${alert.agent_id}`}
                         className="text-blue-500 hover:text-blue-700"
                       >
-                        {alert.agent_name}
+                        {alert.agent_id}
                       </Link>
                     </TableCell>
-                    <TableCell>{alert.type}</TableCell>
+                    <TableCell>{alert.category}</TableCell>
                     <TableCell>
                       <Badge color={getSeverityColor(alert.severity)}>{alert.severity}</Badge>
                     </TableCell>
@@ -576,17 +567,29 @@ export function SecurityAlertsDashboard() {
                       {alert.description}
                     </TableCell>
                     <TableCell>
-                      <Badge color={alert.status === 'resolved' ? 'green' : 'red'}>
-                        {alert.status}
+                      <Badge color="blue">
+                        {alert.alert_level}
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Link href={`/events/${alert.related_event_id}`} className="text-blue-500 hover:text-blue-700">
-                        <Flex className="items-center gap-1">
-                          <EyeIcon className="h-4 w-4" />
-                          <Text>View Event</Text>
-                        </Flex>
-                      </Link>
+                      <Flex className="space-x-2">
+                        <Link 
+                          href={`/alerts/${alert.id}`} 
+                          className="text-blue-500 hover:text-blue-700"
+                          title="View alert details"
+                        >
+                          <EyeIcon className="h-5 w-5" />
+                        </Link>
+                        {alert.trace_id && (
+                          <Link 
+                            href={`/events/trace/${alert.trace_id}`}
+                            className="text-blue-500 hover:text-blue-700"
+                            title="View related events"
+                          >
+                            <ClockIcon className="h-5 w-5" />
+                          </Link>
+                        )}
+                      </Flex>
                     </TableCell>
                       </TableRow>
                 ))

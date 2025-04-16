@@ -32,7 +32,8 @@ import {
   ChartBarIcon,
   ArrowPathIcon,
   XMarkIcon,
-  ArrowTrendingUpIcon
+  ArrowTrendingUpIcon,
+  ChevronRightIcon
 } from '@heroicons/react/24/outline'
 import { fetchAPI, buildQueryParams } from '../lib/api'
 import { METRICS } from '../lib/api-endpoints'
@@ -43,6 +44,10 @@ import ErrorMessage from './ErrorMessage'
 import { colors } from './DesignSystem'
 import SlowToolsTable from './SlowToolsTable'
 import React from 'react'
+import { formatDistanceToNow } from 'date-fns'
+import { Tooltip } from 'react-tooltip'
+import Link from 'next/link'
+import { cleanToolName, formatDuration } from '../lib/formatters'
 
 // Types
 type ToolInteraction = {
@@ -108,7 +113,7 @@ export type ToolUsageAnalysisProps = {
 };
 
 // Utility function
-function formatDuration(ms: number): string {
+function formatDurationMs(ms: number): string {
   if (ms < 1000) return `${ms.toFixed(0)}ms`;
   return `${(ms / 1000).toFixed(2)}s`;
 }
@@ -299,14 +304,13 @@ export default function ToolUsageAnalysis({
   const fetchToolData = async () => {
     // Prevent multiple simultaneous requests
     if (requestInProgress.current) {
+      console.log('Request already in progress, skipping duplicate request');
       return;
     }
     
-    // If we've already fetched data successfully, don't fetch again unless explicitly requested
-    if (dataFetched && !dashboardLoading && !dashboardError) {
-      return;
-    }
+    // Always fetch when explicitly requested
     
+    console.log('Starting tool data fetch');
     requestInProgress.current = true;
     
     try {
@@ -315,6 +319,7 @@ export default function ToolUsageAnalysis({
       
       // If we have dashboard tool executions data, use that
       if (dashboardToolExecutions && dashboardToolExecutions.length > 0) {
+        console.log('Using dashboard tool executions data', dashboardToolExecutions.length);
         // Process the dashboard tool execution data
         setTimeSeriesData(dashboardToolExecutions);
         setDataFetched(true);
@@ -325,55 +330,6 @@ export default function ToolUsageAnalysis({
       
       // Try to fetch data from the metrics endpoint first
       try {
-        // Create fallback data in case API endpoints are missing
-        const fallbackData: ToolInteraction[] = [
-          {
-            id: 1,
-            event_id: 1,
-            tool_name: "file_search",
-            interaction_type: "execution",
-            status: "success",
-            status_code: 200,
-            parameters: {},
-            result: {},
-            request_timestamp: new Date(Date.now() - 86400000).toISOString(),
-            response_timestamp: new Date(Date.now() - 86400000 + 250).toISOString(),
-            duration_ms: 250,
-            framework_name: "file_tools",
-            agent_id: "demo-agent"
-          },
-          {
-            id: 2,
-            event_id: 2,
-            tool_name: "read_file",
-            interaction_type: "execution",
-            status: "success",
-            status_code: 200,
-            parameters: {},
-            result: {},
-            request_timestamp: new Date(Date.now() - 86000000).toISOString(),
-            response_timestamp: new Date(Date.now() - 86000000 + 320).toISOString(),
-            duration_ms: 320,
-            framework_name: "file_tools",
-            agent_id: "demo-agent"
-          },
-          {
-            id: 3,
-            event_id: 3,
-            tool_name: "codebase_search",
-            interaction_type: "execution",
-            status: "success",
-            status_code: 200,
-            parameters: {},
-            result: {},
-            request_timestamp: new Date(Date.now() - 85000000).toISOString(),
-            response_timestamp: new Date(Date.now() - 85000000 + 800).toISOString(),
-            duration_ms: 800,
-            framework_name: "code_tools",
-            agent_id: "demo-agent"
-          }
-        ];
-        
         // Add filter params to request
         const params = buildQueryParams({ 
           time_range: timeRange,
@@ -384,12 +340,72 @@ export default function ToolUsageAnalysis({
         let data: ToolInteractionsResponse | null = null;
         
         try {
+          console.log(`Fetching tool interactions data with params: ${params}`);
           // First try to fetch from tool_interactions endpoint
           data = await fetchAPI<ToolInteractionsResponse>(`${METRICS.TOOL_INTERACTIONS}${params}`);
+          
+          // Add debug logging to see if data is received correctly
+          console.log('Raw API response:', JSON.stringify(data).substring(0, 200) + '...');
+          
+          // Set a max validity period - after this time we'll allow new requests
+          setTimeout(() => {
+            console.log('Request cache expired, allowing new fetches');
+            setDataFetched(false);
+          }, 60000); // 1 minute validity
+          
         } catch (toolInteractionsError) {
           console.warn('Failed to fetch from tool_interactions endpoint, using fallback data', toolInteractionsError);
           
-          // Use fallback data directly without trying execution_count endpoint that doesn't exist
+          // Create fallback data in case API endpoints are missing
+          const fallbackData: ToolInteraction[] = [
+            {
+              id: 1,
+              event_id: 1,
+              tool_name: "file_search",
+              interaction_type: "execution",
+              status: "success",
+              status_code: 200,
+              parameters: {},
+              result: {},
+              request_timestamp: new Date(Date.now() - 86400000).toISOString(),
+              response_timestamp: new Date(Date.now() - 86400000 + 250).toISOString(),
+              duration_ms: 250,
+              framework_name: "file_tools",
+              agent_id: "demo-agent"
+            },
+            {
+              id: 2,
+              event_id: 2,
+              tool_name: "read_file",
+              interaction_type: "execution",
+              status: "success",
+              status_code: 200,
+              parameters: {},
+              result: {},
+              request_timestamp: new Date(Date.now() - 86000000).toISOString(),
+              response_timestamp: new Date(Date.now() - 86000000 + 320).toISOString(),
+              duration_ms: 320,
+              framework_name: "file_tools",
+              agent_id: "demo-agent"
+            },
+            {
+              id: 3,
+              event_id: 3,
+              tool_name: "codebase_search",
+              interaction_type: "execution",
+              status: "success",
+              status_code: 200,
+              parameters: {},
+              result: {},
+              request_timestamp: new Date(Date.now() - 85000000).toISOString(),
+              response_timestamp: new Date(Date.now() - 85000000 + 800).toISOString(),
+              duration_ms: 800,
+              framework_name: "code_tools",
+              agent_id: "demo-agent"
+            }
+          ];
+          
+          // Use fallback data directly
           data = {
             total: fallbackData.length,
             page: 1,
@@ -401,14 +417,21 @@ export default function ToolUsageAnalysis({
         }
         
         if (data && data.interactions && data.interactions.length > 0) {
+          console.log(`Processing ${data.interactions.length} tool interactions`);
+          
+          // Force a small delay to ensure React can properly update state
+          await new Promise(resolve => setTimeout(resolve, 50));
+          
           setToolInteractions(data.interactions);
           
           // Process tool usage data
           const toolData = processToolData(data.interactions);
+          console.log('Tool data processed:', toolData.length);
           setToolUsageData(toolData);
           
           // Process time series data
           const { aggregated, byTool, toolSpecificTimeData: specificTimeData } = processTimeSeriesData(data.interactions);
+          console.log('Time series data processed, aggregated points:', aggregated.length);
           setAggregatedTimeData(aggregated);
           setToolSpecificTimeData(specificTimeData);
           
@@ -418,21 +441,32 @@ export default function ToolUsageAnalysis({
             .slice(0, 5)
             .map(tool => tool.tool_name);
           
+          console.log('Selected top tools:', topTools);
           setVisibleTools(topTools);
           setSelectedTools(topTools);
           
+          // Force a small delay before changing dataFetched flag
+          await new Promise(resolve => setTimeout(resolve, 50));
+          
           // Mark as fetched to prevent refetching
           setDataFetched(true);
+          console.log('Successfully fetched and processed tool data, dataFetched set to true');
         } else {
+          console.log('No tool usage data available');
           setError('No tool usage data available for the selected time period.');
+          // Still mark as fetched to prevent endless retries
+          setDataFetched(true);
         }
       } catch (err) {
         console.error('Failed to fetch tool data:', err);
         setError('Failed to fetch tool data. Please try again later.');
+        // Still mark as fetched to prevent endless retries
+        setDataFetched(true);
       }
     } finally {
       setLoading(false);
       requestInProgress.current = false;
+      console.log('Request completed, loading state reset to false');
     }
   };
 
@@ -743,22 +777,40 @@ export default function ToolUsageAnalysis({
     });
   };
 
-  // Update the refresh function to properly reset the dataFetched flag
-  const handleRefresh = () => {
-    setDataFetched(false);
-    if (onRefresh) {
-      onRefresh();
-    } else {
-      fetchToolData();
+  // Add initialization effect
+  useEffect(() => {
+    // Reset dataFetched when timeRange changes
+    if (timeRange) {
+      setDataFetched(false);
     }
-  };
-
+    
+    // Initialize with empty data to prevent errors
+    if (toolInteractions.length === 0 && !loading) {
+      setLoading(true);
+    }
+    
+    return () => {};
+  }, [timeRange]); // Only run when timeRange changes
+  
   // Update useEffect to handle refresh from dashboard with proper controls and better error handling
   useEffect(() => {
-    // Skip if a request is already in progress
+    // Force initial data fetch on component mount
+    const fetchInitialData = async () => {
+      console.log('Initial component mount, forcing data fetch');
+      if (!dataFetched && !requestInProgress.current) {
+        await fetchToolData();
+      }
+    };
+    
+    fetchInitialData();
+    
+    // Component state change effect
     if (requestInProgress.current) {
+      console.log('Request in progress, skipping effect');
       return;
     }
+    
+    console.log('Effect triggered, dashboard loading:', dashboardLoading, 'dashboard error:', !!dashboardError, 'dataFetched:', dataFetched);
     
     if (dashboardLoading) {
       setLoading(true);
@@ -772,37 +824,65 @@ export default function ToolUsageAnalysis({
       setDataFetched(true);
       return;
     }
+
+    // No additional conditions preventing fetch
     
-    // Only fetch once on initial load or when explicitly triggered
-    if (!dataFetched) {
-      fetchToolData().catch(err => {
-        console.error('Failed to fetch tool data:', err);
-        setError('An unexpected error occurred. Please try again later.');
+    // Cleanup function for component unmount
+    return () => {
+      console.log('Component unmounting, cleaning up');
+      requestInProgress.current = false;
+    };
+  }, [timeRange, dashboardToolExecutions, dashboardLoading, dashboardError]);
+
+  // Update the refresh function for better toggle behavior
+  const handleRefresh = () => {
+    const isCurrentlyShowing = toolInteractions.length > 0;
+    
+    if (isCurrentlyShowing) {
+      // Already showing data, just toggle the loading state for visual feedback
+      setLoading(true);
+      setTimeout(() => {
         setLoading(false);
-        // Mark as fetched to prevent retrying and creating an infinite loop
-        setDataFetched(true);
-        requestInProgress.current = false;
-      });
-    }
-  }, [timeRange, dashboardToolExecutions, dashboardLoading, dashboardError, dataFetched]);
-  
-  // Add an effect to reset dataFetched when filters change, with error handling
-  useEffect(() => {
-    if (dataFetched && !error && !dashboardError) {
+      }, 300);
+    } else {
+      // Data not showing, do a full refresh
+      setToolInteractions([]);
+      setToolUsageData([]);
+      setTimeSeriesData([]);
+      setAggregatedTimeData([]);
+      setToolSpecificTimeData([]);
       setDataFetched(false);
+      setError(null);
+      
+      console.log('Forcing complete data refresh');
+      
+      if (onRefresh) {
+        onRefresh();
+      } else {
+        fetchToolData();
+      }
     }
-  }, [error, dashboardError]);
+  };
 
   // Update the render to show loading and error states from dashboard with better user experience
   const renderContent = () => {
     const isLoadingState = loading || dashboardLoading;
     const errorState = error || dashboardError;
     
+    console.log('Render content - loading:', loading, 'dashboardLoading:', dashboardLoading, 
+                'error:', error, 'dashboardError:', dashboardError, 
+                'dataFetched:', dataFetched,
+                'toolInteractions length:', toolInteractions.length,
+                'toolUsageData length:', toolUsageData.length,
+                'timeSeriesData length:', timeSeriesData.length);
+    
     if (isLoadingState) {
+      console.log('Rendering loading state');
       return <LoadingState />;
     }
     
     if (errorState) {
+      console.log('Rendering error state:', errorState);
       return (
         <div className="flex flex-col items-center justify-center p-6 bg-gray-50 rounded-lg">
           <WrenchScrewdriverIcon className="h-12 w-12 text-gray-400 mb-4" />
@@ -827,6 +907,8 @@ export default function ToolUsageAnalysis({
       );
     }
 
+    console.log('Rendering content for tab:', activeTab);
+    
     // Display appropriate content based on active tab
     switch (activeTab) {
       case 0: // Tool Usage Tab
@@ -834,6 +916,10 @@ export default function ToolUsageAnalysis({
           <div>
             <Flex className="mb-4 items-center justify-between">
               <Text>Tool execution frequency by tool name</Text>
+              <Link href="/tools" className="text-indigo-600 hover:text-indigo-800 text-sm flex items-center gap-1">
+                <span>View in Tool Explorer</span>
+                <ChevronRightIcon className="h-4 w-4" />
+              </Link>
             </Flex>
             
             {histogramData.length > 0 ? (
@@ -1140,6 +1226,24 @@ export default function ToolUsageAnalysis({
         description="Monitor and analyze tool usage patterns and performance"
         className={`${className}`}
         contentClassName="pb-4 overflow-visible"
+        actions={
+          <>
+            <Button 
+              size="xs" 
+              variant="light" 
+              icon={ArrowPathIcon} 
+              onClick={handleRefresh}
+              title="Refresh data"
+            >
+              Refresh
+            </Button>
+            {loading && (
+              <div className="animate-pulse text-xs text-gray-500">
+                Loading...
+              </div>
+            )}
+          </>
+        }
       >
         <TabGroup index={activeTab} onIndexChange={setActiveTab}>
           <TabList variant="line" className="mt-1">

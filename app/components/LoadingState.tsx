@@ -1,7 +1,7 @@
 'use client'
 
 import { FC, ReactNode } from 'react'
-import { Card, Text, Flex } from '@tremor/react'
+import { Card, Text, Flex, Title } from '@tremor/react'
 import { ArrowPathIcon } from '@heroicons/react/24/outline'
 
 export type LoadingStateProps = {

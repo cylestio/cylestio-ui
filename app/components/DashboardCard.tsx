@@ -11,6 +11,7 @@ export type DashboardCardProps = {
   className?: string
   contentClassName?: string
   icon?: ReactNode
+  actions?: ReactNode
   footer?: ReactNode
   helpText?: string
   isLoading?: boolean
@@ -61,6 +62,7 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
   className = '',
   contentClassName = '',
   icon,
+  actions,
   footer,
   helpText,
   isLoading = false,
@@ -106,14 +108,18 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
           )}
         </div>
         
-        {collapsible && (
-          <button 
-            onClick={toggleCollapse} 
-            className="p-1 text-neutral-400 hover:text-neutral-600 transition-colors duration-150"
-          >
-            {isCollapsed ? <ChevronDownIcon className="h-5 w-5" /> : <ChevronUpIcon className="h-5 w-5" />}
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {actions}
+          
+          {collapsible && (
+            <button 
+              onClick={toggleCollapse} 
+              className="p-1 text-neutral-400 hover:text-neutral-600 transition-colors duration-150"
+            >
+              {isCollapsed ? <ChevronDownIcon className="h-5 w-5" /> : <ChevronUpIcon className="h-5 w-5" />}
+            </button>
+          )}
+        </div>
       </div>
       
       {/* Card Description */}

@@ -48,6 +48,7 @@ For complete documentation, visit:
 - [Installation Guide](docs/installation.md)
 - [API Reference](docs/api-reference.md)
 - [Customization Guide](docs/customization.md)
+- [API Integration Guide](docs/API_INTEGRATION_GUIDE.md) - **IMPORTANT: Always use real API endpoints**
 
 ## Integration with Cylestio Monitor
 

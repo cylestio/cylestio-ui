@@ -12,12 +12,14 @@ export interface ModelDistributionChartProps {
   data?: ModelDataItem[];
   className?: string;
   valueFormatter?: (value: number) => string;
+  showLegend?: boolean;
 }
 
 export function ModelDistributionChart({
   data,
   className = '',
-  valueFormatter = (value: number) => `${value}`
+  valueFormatter = (value: number) => `${value}`,
+  showLegend = true
 }: ModelDistributionChartProps) {
   if (!data || !Array.isArray(data) || data.length === 0) {
     return (
@@ -202,22 +204,24 @@ export function ModelDistributionChart({
       </div>
       
       {/* Simplified horizontal legend */}
-      <div className="mt-4 w-full flex flex-wrap justify-center gap-3">
-        {chartData.map((item, index) => (
-          <div 
-            key={index}
-            className="flex items-center"
-          >
+      {showLegend && (
+        <div className="mt-4 w-full flex flex-wrap justify-center gap-3">
+          {chartData.map((item, index) => (
             <div 
-              className="w-3 h-3 rounded-full mr-1.5" 
-              style={{ backgroundColor: item.color }} 
-            />
-            <span className="text-sm text-gray-700 whitespace-nowrap">
-              {item.name.split(' (')[0]} <span className="font-semibold">{valueFormatter(item.count)}</span>
-            </span>
-          </div>
-        ))}
-      </div>
+              key={index}
+              className="flex items-center"
+            >
+              <div 
+                className="w-3 h-3 rounded-full mr-1.5" 
+                style={{ backgroundColor: item.color }} 
+              />
+              <span className="text-sm text-gray-700 whitespace-nowrap">
+                {item.name.split(' (')[0]} <span className="font-semibold">{valueFormatter(item.count)}</span>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 } 

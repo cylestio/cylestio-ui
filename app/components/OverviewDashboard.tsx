@@ -357,36 +357,6 @@ export default function OverviewDashboard({ timeRange }: OverviewDashboardProps)
         });
       }
       
-      // Add estimated cost metric if not present in API response
-      if (!currentMetrics.find(m => m.metric === 'token_usage_cost')) {
-        // Fetch token usage cost data
-        try {
-          const costResponse = await fetchAPI<{ total?: number }>(`${METRICS.TOKEN_USAGE_COST}?time_range=${timeRange}`);
-          const cost = costResponse?.total || 0;
-          
-          currentMetrics = [
-            ...currentMetrics,
-            {
-              metric: 'token_usage_cost',
-              value: cost,
-              change: 0,
-              trend: 'stable'
-            }
-          ];
-        } catch (error) {
-          console.warn('Failed to fetch token usage cost:', error);
-          currentMetrics = [
-            ...currentMetrics,
-            {
-              metric: 'token_usage_cost',
-              value: 0,
-              change: 0,
-              trend: 'stable'
-            }
-          ];
-        }
-      }
-      
       // Fetch tool data directly from the tool interactions API
       try {
         const toolsResponse = await fetchAPI<ToolInteractionsResponse>(`${METRICS.TOOL_INTERACTIONS}?time_range=${timeRange}`);
@@ -411,10 +381,26 @@ export default function OverviewDashboard({ timeRange }: OverviewDashboardProps)
                 trend: 'stable'
               }
             ];
+            
+            // Update metrics state immediately to reflect the changes
+            setMetrics(currentMetrics);
           }
         }
       } catch (error) {
         console.warn('Failed to count unique tools:', error);
+        // Fallback to 0 if the API fails
+        if (!currentMetrics.find(m => m.metric === 'tools_count')) {
+          currentMetrics = [
+            ...currentMetrics,
+            {
+              metric: 'tools_count',
+              value: 0,
+              change: 0,
+              trend: 'stable'
+            }
+          ];
+          setMetrics(currentMetrics);
+        }
       }
       
       // Calculate date range for API requests
@@ -461,6 +447,43 @@ export default function OverviewDashboard({ timeRange }: OverviewDashboardProps)
         }
       } catch (error) {
         console.warn('Failed to fetch token usage chart data:', error);
+      }
+      
+      // Fetch token usage cost data
+      try {
+        const costResponse = await fetchAPI<{ total?: number }>(`${METRICS.TOKEN_USAGE_COST}?time_range=${timeRange}`);
+        const cost = costResponse?.total || 0;
+        
+        // Add token_usage_cost to metrics
+        if (!currentMetrics.find(m => m.metric === 'token_usage_cost')) {
+          currentMetrics = [
+            ...currentMetrics,
+            {
+              metric: 'token_usage_cost',
+              value: cost,
+              change: 0,
+              trend: 'stable'
+            }
+          ];
+          
+          // Update metrics state immediately
+          setMetrics(currentMetrics);
+        }
+      } catch (error) {
+        console.warn('Failed to fetch token usage cost:', error);
+        // Set a fallback value of 0
+        if (!currentMetrics.find(m => m.metric === 'token_usage_cost')) {
+          currentMetrics = [
+            ...currentMetrics,
+            {
+              metric: 'token_usage_cost',
+              value: 0,
+              change: 0,
+              trend: 'stable'
+            }
+          ];
+          setMetrics(currentMetrics);
+        }
       }
       
       // Fetch tool execution data
@@ -780,6 +803,13 @@ export default function OverviewDashboard({ timeRange }: OverviewDashboardProps)
   const securityAlertsMetric = metrics.find(m => m.metric === 'security_alerts');
   console.log('Current security alerts metric:', securityAlertsMetric);
   
+  // Add debug logging for the tools_count and token_usage_cost metrics
+  const toolsCountMetric = metrics.find(m => m.metric === 'tools_count');
+  console.log('Current tools count metric:', toolsCountMetric);
+  
+  const tokenUsageCostMetric = metrics.find(m => m.metric === 'token_usage_cost');
+  console.log('Current token usage cost metric:', tokenUsageCostMetric);
+  
   return (
     <div className="p-4 sm:p-6 pt-0">
       <div>
@@ -826,25 +856,23 @@ export default function OverviewDashboard({ timeRange }: OverviewDashboardProps)
               valueClassName="text-2xl"
               size="md"
               trend={null}
+              footer={
+                <Link href="/events" className="text-xs text-blue-600 hover:text-blue-800 hover:underline flex items-center mt-2">
+                  <ClockIcon className="h-3 w-3 mr-1" /> View All Events
+                </Link>
+              }
             />
             
             <MetricCard
               title="Available Tools"
-              value={toolExecutions.reduce((acc, item) => {
+              value={metrics.find(m => m.metric === 'tools_count')?.value || (toolExecutions.reduce((acc, item) => {
                 // Extract unique tool names from tool executions
                 const toolName = item.dimensions?.tool_name;
                 if (toolName && !acc.includes(toolName)) {
                   acc.push(toolName);
                 }
                 return acc;
-              }, [
-                // Add known tools from the application if tool executions data doesn't have them
-                'get_forecast', 
-                'get_alerts',
-                'get_weather',
-                'search_data', 
-                'analyze_text'
-              ]).length || metrics.find(m => m.metric === 'tools_count')?.value || 5}
+              }, []).length)}
               icon={
                 <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7 text-indigo-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="4" y="4" width="16" height="16" rx="2" />
@@ -867,7 +895,7 @@ export default function OverviewDashboard({ timeRange }: OverviewDashboardProps)
             
             <MetricCard
               title="Estimated Cost"
-              value={`$${(metrics.find(m => m.metric === 'token_usage_cost')?.value || 0.05).toFixed(2)}`}
+              value={`$${(metrics.find(m => m.metric === 'token_usage_cost')?.value || 0).toFixed(2)}`}
               icon={<CurrencyDollarIcon className="w-7 h-7 text-emerald-600" />}
               variant="success"
               valueClassName="text-2xl"

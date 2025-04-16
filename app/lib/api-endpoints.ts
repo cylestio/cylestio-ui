@@ -21,8 +21,11 @@ export const DASHBOARD = {
 
 // Security endpoints - For security alerts and detections
 export const SECURITY = {
-  ALERTS: '/v1/security/alerts',
-  ALERT_DETAIL: (id: string) => `/v1/security/alerts/${id}`,
+  ALERTS: '/v1/alerts',
+  ALERT_DETAIL: (id: string) => `/v1/alerts/${id}`,
+  ALERTS_OVERVIEW: '/v1/alerts/overview',
+  ALERTS_TIMESERIES: '/v1/alerts/timeseries',
+  ALERTS_STATS: '/v1/alerts/stats',
   ALERT_COUNT: '/v1/alerts/count',
   SEVERITY: '/v1/metrics/security/severity',
   TYPES: '/v1/metrics/security/types',
@@ -52,6 +55,7 @@ export const METRICS = {
   // New LLM metrics
   LLM_ANALYTICS: '/v1/metrics/llm/analytics',
   LLM_MODELS: '/v1/metrics/llm/models',
+  LLM_MODELS_PRICING: '/v1/metrics/pricing/llm_models',
   LLM_USAGE_TRENDS: '/v1/metrics/llm/usage_trends',
   LLM_AGENT_USAGE: '/v1/metrics/llm/agent_usage',
   LLM_AGENT_MODEL_RELATIONSHIPS: '/v1/metrics/llm/agent_model_relationships',
