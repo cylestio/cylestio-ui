@@ -28,7 +28,16 @@ interface SecurityExplorerContainerProps {
 
 export default function SecurityExplorerContainer({ searchParams }: SecurityExplorerContainerProps) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState(0);
+  // Initialize the activeTab based on URL parameter 'tab', or default to 0 (Dashboard)
+  const [activeTab, setActiveTab] = useState(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam === null) {
+      return 0;
+    }
+    const tabIndex = parseInt(tabParam, 10);
+    return isNaN(tabIndex) || tabIndex < 0 || tabIndex > 2 ? 0 : tabIndex;
+  });
+  
   const [filters, setFilters] = useState({
     severity: searchParams.get('severity') || '',
     category: searchParams.get('category') || '',
@@ -37,6 +46,7 @@ export default function SecurityExplorerContainer({ searchParams }: SecurityExpl
     search: searchParams.get('search') || '',
     time_range: searchParams.get('time_range') || '7d',
     page: parseInt(searchParams.get('page') || '1'),
+    tab: searchParams.get('tab') || '0',
   });
 
   // Update URL when filters change
@@ -45,6 +55,15 @@ export default function SecurityExplorerContainer({ searchParams }: SecurityExpl
     const newPath = queryString ? `/security${queryString}` : '/security';
     router.replace(newPath, { scroll: false });
   }, [filters, router]);
+  
+  // Handle tab changes
+  const handleTabChange = (index: number) => {
+    setActiveTab(index);
+    setFilters({
+      ...filters,
+      tab: index.toString(),
+    });
+  };
 
   // Handle filter changes
   const handleFilterChange = (newFilters: Record<string, any>) => {
@@ -92,11 +111,11 @@ export default function SecurityExplorerContainer({ searchParams }: SecurityExpl
         onFilterChange={handleFilterChange} 
       />
       
-      <TabGroup className="mt-6" onIndexChange={setActiveTab}>
+      <TabGroup className="mt-6" index={activeTab} onIndexChange={handleTabChange}>
         <TabList>
           <Tab>Dashboard</Tab>
-          <Tab>Alerts</Tab>
-          <Tab>Policies</Tab>
+          <Tab>Security Alerts</Tab>
+          <Tab>Policy Violations</Tab>
         </TabList>
         
         <TabPanels>
@@ -110,7 +129,11 @@ export default function SecurityExplorerContainer({ searchParams }: SecurityExpl
           <TabPanel>
             <Card className="mt-6">
               <SecurityAlertsTable 
-                filters={filters} 
+                filters={{
+                  ...filters,
+                  // Filter out sensitive_data alerts from the Alerts tab
+                  category_exclude: 'sensitive_data'
+                }}
                 onPageChange={handlePageChange} 
               />
             </Card>
@@ -119,9 +142,14 @@ export default function SecurityExplorerContainer({ searchParams }: SecurityExpl
           <TabPanel>
             <Grid numItemsMd={1} className="mt-6 gap-6">
               <Card>
-                <div className="h-72 flex items-center justify-center">
-                  <Text>Policy management coming soon</Text>
-                </div>
+                <SecurityAlertsTable 
+                  filters={{
+                    ...filters,
+                    // Only show sensitive_data alerts in the Policies tab
+                    category: 'sensitive_data'
+                  }}
+                  onPageChange={handlePageChange}
+                />
               </Card>
             </Grid>
           </TabPanel>

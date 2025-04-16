@@ -21,6 +21,8 @@ import {
   EyeIcon,
   ShieldExclamationIcon,
   ClockIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
 } from '@heroicons/react/24/outline';
 import Link from 'next/link';
 import { fetchAPI } from '../../lib/api';
@@ -36,13 +38,21 @@ interface SecurityAlertsTableProps {
 type Alert = {
   id: string;
   timestamp: string;
-  severity: string;
-  category: string;
+  schema_version: string;
+  trace_id: string;
+  span_id: string;
+  parent_span_id: string | null;
+  event_name: string;
+  log_level: string;
   alert_level: string;
-  llm_vendor: string;
-  title: string;
+  category: string;
+  severity: string;
   description: string;
+  llm_vendor: string;
+  content_sample: string;
+  detection_time: string;
   keywords: string[];
+  event_id: number;
   agent_id: string;
 };
 
@@ -56,12 +66,7 @@ type PaginationInfo = {
 type AlertsResponse = {
   alerts: Alert[];
   pagination: PaginationInfo;
-  time_range: {
-    from: string;
-    to: string;
-    description: string;
-  };
-  filters: Record<string, any>;
+  total_count: number;
   metrics: {
     total_count: number;
     by_severity: Record<string, number>;
@@ -69,6 +74,12 @@ type AlertsResponse = {
     by_alert_level: Record<string, number>;
     by_llm_vendor: Record<string, number>;
   };
+  time_range: {
+    from: string;
+    to: string;
+    description: string;
+  };
+  filters: Record<string, any>;
 };
 
 export default function SecurityAlertsTable({ filters, onPageChange }: SecurityAlertsTableProps) {
@@ -158,8 +169,22 @@ export default function SecurityAlertsTable({ filters, onPageChange }: SecurityA
         
         const data = await fetchAPI<AlertsResponse>(`${SECURITY.ALERTS}?${queryParams.toString()}`);
         
-        setAlerts(data.alerts);
-        setPagination(data.pagination);
+        // Handle category_exclude filter client-side if specified
+        let filteredAlerts = data.alerts;
+        if (filters.category_exclude) {
+          filteredAlerts = filteredAlerts.filter(alert => 
+            alert.category !== filters.category_exclude
+          );
+        }
+        
+        setAlerts(filteredAlerts);
+        setPagination({
+          ...data.pagination,
+          // Adjust total count if we've filtered client-side
+          total: filters.category_exclude 
+            ? filteredAlerts.length 
+            : data.pagination.total
+        });
         setError(null);
       } catch (err) {
         console.error('Error fetching security alerts:', err);
@@ -229,15 +254,15 @@ export default function SecurityAlertsTable({ filters, onPageChange }: SecurityA
               <TableCell>
                 <Link href={`/security/alerts/${alert.id}`}>
                   <Text className="font-medium hover:text-blue-500 cursor-pointer">
-                    {alert.title || alert.description.substring(0, 60) + (alert.description.length > 60 ? '...' : '')}
+                    {alert.description.substring(0, 60) + (alert.description.length > 60 ? '...' : '')}
                   </Text>
+                  {alert.keywords && alert.keywords.length > 0 && (
+                    <Text className="text-xs text-gray-500 mt-1">
+                      Keywords: {alert.keywords.slice(0, 3).join(', ')}
+                      {alert.keywords.length > 3 ? ` +${alert.keywords.length - 3} more` : ''}
+                    </Text>
+                  )}
                 </Link>
-                {alert.keywords && alert.keywords.length > 0 && (
-                  <Text className="text-xs text-gray-500 mt-1">
-                    Keywords: {alert.keywords.slice(0, 3).join(', ')}
-                    {alert.keywords.length > 3 ? ` +${alert.keywords.length - 3} more` : ''}
-                  </Text>
-                )}
               </TableCell>
               
               <TableCell>
@@ -253,7 +278,12 @@ export default function SecurityAlertsTable({ filters, onPageChange }: SecurityA
               
               <TableCell>
                 <Link href={`/security/alerts/${alert.id}`}>
-                  <Button size="xs" variant="light" icon={EyeIcon}>
+                  <Button 
+                    variant="light" 
+                    size="xs" 
+                    icon={EyeIcon}
+                    tooltip="View Alert Details"
+                  >
                     View
                   </Button>
                 </Link>
@@ -263,32 +293,30 @@ export default function SecurityAlertsTable({ filters, onPageChange }: SecurityA
         </TableBody>
       </Table>
       
-      {/* Pagination */}
       {pagination.pages > 1 && (
-        <Flex justifyContent="end" className="mt-4">
-          <div className="flex items-center gap-2">
+        <Flex justifyContent="between" className="mt-4">
+          <Text>
+            Showing {alerts.length} of {pagination.total} alerts
+          </Text>
+          <Flex className="gap-2">
             <Button
               size="xs"
-              variant="light"
-              onClick={() => onPageChange(Math.max(1, pagination.page - 1))}
+              icon={ChevronLeftIcon}
               disabled={pagination.page === 1}
+              onClick={() => onPageChange(pagination.page - 1)}
             >
               Previous
             </Button>
-            
-            <Text>
-              Page {pagination.page} of {pagination.pages}
-            </Text>
-            
             <Button
               size="xs"
-              variant="light"
-              onClick={() => onPageChange(Math.min(pagination.pages, pagination.page + 1))}
+              icon={ChevronRightIcon}
+              iconPosition="right"
               disabled={pagination.page === pagination.pages}
+              onClick={() => onPageChange(pagination.page + 1)}
             >
               Next
             </Button>
-          </div>
+          </Flex>
         </Flex>
       )}
     </div>

@@ -19,6 +19,12 @@ import {
   TabPanels,
   List,
   ListItem,
+  Table,
+  TableHead,
+  TableHeaderCell,
+  TableBody,
+  TableRow,
+  TableCell,
 } from '@tremor/react';
 import {
   ShieldExclamationIcon,
@@ -50,6 +56,7 @@ type RelatedEvent = {
   span_id: string;
   parent_span_id: string | null;
   attributes: Record<string, any>;
+  event_name?: string;
 };
 
 type DetectionPattern = {
@@ -70,20 +77,27 @@ type RelatedData = {
 type Alert = {
   id: string;
   timestamp: string;
-  severity: string;
-  category: string;
-  alert_level: string;
-  llm_vendor: string;
-  title: string;
-  description: string;
-  keywords: string[];
+  schema_version: string;
   trace_id: string;
   span_id: string;
-  model: string;
+  parent_span_id: string | null;
+  event_name: string;
+  log_level: string;
+  alert_level: string;
+  category: string;
+  severity: string;
+  description: string;
+  llm_vendor: string;
+  content_sample: string;
+  detection_time: string;
+  keywords: string[];
+  event_id: number;
   agent_id: string;
-  related_data: RelatedData;
+  model?: string;
+  attributes?: Record<string, any>;
 };
 
+// Updated response type to include related events
 type AlertDetailResponse = {
   alert: Alert;
   related_events: RelatedEvent[];
@@ -93,7 +107,8 @@ export default function SecurityAlertDetailContainer({ alertId }: SecurityAlertD
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [alertDetail, setAlertDetail] = useState<AlertDetailResponse | null>(null);
+  const [alertDetail, setAlertDetail] = useState<Alert | null>(null);
+  const [relatedEvents, setRelatedEvents] = useState<RelatedEvent[]>([]);
   
   // Get appropriate color for severity
   const getSeverityColor = (severity: string) => {
@@ -130,8 +145,30 @@ export default function SecurityAlertDetailContainer({ alertId }: SecurityAlertD
     async function fetchAlertDetail() {
       try {
         setLoading(true);
-        const data = await fetchAPI<AlertDetailResponse>(`${SECURITY.ALERT_DETAIL(alertId)}?include_related_events=true`);
-        setAlertDetail(data);
+        // Fetch the alert detail
+        const alertResponse = await fetchAPI<Alert>(`${SECURITY.ALERT_DETAIL(alertId)}`);
+        setAlertDetail(alertResponse);
+        
+        // Fetch triggered event IDs
+        try {
+          const triggersResponse = await fetchAPI<{ triggered_event_ids: string[] }>(`${SECURITY.ALERT_DETAIL(alertId)}/triggers`);
+          
+          // Fetch each event detail
+          if (triggersResponse.triggered_event_ids && triggersResponse.triggered_event_ids.length > 0) {
+            const eventPromises = triggersResponse.triggered_event_ids.map(eventId => 
+              fetchAPI<RelatedEvent>(`/v1/telemetry/events/${eventId}`)
+            );
+            
+            const eventResults = await Promise.all(eventPromises);
+            setRelatedEvents(eventResults);
+          } else {
+            setRelatedEvents([]);
+          }
+        } catch (triggerErr) {
+          console.error('Error fetching related events:', triggerErr);
+          setRelatedEvents([]);
+        }
+        
         setError(null);
       } catch (err) {
         console.error('Error fetching alert detail:', err);
@@ -167,7 +204,7 @@ export default function SecurityAlertDetailContainer({ alertId }: SecurityAlertD
     );
   }
   
-  const { alert, related_events } = alertDetail;
+  const alert = alertDetail;
   
   // Breadcrumbs
   const breadcrumbItems = [
@@ -183,10 +220,10 @@ export default function SecurityAlertDetailContainer({ alertId }: SecurityAlertD
       
       <Flex justifyContent="between" alignItems="center" className="mb-6">
         <Flex alignItems="center" className="gap-2">
-          <ShieldExclamationIcon className={`h-8 w-8 text-${getSeverityColor(alert.severity)}-500`} />
+          <ShieldExclamationIcon className={`h-8 w-8 text-${getSeverityColor(alert?.severity || '')}-500`} />
           <div>
-            <Title>{alert.title || formatCategory(alert.category)}</Title>
-            <Text className="mt-1">{alert.description}</Text>
+            <Title>{alert?.category ? formatCategory(alert.category) : 'Alert Details'}</Title>
+            <Text className="mt-1">{alert?.description}</Text>
           </div>
         </Flex>
         
@@ -202,53 +239,53 @@ export default function SecurityAlertDetailContainer({ alertId }: SecurityAlertD
       <Grid numItemsMd={1} numItemsLg={4} className="gap-6">
         {/* Alert overview panel - takes up full width on first row */}
         <Card className="lg:col-span-4">
-          <Flex alignItems="center" className="gap-6">
+          <Flex alignItems="center" className="gap-6 flex-wrap">
             <div>
               <Text>Severity</Text>
-              <Badge className="mt-1" size="xl" color={getSeverityColor(alert.severity)}>
-                {alert.severity}
+              <Badge className="mt-1" size="xl" color={getSeverityColor(alert?.severity || '')}>
+                {alert?.severity}
               </Badge>
             </div>
             
             <div>
               <Text>Alert Level</Text>
-              <Badge className="mt-1" size="xl" color={getAlertLevelColor(alert.alert_level)}>
-                {alert.alert_level}
+              <Badge className="mt-1" size="xl" color={getAlertLevelColor(alert?.alert_level || '')}>
+                {alert?.alert_level}
               </Badge>
             </div>
             
             <div>
               <Text>Category</Text>
-              <Text className="mt-1 font-medium">{formatCategory(alert.category)}</Text>
+              <Text className="mt-1 font-medium">{formatCategory(alert?.category || '')}</Text>
             </div>
             
             <div>
               <Text>LLM Vendor</Text>
-              <Text className="mt-1 font-medium">{alert.llm_vendor}</Text>
+              <Text className="mt-1 font-medium">{alert?.llm_vendor}</Text>
             </div>
             
             <div>
-              <Text>Model</Text>
-              <Text className="mt-1 font-medium">{alert.model}</Text>
+              <Text>Event Name</Text>
+              <Text className="mt-1 font-medium">{alert?.event_name}</Text>
             </div>
             
             <div>
               <Text>Time</Text>
               <Flex justifyContent="start" alignItems="center" className="gap-1 mt-1">
                 <ClockIcon className="h-4 w-4 text-gray-500" />
-                <Text>{formatISOToLocalDisplay(alert.timestamp)}</Text>
+                <Text>{alert?.timestamp ? formatISOToLocalDisplay(alert.timestamp) : 'N/A'}</Text>
               </Flex>
             </div>
           </Flex>
           
-          {alert.keywords && alert.keywords.length > 0 && (
+          {alert?.keywords && alert.keywords.length > 0 && (
             <>
               <Divider className="my-4" />
               <div>
                 <Text>Keywords</Text>
                 <Flex className="mt-2 flex-wrap gap-2">
                   {alert.keywords.map((keyword, index) => (
-                    <Badge key={index} size="sm" color="gray">
+                    <Badge key={index} color="blue" size="sm">
                       {keyword}
                     </Badge>
                   ))}
@@ -258,179 +295,181 @@ export default function SecurityAlertDetailContainer({ alertId }: SecurityAlertD
           )}
         </Card>
         
-        {/* Left column - Alert details */}
-        <Card className="lg:col-span-3">
+        {/* Content Sample */}
+        <Card className="lg:col-span-4">
+          <Title>Content Sample</Title>
+          <Divider className="my-2" />
+          <div className="mt-2 bg-gray-50 p-4 rounded-md font-mono text-sm whitespace-pre-wrap">
+            {alert?.content_sample || 'No content sample available'}
+          </div>
+        </Card>
+        
+        {/* Alert Details */}
+        <Card className="lg:col-span-2">
+          <Title>Alert Details</Title>
+          <Divider className="my-2" />
+          <List>
+            <ListItem>
+              <Text>Alert ID</Text>
+              <Text>{alert?.id}</Text>
+            </ListItem>
+            <ListItem>
+              <Text>Event ID</Text>
+              <Text>{alert?.event_id}</Text>
+            </ListItem>
+            <ListItem>
+              <Text>Agent ID</Text>
+              <Text>{alert?.agent_id}</Text>
+            </ListItem>
+            <ListItem>
+              <Text>Detection Time</Text>
+              <Text>{alert?.detection_time ? formatISOToLocalDisplay(alert.detection_time) : 'N/A'}</Text>
+            </ListItem>
+            <ListItem>
+              <Text>Log Level</Text>
+              <Text>{alert?.log_level}</Text>
+            </ListItem>
+          </List>
+        </Card>
+        
+        {/* Trace Information */}
+        <Card className="lg:col-span-2">
+          <Title>Trace Information</Title>
+          <Divider className="my-2" />
+          <List>
+            <ListItem>
+              <Text>Trace ID</Text>
+              <Text className="font-mono text-xs truncate">{alert?.trace_id}</Text>
+            </ListItem>
+            <ListItem>
+              <Text>Span ID</Text>
+              <Text className="font-mono text-xs truncate">{alert?.span_id}</Text>
+            </ListItem>
+            <ListItem>
+              <Text>Parent Span ID</Text>
+              <Text className="font-mono text-xs truncate">{alert?.parent_span_id || 'None'}</Text>
+            </ListItem>
+            <ListItem>
+              <Text>Schema Version</Text>
+              <Text>{alert?.schema_version}</Text>
+            </ListItem>
+          </List>
+        </Card>
+        
+        {/* Related Events - New Section */}
+        <Card className="lg:col-span-4">
+          <Title>Related Events</Title>
+          <Divider className="my-2" />
+          
+          {relatedEvents && relatedEvents.length > 0 ? (
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableHeaderCell>Event Name</TableHeaderCell>
+                  <TableHeaderCell>Level</TableHeaderCell>
+                  <TableHeaderCell>Time</TableHeaderCell>
+                  <TableHeaderCell>Agent</TableHeaderCell>
+                  <TableHeaderCell>Span ID</TableHeaderCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {relatedEvents.map((event) => (
+                  <TableRow key={event.id}>
+                    <TableCell>{event.name}</TableCell>
+                    <TableCell>
+                      <Badge 
+                        color={
+                          event.level === 'ERROR' || event.level === 'SECURITY_ALERT' 
+                            ? 'rose' 
+                            : event.level === 'WARNING' 
+                              ? 'amber' 
+                              : 'blue'
+                        } 
+                        size="sm"
+                      >
+                        {event.level}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>{formatISOToLocalDisplay(event.timestamp)}</TableCell>
+                    <TableCell>{event.agent_id}</TableCell>
+                    <TableCell className="font-mono text-xs">{event.span_id}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <Text className="p-4 text-center text-gray-500">No related events found</Text>
+          )}
+        </Card>
+        
+        {/* Raw Attributes - New Section */}
+        <Card className="lg:col-span-4">
+          <Title>Raw Attributes</Title>
+          <Divider className="my-2" />
           <TabGroup>
             <TabList>
-              <Tab icon={DocumentTextIcon}>Alert Details</Tab>
-              <Tab icon={ChatBubbleLeftEllipsisIcon}>Related Events</Tab>
-              <Tab icon={CodeBracketIcon}>Raw Data</Tab>
+              <Tab>JSON View</Tab>
+              <Tab>Table View</Tab>
             </TabList>
-            
             <TabPanels>
-              {/* Alert Details Tab */}
               <TabPanel>
-                <div className="space-y-6 mt-4">
-                  {alert.related_data?.detected_text && (
-                    <div>
-                      <Subtitle className="mb-2">Detected Text</Subtitle>
-                      <Card className="bg-gray-50 p-4">
-                        <Text className="whitespace-pre-wrap font-mono text-sm">
-                          {alert.related_data.detected_text}
-                        </Text>
-                      </Card>
-                    </div>
-                  )}
-                  
-                  {alert.related_data?.confidence_score && (
-                    <div>
-                      <Subtitle className="mb-2">Confidence Score</Subtitle>
-                      <Text>{(alert.related_data.confidence_score * 100).toFixed(1)}%</Text>
-                    </div>
-                  )}
-                  
-                  {alert.related_data?.detection_details?.matching_patterns && (
-                    <div>
-                      <Subtitle className="mb-2">Matching Patterns</Subtitle>
-                      <List>
-                        {alert.related_data.detection_details.matching_patterns.map((pattern, index) => (
-                          <ListItem key={index}>
-                            <Flex justifyContent="between">
-                              <Text>{pattern.pattern}</Text>
-                              <Badge size="xs" color="indigo">
-                                {(pattern.match_score * 100).toFixed(1)}% match
-                              </Badge>
-                            </Flex>
-                          </ListItem>
-                        ))}
-                      </List>
-                    </div>
-                  )}
-                  
-                  <div>
-                    <Subtitle className="mb-2">Correlation IDs</Subtitle>
-                    <Grid numItemsSm={2} className="gap-4">
-                      <div>
-                        <Text>Trace ID</Text>
-                        <Link href={`/events/traces/${alert.trace_id}`}>
-                          <Text className="font-mono text-sm text-blue-500 hover:underline">
-                            {alert.trace_id}
-                          </Text>
-                        </Link>
-                      </div>
-                      
-                      <div>
-                        <Text>Span ID</Text>
-                        <Text className="font-mono text-sm">{alert.span_id}</Text>
-                      </div>
-                    </Grid>
-                  </div>
+                <div className="mt-4 bg-gray-50 p-4 rounded-md overflow-auto max-h-96">
+                  <pre className="font-mono text-xs whitespace-pre-wrap">{JSON.stringify(alert, null, 2)}</pre>
                 </div>
               </TabPanel>
-              
-              {/* Related Events Tab */}
               <TabPanel>
-                {related_events.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Text>No related events found</Text>
-                  </div>
-                ) : (
-                  <div className="mt-4">
-                    <List>
-                      {related_events.map((event) => (
-                        <ListItem key={event.id}>
-                          <Flex justifyContent="between" alignItems="center">
-                            <div>
-                              <Flex alignItems="center" className="gap-2">
-                                <Badge size="xs" color={event.level === 'warning' ? 'amber' : event.level === 'error' ? 'rose' : 'blue'}>
-                                  {event.level}
-                                </Badge>
-                                <Text className="font-medium">{event.name}</Text>
-                              </Flex>
-                              <Text className="text-xs text-gray-500 mt-1">
-                                {formatISOToLocalDisplay(event.timestamp)}
-                              </Text>
-                            </div>
-                            
-                            <Link href={`/events/${event.id}`}>
-                              <Button size="xs" variant="light">
-                                View Event
-                              </Button>
-                            </Link>
-                          </Flex>
-                        </ListItem>
+                <div className="mt-4 overflow-auto max-h-96">
+                  <Table>
+                    <TableHead>
+                      <TableRow>
+                        <TableHeaderCell>Attribute</TableHeaderCell>
+                        <TableHeaderCell>Value</TableHeaderCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {alert && Object.entries(alert).map(([key, value]) => (
+                        <TableRow key={key}>
+                          <TableCell className="font-medium">{key}</TableCell>
+                          <TableCell className="font-mono text-xs">
+                            {typeof value === 'object' 
+                              ? JSON.stringify(value, null, 2)
+                              : String(value)
+                            }
+                          </TableCell>
+                        </TableRow>
                       ))}
-                    </List>
-                  </div>
-                )}
-              </TabPanel>
-              
-              {/* Raw Data Tab */}
-              <TabPanel>
-                <div className="mt-4">
-                  <Card className="bg-gray-50 p-4 overflow-auto">
-                    <pre className="text-xs font-mono whitespace-pre-wrap">
-                      {JSON.stringify(alert, null, 2)}
-                    </pre>
-                  </Card>
+                    </TableBody>
+                  </Table>
                 </div>
               </TabPanel>
             </TabPanels>
           </TabGroup>
         </Card>
         
-        {/* Right column - Contextual information */}
-        <Card className="lg:col-span-1">
-          <Title>Contextual Info</Title>
-          
-          <div className="mt-4">
-            <Subtitle>Agent Information</Subtitle>
-            <Link href={`/agents/${alert.agent_id}`}>
-              <Flex justifyContent="start" alignItems="center" className="gap-2 mt-2 hover:text-blue-500">
-                <ServerIcon className="h-5 w-5" />
-                <Text className="font-medium">{alert.agent_id}</Text>
-              </Flex>
-            </Link>
-          </div>
-          
-          <Divider className="my-4" />
-          
-          <div>
-            <Subtitle>Security Resources</Subtitle>
-            <List className="mt-2">
-              <ListItem>
-                <Link href="/security/documentation/prompt-injection">
-                  <Text className="text-blue-500 hover:underline">
-                    Prompt Injection Guide
-                  </Text>
-                </Link>
-              </ListItem>
-              <ListItem>
-                <Link href="/security/documentation/best-practices">
-                  <Text className="text-blue-500 hover:underline">
-                    LLM Security Best Practices
-                  </Text>
-                </Link>
-              </ListItem>
-              <ListItem>
-                <Link href="/security/documentation/severity-guide">
-                  <Text className="text-blue-500 hover:underline">
-                    Alert Severity Guide
-                  </Text>
-                </Link>
-              </ListItem>
-            </List>
-          </div>
-          
-          <Divider className="my-4" />
-          
-          <div>
-            <Subtitle>Similar Alerts</Subtitle>
-            <Text className="text-gray-500 mt-2 text-sm">
-              Similar alerts feature coming soon
-            </Text>
-          </div>
-        </Card>
+        {/* Related Event Attributes - New Section */}
+        {relatedEvents && relatedEvents.length > 0 && (
+          <Card className="lg:col-span-4">
+            <Title>Related Event Attributes</Title>
+            <Divider className="my-2" />
+            <TabGroup>
+              <TabList>
+                {relatedEvents.map((event, index) => (
+                  <Tab key={index}>Event {index + 1}</Tab>
+                ))}
+              </TabList>
+              <TabPanels>
+                {relatedEvents.map((event, index) => (
+                  <TabPanel key={index}>
+                    <div className="mt-4 bg-gray-50 p-4 rounded-md overflow-auto max-h-96">
+                      <Text className="mb-2 font-semibold">{event.name}</Text>
+                      <pre className="font-mono text-xs whitespace-pre-wrap">{JSON.stringify(event.attributes, null, 2)}</pre>
+                    </div>
+                  </TabPanel>
+                ))}
+              </TabPanels>
+            </TabGroup>
+          </Card>
+        )}
       </Grid>
     </div>
   );

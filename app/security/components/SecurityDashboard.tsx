@@ -15,6 +15,12 @@ import {
   List,
   ListItem,
   Button,
+  Table,
+  TableHead,
+  TableHeaderCell,
+  TableBody,
+  TableRow,
+  TableCell,
 } from '@tremor/react';
 import {
   ArrowUpIcon,
@@ -40,22 +46,14 @@ type ChartDataPoint = {
   count: number;
 };
 
-type AlertSummary = {
-  total_alerts: number;
-  critical_alerts: number;
-  high_alerts: number;
-  medium_alerts: number;
-  low_alerts: number;
+// Updated to match actual API response
+type MetricsSummary = {
+  total_count: number;
+  by_severity: Record<string, number>;
+  by_category: Record<string, number>;
+  by_alert_level: Record<string, number>;
+  by_llm_vendor: Record<string, number>;
 };
-
-type AlertTrends = {
-  '24h_change_percent': number;
-  '7d_change_percent': number;
-  '30d_change_percent': number;
-};
-
-type AlertByCategory = Record<string, number>;
-type AlertBySeverity = Record<string, number>;
 
 type RecentAlert = {
   id: string;
@@ -63,14 +61,23 @@ type RecentAlert = {
   severity: string;
   category: string;
   alert_level: string;
-  title: string;
+  description: string;
+  llm_vendor: string;
+  content_sample: string;
+  detection_time: string;
+  keywords: string[];
+  event_id: number;
+  agent_id: string;
+  schema_version: string;
+  trace_id: string;
+  span_id: string;
+  parent_span_id: string | null;
+  event_name: string;
+  log_level: string;
 };
 
 type OverviewResponse = {
-  summary: AlertSummary;
-  trends: AlertTrends;
-  by_category: AlertByCategory;
-  by_severity: AlertBySeverity;
+  metrics: MetricsSummary;
   time_series: ChartDataPoint[];
   recent_alerts: RecentAlert[];
   time_range: {
@@ -94,8 +101,7 @@ export default function SecurityDashboard({ timeRange, filters }: SecurityDashbo
   };
   
   // Convert by_category data to chart format
-  const formatCategoryData = (data: AlertByCategory) => {
-    if (!data) return [];
+  const formatCategoryData = (data: Record<string, number> = {}) => {
     return Object.entries(data).map(([category, count]) => ({
       name: category.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' '),
       value: count,
@@ -103,12 +109,20 @@ export default function SecurityDashboard({ timeRange, filters }: SecurityDashbo
   };
   
   // Convert by_severity data to chart format
-  const formatSeverityData = (data: AlertBySeverity) => {
-    if (!data) return [];
+  const formatSeverityData = (data: Record<string, number> = {}) => {
     return Object.entries(data).map(([severity, count]) => ({
       name: severity.charAt(0).toUpperCase() + severity.slice(1),
       value: count,
     }));
+  };
+  
+  // Format category for display
+  const formatCategory = (category: string) => {
+    if (!category) return '';
+    return category
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
   };
   
   // Get appropriate color for severity
@@ -184,8 +198,8 @@ export default function SecurityDashboard({ timeRange, filters }: SecurityDashbo
   
   // Format the data for charts
   const timeSeriesData = overview.time_series ? formatChartData(overview.time_series) : [];
-  const categoryData = formatCategoryData(overview.by_category);
-  const severityData = formatSeverityData(overview.by_severity);
+  const categoryData = formatCategoryData(overview.metrics?.by_category);
+  const severityData = formatSeverityData(overview.metrics?.by_severity);
   
   return (
     <div className="space-y-6">
@@ -194,9 +208,8 @@ export default function SecurityDashboard({ timeRange, filters }: SecurityDashbo
         <Card decoration="top" decorationColor="rose">
           <Flex justifyContent="between">
             <Text>Total Alerts</Text>
-            {overview.trends && overview.trends['7d_change_percent'] !== 0 && formatTrend(overview.trends['7d_change_percent'])}
           </Flex>
-          <Metric className="mt-1">{overview.summary && overview.summary.total_alerts.toLocaleString()}</Metric>
+          <Metric className="mt-1">{overview.metrics?.total_count?.toLocaleString() || 0}</Metric>
           <Flex className="mt-4">
             <Text className="text-xs text-gray-500">
               <ClockIcon className="h-4 w-4 inline mr-1" />
@@ -208,36 +221,40 @@ export default function SecurityDashboard({ timeRange, filters }: SecurityDashbo
         <Card decoration="top" decorationColor="rose">
           <Text>Critical Alerts</Text>
           <Flex alignItems="baseline" className="space-x-2">
-            <Metric className="mt-1">{overview.summary && overview.summary.critical_alerts.toLocaleString()}</Metric>
+            <Metric className="mt-1">{overview.metrics?.by_severity?.critical || 0}</Metric>
             <Badge color="rose" size="xs">Critical</Badge>
           </Flex>
           <Text className="mt-4 text-xs text-gray-500">
-            {overview.summary && Math.round((overview.summary.critical_alerts / overview.summary.total_alerts) * 100)}% of total alerts
+            {overview.metrics?.total_count > 0 && overview.metrics?.by_severity?.critical 
+              ? Math.round((overview.metrics.by_severity.critical / overview.metrics.total_count) * 100)
+              : 0}% of total alerts
           </Text>
         </Card>
         
         <Card decoration="top" decorationColor="orange">
           <Text>High Alerts</Text>
           <Flex alignItems="baseline" className="space-x-2">
-            <Metric className="mt-1">{overview.summary && overview.summary.high_alerts.toLocaleString()}</Metric>
+            <Metric className="mt-1">{overview.metrics?.by_severity?.high || 0}</Metric>
             <Badge color="orange" size="xs">High</Badge>
           </Flex>
           <Text className="mt-4 text-xs text-gray-500">
-            {overview.summary && Math.round((overview.summary.high_alerts / overview.summary.total_alerts) * 100)}% of total alerts
+            {overview.metrics?.total_count > 0 && overview.metrics?.by_severity?.high 
+              ? Math.round((overview.metrics.by_severity.high / overview.metrics.total_count) * 100)
+              : 0}% of total alerts
           </Text>
         </Card>
         
         <Card decoration="top" decorationColor="amber">
           <Text>Medium & Low Alerts</Text>
           <Metric className="mt-1">
-            {overview.summary && (overview.summary.medium_alerts + overview.summary.low_alerts).toLocaleString()}
+            {((overview.metrics?.by_severity?.medium || 0) + (overview.metrics?.by_severity?.low || 0))}
           </Metric>
           <Flex className="mt-4 gap-2">
             <Badge color="amber" size="xs">
-              Medium: {overview.summary && overview.summary.medium_alerts.toLocaleString()}
+              Medium: {overview.metrics?.by_severity?.medium || 0}
             </Badge>
             <Badge color="blue" size="xs">
-              Low: {overview.summary && overview.summary.low_alerts.toLocaleString()}
+              Low: {overview.metrics?.by_severity?.low || 0}
             </Badge>
           </Flex>
         </Card>
@@ -249,17 +266,16 @@ export default function SecurityDashboard({ timeRange, filters }: SecurityDashbo
           <Title>Alert Trend</Title>
           {timeSeriesData.length > 0 ? (
             <AreaChart
-              className="h-72 mt-4"
+              className="mt-4 h-80"
               data={timeSeriesData}
               index="date"
               categories={["Alerts"]}
               colors={["rose"]}
               showLegend={false}
-              curveType="monotone"
-              showAnimation
+              valueFormatter={(value) => `${value} alerts`}
             />
           ) : (
-            <div className="h-72 mt-4 flex items-center justify-center">
+            <div className="h-80 flex items-center justify-center">
               <Text>No trend data available</Text>
             </div>
           )}
@@ -269,15 +285,16 @@ export default function SecurityDashboard({ timeRange, filters }: SecurityDashbo
           <Title>Alerts by Severity</Title>
           {severityData.length > 0 ? (
             <DonutChart
-              className="h-72 mt-4"
+              className="mt-4 h-80"
               data={severityData}
               category="value"
               index="name"
-              colors={["rose", "orange", "amber", "blue"]}
-              showAnimation
+              colors={["blue", "amber", "orange", "rose"]}
+              showLabel={true}
+              valueFormatter={(value) => `${value} alerts`}
             />
           ) : (
-            <div className="h-72 mt-4 flex items-center justify-center">
+            <div className="h-80 flex items-center justify-center">
               <Text>No severity data available</Text>
             </div>
           )}
@@ -286,59 +303,94 @@ export default function SecurityDashboard({ timeRange, filters }: SecurityDashbo
         <Card>
           <Title>Alerts by Category</Title>
           {categoryData.length > 0 ? (
-            <BarChart
-              className="h-72 mt-4"
-              data={categoryData}
-              index="name"
-              categories={["value"]}
-              colors={["purple"]}
-              showLegend={false}
-              showAnimation
-            />
+            <>
+              <DonutChart
+                className="mt-4 h-72"
+                data={categoryData}
+                category="value"
+                index="name"
+                colors={["indigo", "cyan", "green", "amber", "rose", "pink"]}
+                showLabel={true}
+                valueFormatter={(value) => `${value} alerts`}
+              />
+              <Text className="text-xs text-gray-500 text-center mt-2 italic">
+                Note: "Sensitive Data" alerts are displayed in the Policy Violations tab
+              </Text>
+            </>
           ) : (
-            <div className="h-72 mt-4 flex items-center justify-center">
+            <div className="h-80 flex items-center justify-center">
               <Text>No category data available</Text>
             </div>
           )}
         </Card>
       </Grid>
       
-      {/* Recent alerts */}
+      {/* Recent Alerts */}
       <Card>
-        <Flex justifyContent="between" alignItems="center">
+        <Flex justifyContent="between" alignItems="center" className="mb-4">
           <Title>Recent Critical & High Alerts</Title>
           <Link href="/security?tab=1">
-            <Button size="xs" icon={EyeIcon} variant="light">
-              View All Alerts
+            <Button 
+              variant="light" 
+              size="xs" 
+              icon={EyeIcon}
+            >
+              View All Security Alerts
             </Button>
           </Link>
         </Flex>
         
-        <List className="mt-4">
-          {!overview.recent_alerts || overview.recent_alerts.length === 0 ? (
-            <Text className="py-2 text-gray-500">No recent alerts</Text>
-          ) : (
-            overview.recent_alerts.map((alert) => (
-              <ListItem key={alert.id}>
-                <Flex justifyContent="between" alignItems="center">
-                  <Flex justifyContent="start" alignItems="center" className="gap-2">
-                    <Badge size="xs" color={getSeverityColor(alert.severity)}>
+        {overview.recent_alerts && overview.recent_alerts.length > 0 ? (
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableHeaderCell>Severity</TableHeaderCell>
+                <TableHeaderCell>Category</TableHeaderCell>
+                <TableHeaderCell>Description</TableHeaderCell>
+                <TableHeaderCell>Time</TableHeaderCell>
+                <TableHeaderCell>Actions</TableHeaderCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {overview.recent_alerts
+                .filter(alert => alert.category !== 'sensitive_data')
+                .map((alert) => (
+                <TableRow key={alert.id}>
+                  <TableCell>
+                    <Badge color={getSeverityColor(alert.severity)} size="sm">
                       {alert.severity}
                     </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Text>{formatCategory(alert.category)}</Text>
+                  </TableCell>
+                  <TableCell>
+                    <Text className="truncate max-w-md">
+                      {alert.description}
+                    </Text>
+                  </TableCell>
+                  <TableCell>
+                    <Text>{formatISOToLocalDisplay(alert.timestamp)}</Text>
+                  </TableCell>
+                  <TableCell>
                     <Link href={`/security/alerts/${alert.id}`}>
-                      <Text className="font-medium hover:text-blue-500 cursor-pointer">
-                        {alert.title}
-                      </Text>
+                      <Button 
+                        variant="light" 
+                        size="xs" 
+                        icon={EyeIcon}
+                        tooltip="View Details"
+                      >
+                        View
+                      </Button>
                     </Link>
-                  </Flex>
-                  <Text className="text-gray-500 text-sm">
-                    {formatISOToLocalDisplay(alert.timestamp)}
-                  </Text>
-                </Flex>
-              </ListItem>
-            ))
-          )}
-        </List>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        ) : (
+          <Text>No recent alerts found</Text>
+        )}
       </Card>
     </div>
   );
