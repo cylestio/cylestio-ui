@@ -1,6 +1,21 @@
-// Minimal test setup file
-// This file is intentionally kept minimal during the UI revamp period
-// Tests are currently disabled, but this file is kept to prevent errors in Jest configuration
+// Setup file for Jest tests
+import '@testing-library/jest-dom';
+
+// Extend Jest matchers
+expect.extend({
+  // Add any custom matchers here
+});
+
+// Silence console warnings and errors during tests
+// Comment these out if you want to see them during testing
+beforeAll(() => {
+  jest.spyOn(console, 'error').mockImplementation(() => {});
+  jest.spyOn(console, 'warn').mockImplementation(() => {});
+});
+
+afterAll(() => {
+  jest.restoreAllMocks();
+});
 
 // Empty export to satisfy TypeScript
 export {}

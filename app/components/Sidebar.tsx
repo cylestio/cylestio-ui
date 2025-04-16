@@ -14,9 +14,10 @@ import {
   DocumentTextIcon,
   WrenchScrewdriverIcon,
   ChatBubbleBottomCenterTextIcon,
+  ShieldExclamationIcon,
 } from '@heroicons/react/24/outline'
 import { useEffect, useState } from 'react'
-import { RiDashboardLine, RiRobot2Line, RiTimeLine, RiToolsLine, RiBrainLine, RiMessageLine } from 'react-icons/ri'
+import { RiDashboardLine, RiRobot2Line, RiTimeLine, RiToolsLine, RiBrainLine, RiMessageLine, RiShieldLine } from 'react-icons/ri'
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: RiDashboardLine },
@@ -24,6 +25,7 @@ const navigation = [
   { name: 'Events', href: '/events', icon: RiTimeLine },
   { name: 'Tools', href: '/tools', icon: RiToolsLine },
   { name: 'LLM Explorer', href: '/llm', icon: RiBrainLine },
+  { name: 'Security', href: '/security', icon: RiShieldLine },
 ]
 
 // Define and export props interface

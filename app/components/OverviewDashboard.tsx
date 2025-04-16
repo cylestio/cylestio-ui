@@ -857,8 +857,8 @@ export default function OverviewDashboard({ timeRange }: OverviewDashboardProps)
               size="md"
               trend={null}
               footer={
-                <Link href="/events" className="text-xs text-blue-600 hover:text-blue-800 hover:underline flex items-center mt-2">
-                  <ClockIcon className="h-3 w-3 mr-1" /> View All Events
+                <Link href="/security" className="text-xs text-blue-600 hover:text-blue-800 hover:underline flex items-center mt-2">
+                  <ShieldExclamationIcon className="h-3 w-3 mr-1" /> View Security Explorer
                 </Link>
               }
             />
@@ -931,6 +931,59 @@ export default function OverviewDashboard({ timeRange }: OverviewDashboardProps)
             timeRange={timeRange}
             className="h-full"
           />
+        </div>
+        
+        {/* Security Alerts Section */}
+        <div className="mt-6 mb-8">
+          <Card className="p-6">
+            <Flex justifyContent="between" alignItems="center" className="mb-4">
+              <Flex alignItems="center" className="gap-2">
+                <ShieldExclamationIcon className="h-6 w-6 text-red-600" />
+                <Title>Security Alerts</Title>
+              </Flex>
+              <Link href="/security">
+                <Button size="xs" variant="light" icon={EyeIcon}>
+                  View All
+                </Button>
+              </Link>
+            </Flex>
+            
+            <Text className="mb-6">
+              Monitor your LLM application security and respond to potential threats
+            </Text>
+            
+            <Flex className="gap-4 flex-wrap">
+              <Card className="p-4 shadow-sm border border-red-100 flex-1" decoration="top" decorationColor="red">
+                <Text>Critical Alerts</Text>
+                <Metric className="text-red-600">
+                  {metrics.find(m => m.metric === 'security_alerts_critical')?.value || 0}
+                </Metric>
+                <Link href="/security?severity=critical">
+                  <Text className="text-xs text-blue-600 hover:text-blue-800 hover:underline mt-2">View Critical Alerts</Text>
+                </Link>
+              </Card>
+              
+              <Card className="p-4 shadow-sm border border-orange-100 flex-1" decoration="top" decorationColor="orange">
+                <Text>High Severity</Text>
+                <Metric className="text-orange-600">
+                  {metrics.find(m => m.metric === 'security_alerts_high')?.value || 0}
+                </Metric>
+                <Link href="/security?severity=high">
+                  <Text className="text-xs text-blue-600 hover:text-blue-800 hover:underline mt-2">View High Severity Alerts</Text>
+                </Link>
+              </Card>
+              
+              <Card className="p-4 shadow-sm border border-gray-100 flex-1" decoration="top" decorationColor="blue">
+                <Text>Total Alerts</Text>
+                <Metric>
+                  {metrics.find(m => m.metric === 'security_alerts')?.value || 0}
+                </Metric>
+                <Link href="/security">
+                  <Text className="text-xs text-blue-600 hover:text-blue-800 hover:underline mt-2">Security Explorer</Text>
+                </Link>
+              </Card>
+            </Flex>
+          </Card>
         </div>
         
         {/* Continue with the rest of the dashboard ... */}

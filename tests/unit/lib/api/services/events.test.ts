@@ -10,12 +10,28 @@ jest.mock('@/lib/api/helpers', () => ({
   parseApiDates: jest.fn((item) => item) // Return the item unchanged
 }));
 
-jest.mock('@/lib/api/client', () => ({
-  default: {
-    get: jest.fn(),
-    post: jest.fn()
-  }
-}));
+// Mock the API client with a structure matching the actual implementation
+jest.mock('@/lib/api/client', () => {
+  return {
+    __esModule: true,
+    default: {
+      get: jest.fn(),
+      post: jest.fn(),
+      put: jest.fn(),
+      patch: jest.fn(),
+      delete: jest.fn(),
+      defaults: {
+        baseURL: 'http://localhost:3000',
+        timeout: 15000,
+        headers: {}
+      },
+      interceptors: {
+        request: { use: jest.fn(), eject: jest.fn() },
+        response: { use: jest.fn(), eject: jest.fn() }
+      }
+    }
+  };
+});
 
 describe('EventsService', () => {
   // Sample event data for testing

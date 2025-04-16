@@ -1,33 +1,49 @@
-import { AgentService } from '@/lib/api/services';
+import { AgentService, AgentServiceParams } from '@/lib/api/services';
 import { getPaginatedData, getSingleItem, parseApiDates } from '@/lib/api/helpers';
 import apiClient from '@/lib/api/client';
 import { API_PATHS, Agent } from '@/types/api';
 import { AgentMetrics } from '@/lib/api/services/agents';
 
-// Mock the helpers and apiClient
+// Mock the helpers
 jest.mock('@/lib/api/helpers', () => ({
   getPaginatedData: jest.fn(),
   getSingleItem: jest.fn(),
   parseApiDates: jest.fn((item) => item) // Return the item unchanged
 }));
 
-jest.mock('@/lib/api/client', () => ({
-  default: {
-    get: jest.fn()
-  }
-}));
+// Mock the API client with a structure matching the actual implementation
+jest.mock('@/lib/api/client', () => {
+  return {
+    __esModule: true,
+    default: {
+      get: jest.fn(),
+      post: jest.fn(),
+      put: jest.fn(),
+      patch: jest.fn(),
+      delete: jest.fn(),
+      defaults: {
+        baseURL: 'http://localhost:3000',
+        timeout: 15000,
+        headers: {}
+      },
+      interceptors: {
+        request: { use: jest.fn(), eject: jest.fn() },
+        response: { use: jest.fn(), eject: jest.fn() }
+      }
+    }
+  };
+});
 
 describe('AgentService', () => {
   // Sample agent data for testing
   const mockAgent: Agent = {
     id: 1,
     agent_id: 'assistant-abc123',
-    name: 'Customer Support Assistant',
-    description: 'AI assistant for customer support',
-    version: '1.0.0',
-    active: true,
-    last_active: '2023-05-11T14:23:45Z',
-    creation_time: '2023-05-01T10:00:00Z'
+    name: 'Test Agent',
+    description: 'A test agent for unit tests',
+    model: 'gpt-4',
+    creation_time: '2023-01-01T00:00:00Z',
+    last_active: '2023-01-01T01:00:00Z'
   };
 
   const mockAgentList = {
@@ -44,13 +60,13 @@ describe('AgentService', () => {
     page_size: 50
   };
 
-  const mockAgentMetrics: AgentMetrics = {
-    total_sessions: 42,
-    total_conversations: 128,
-    total_events: 1024,
-    llm_calls: 512,
-    tool_calls: 256,
-    security_alerts: 8
+  const mockAgentMetrics = {
+    total_sessions: 10,
+    total_conversations: 25,
+    total_events: 100,
+    llm_calls: 50,
+    tool_calls: 30,
+    security_alerts: 5
   };
 
   beforeEach(() => {
@@ -75,7 +91,7 @@ describe('AgentService', () => {
           sort_by: 'name'
         }
       );
-
+      
       expect(parseApiDates).toHaveBeenCalled();
       expect(result).toEqual(mockAgentList);
     });
@@ -93,10 +109,10 @@ describe('AgentService', () => {
 
       expect(getPaginatedData).toHaveBeenCalledWith(
         API_PATHS.AGENTS,
-        expect.objectContaining({
+        {
           start_time: startTime,
           end_time: endTime
-        })
+        }
       );
     });
     
