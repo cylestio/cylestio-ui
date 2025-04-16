@@ -6,29 +6,35 @@ const createJestConfig = nextJest({
   dir: './',
 })
 
-// Jest configuration that skips ALL tests completely
+// Jest configuration
 const customJestConfig: Config = {
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
   testEnvironment: 'jest-environment-jsdom',
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/app/$1',
   },
-  // Disable coverage thresholds
+  // Reasonable coverage thresholds
   coverageThreshold: {
     global: {
-      statements: 0,
-      branches: 0,
-      functions: 0,
-      lines: 0,
+      statements: 60,
+      branches: 60,
+      functions: 60,
+      lines: 60,
     },
   },
-  // Skip ALL tests completely
-  testMatch: ['<rootDir>/non-existent-directory/**/*.test.{js,jsx,ts,tsx}'],
-  // Additional configuration to force-skip tests
-  testPathIgnorePatterns: ['<rootDir>'],
-  testTimeout: 1, // Set a very short timeout
-  // Run no tests (empty array)
-  roots: [],
+  // Normal test matching
+  testMatch: ['<rootDir>/**/*.test.{js,jsx,ts,tsx}'],
+  // Standard ignores
+  testPathIgnorePatterns: [
+    '<rootDir>/node_modules/',
+    '<rootDir>/.next/',
+    '<rootDir>/dist/'
+  ],
+  testTimeout: 10000,
+  // Run tests from standard locations
+  roots: [
+    '<rootDir>/tests'
+  ],
 }
 
 export default createJestConfig(customJestConfig)
