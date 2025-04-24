@@ -2,7 +2,7 @@
 
 import { Grid, Title, Text } from '@tremor/react';
 import DrilldownMetricCard from '../../components/drilldown/DrilldownMetricCard';
-import { ClockIcon, UserGroupIcon, CommandLineIcon, CurrencyDollarIcon, ExclamationTriangleIcon, ChatBubbleBottomCenterTextIcon } from '@heroicons/react/24/outline';
+import { ClockIcon, UserGroupIcon, CommandLineIcon, CurrencyDollarIcon, ExclamationTriangleIcon, ChatBubbleBottomCenterTextIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
 import { useState, useEffect } from 'react';
 import { fetchAPI } from '../../lib/api';
 import { AGENTS } from '../../lib/api-endpoints';
@@ -17,6 +17,9 @@ type Agent = {
   created_at: string;
   updated_at: string;
   configuration?: Record<string, any>;
+  request_count?: number;
+  token_usage?: number;
+  error_count?: number;
   metrics?: {
     request_count: number;
     token_usage: number;
@@ -179,6 +182,52 @@ export function AgentMetricsDashboard({ agent, metrics = [], agentId, timeRange 
         <Text>Key metrics for this agent</Text>
       </div>
 
+      <Grid numItems={1} numItemsSm={2} numItemsLg={4} className="gap-4 mb-6">
+        {/* Total Requests */}
+        <DrilldownMetricCard
+          title="Total Requests"
+          value={(activeAgent.request_count || activeAgent.metrics?.request_count || 0).toLocaleString()}
+          icon={<CommandLineIcon className="h-5 w-5" />}
+          variant="primary"
+          drilldownHref={`/agents/${agentId}/performance`}
+        />
+
+        {/* Success Rate */}
+        <DrilldownMetricCard
+          title="Success Rate"
+          value={activeAgent.metrics?.success_rate 
+                 ? `${activeAgent.metrics.success_rate}%` 
+                 : (activeAgent.request_count || activeAgent.metrics?.request_count || 0) > 0 && 
+                   (activeAgent.error_count || activeAgent.metrics?.error_count || 0) > 0 
+                   ? `${Math.round(((
+                       (activeAgent.request_count || activeAgent.metrics?.request_count || 0) - 
+                       (activeAgent.error_count || activeAgent.metrics?.error_count || 0)
+                     ) / (activeAgent.request_count || activeAgent.metrics?.request_count || 1)) * 100)}%` 
+                   : 'N/A'}
+          icon={<CheckCircleIcon className="h-5 w-5" />}
+          variant="success"
+          drilldownHref={`/agents/${agentId}/performance`}
+        />
+
+        {/* Token Usage */}
+        <DrilldownMetricCard
+          title="Token Usage"
+          value={(activeAgent.token_usage || activeAgent.metrics?.token_usage || 0).toLocaleString()}
+          icon={<ChatBubbleBottomCenterTextIcon className="h-5 w-5" />}
+          variant="warning"
+          drilldownHref={`/agents/${agentId}/tokens`}
+        />
+
+        {/* Errors */}
+        <DrilldownMetricCard
+          title="Errors"
+          value={(activeAgent.error_count || activeAgent.metrics?.error_count || 0).toLocaleString()}
+          icon={<ExclamationTriangleIcon className="h-5 w-5" />}
+          variant="error"
+          drilldownHref={`/agents/${agentId}/errors`}
+        />
+      </Grid>
+
       <Grid numItems={1} numItemsSm={2} numItemsLg={4} className="gap-4">
         {/* Response Time */}
         <DrilldownMetricCard
@@ -187,8 +236,6 @@ export function AgentMetricsDashboard({ agent, metrics = [], agentId, timeRange 
           icon={<ClockIcon className="h-5 w-5" />}
           variant="primary"
           drilldownHref={`/agents/${agentId}/performance`}
-          drilldownFilters={{ metric: 'response_time' }}
-          drilldownLabel="View response time details"
         />
 
         {/* Session Count */}
@@ -198,7 +245,6 @@ export function AgentMetricsDashboard({ agent, metrics = [], agentId, timeRange 
           icon={<UserGroupIcon className="h-5 w-5" />}
           variant="primary"
           drilldownHref={`/agents/${agentId}/sessions`}
-          drilldownLabel="View all sessions"
         />
 
         {/* Tool Usage */}
@@ -208,7 +254,6 @@ export function AgentMetricsDashboard({ agent, metrics = [], agentId, timeRange 
           icon={<CommandLineIcon className="h-5 w-5" />}
           variant="primary"
           drilldownHref={`/agents/${agentId}/tools`}
-          drilldownLabel="View tool usage details"
         />
 
         {/* Token Usage Cost */}
@@ -218,7 +263,6 @@ export function AgentMetricsDashboard({ agent, metrics = [], agentId, timeRange 
           icon={<CurrencyDollarIcon className="h-5 w-5" />}
           variant="primary"
           drilldownHref={`/agents/${agentId}/tokens`}
-          drilldownLabel="View token usage details"
         />
 
         {/* Error Rate */}
@@ -228,7 +272,6 @@ export function AgentMetricsDashboard({ agent, metrics = [], agentId, timeRange 
           icon={<ExclamationTriangleIcon className="h-5 w-5" />}
           variant="error"
           drilldownHref={`/agents/${agentId}/errors`}
-          drilldownLabel="View error details"
         />
 
         {/* LLM Requests */}
@@ -238,7 +281,6 @@ export function AgentMetricsDashboard({ agent, metrics = [], agentId, timeRange 
           icon={<ChatBubbleBottomCenterTextIcon className="h-5 w-5" />}
           variant="primary"
           drilldownHref={`/agents/${agentId}/llms`}
-          drilldownLabel="View LLM usage details"
         />
       </Grid>
     </div>

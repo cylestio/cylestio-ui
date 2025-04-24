@@ -49,7 +49,6 @@ const FilterBar: React.FC<FilterBarProps> = ({
   
   // Initialize filter state from props and URL parameters if enabled
   const [filterState, setFilterState] = useState<Record<string, any>>({})
-  const [showFilters, setShowFilters] = useState(false)
   
   // Initialize filter values from URL params or defaults on component mount
   const filterStateInitialized = useRef(false);
@@ -216,10 +215,6 @@ const FilterBar: React.FC<FilterBarProps> = ({
     }
   }
   
-  const toggleFilters = () => {
-    setShowFilters(!showFilters)
-  }
-  
   // Determine if we have any active filters
   const hasActiveFilters = Object.values(filterState).some(
     value => value !== undefined && value !== null && value !== ''
@@ -229,83 +224,63 @@ const FilterBar: React.FC<FilterBarProps> = ({
   const searchFilter = filters.find(f => f.type === 'search')
   
   return (
-    <div className={`mb-4 ${className}`}>
-      <Flex justifyContent="between" className="mb-2">
-        <Flex className="gap-2">
-          {searchFilter && (
-            <div className="w-64">
-              <TextInput
-                placeholder={searchFilter.placeholder || 'Search...'}
-                value={filterState[searchFilter.id] || ''}
-                onChange={e => handleFilterChange(searchFilter.id, e.target.value)}
-                icon={MagnifyingGlassIcon}
-              />
-            </div>
-          )}
-          
-          <Button
-            size="xs"
-            variant="secondary"
-            icon={AdjustmentsHorizontalIcon}
-            onClick={toggleFilters}
-          >
-            Filters
-          </Button>
-        </Flex>
+    <div className={`${className}`}>
+      <div className="flex flex-nowrap items-center gap-4 overflow-x-auto">
+        {searchFilter && (
+          <div className="min-w-[200px] flex-shrink-0">
+            <TextInput
+              placeholder={searchFilter.placeholder || 'Search...'}
+              value={filterState[searchFilter.id] || ''}
+              onChange={e => handleFilterChange(searchFilter.id, e.target.value)}
+              icon={MagnifyingGlassIcon}
+              className="border-gray-200"
+            />
+          </div>
+        )}
         
+        {filters
+          .filter(filter => filter.type !== 'search') // Search is already shown above
+          .map(filter => (
+            <div key={filter.id} className="flex items-center gap-2 min-w-[220px] flex-shrink-0">
+              <span className="text-sm text-gray-600 whitespace-nowrap">{filter.label}:</span>
+              {filter.type === 'select' && (
+                <Select
+                  value={filterState[filter.id] || ''}
+                  onValueChange={value => handleFilterChange(filter.id, value)}
+                  placeholder={filter.placeholder || 'Select...'}
+                  className="border-gray-200 min-w-[140px]"
+                >
+                  {filter.options?.map(option => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </Select>
+              )}
+              
+              {filter.type === 'date-range' && (
+                <DateRangePicker
+                  value={filterState[filter.id] as DateRangePickerValue || { from: undefined, to: undefined }}
+                  onValueChange={value => handleFilterChange(filter.id, value)}
+                  placeholder={filter.placeholder || 'Select date range'}
+                  className="border-gray-200"
+                />
+              )}
+            </div>
+          ))}
+          
         {hasActiveFilters && (
           <Button
             size="xs"
             variant="light"
             onClick={handleClearAll}
             icon={XMarkIcon}
+            className="text-gray-500 ml-auto"
           >
             Clear
           </Button>
         )}
-      </Flex>
-      
-      {showFilters && (
-        <div className="flex flex-wrap gap-2 mb-2 p-2 bg-gray-50 rounded border border-gray-200">
-          {filters
-            .filter(filter => filter.type !== 'search') // Search is already shown above
-            .map(filter => (
-              <div key={filter.id} className="min-w-[180px] max-w-xs">
-                {filter.type === 'select' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1">
-                      {filter.label}
-                    </label>
-                    <Select
-                      value={filterState[filter.id] || ''}
-                      onValueChange={value => handleFilterChange(filter.id, value)}
-                      placeholder={filter.placeholder || 'Select...'}
-                    >
-                      {filter.options?.map(option => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </Select>
-                  </div>
-                )}
-                
-                {filter.type === 'date-range' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1">
-                      {filter.label}
-                    </label>
-                    <DateRangePicker
-                      value={filterState[filter.id] as DateRangePickerValue || { from: undefined, to: undefined }}
-                      onValueChange={value => handleFilterChange(filter.id, value)}
-                      placeholder={filter.placeholder || 'Select date range'}
-                    />
-                  </div>
-                )}
-              </div>
-            ))}
-        </div>
-      )}
+      </div>
     </div>
   )
 }

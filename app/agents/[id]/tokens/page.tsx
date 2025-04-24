@@ -154,6 +154,7 @@ export default function AgentTokensPage({ params }: AgentTokensPageProps) {
           { label: agentName, href: `/agents/${agentId}` },
           { label: 'Token Usage', href: `/agents/${agentId}/tokens` },
         ]}
+        includeHome={true}
       />
       
       <div className="flex justify-between items-center mb-6">

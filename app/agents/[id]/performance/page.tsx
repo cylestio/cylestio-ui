@@ -94,6 +94,7 @@ export default function AgentPerformancePage({ params }: AgentPerformancePagePro
           { label: agentName, href: `/agents/${agentId}` },
           { label: 'Performance', href: `/agents/${agentId}/performance` },
         ]}
+        includeHome={true}
       />
       
       <div className="flex justify-between items-center mb-6">

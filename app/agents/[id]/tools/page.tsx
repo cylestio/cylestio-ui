@@ -148,6 +148,7 @@ export default function AgentToolsPage({ params }: AgentToolsPageProps) {
           { label: agentName, href: `/agents/${agentId}` },
           { label: 'Tool Usage', href: `/agents/${agentId}/tools` },
         ]}
+        includeHome={true}
       />
       
       <div className="flex justify-between items-center mb-6">

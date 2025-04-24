@@ -462,6 +462,13 @@ export function AgentsExplorerContainer() {
             <FilterBar
               filters={[
                 {
+                  id: 'search',
+                  label: 'Search',
+                  type: 'search',
+                  placeholder: 'Search agent name...',
+                  defaultValue: filters.search || ''
+                },
+                {
                   id: 'status',
                   label: 'Status',
                   type: 'select',
@@ -471,13 +478,6 @@ export function AgentsExplorerContainer() {
                     { value: 'inactive', label: 'Inactive' }
                   ],
                   defaultValue: filters.status || 'all'
-                },
-                {
-                  id: 'search',
-                  label: 'Search',
-                  type: 'search',
-                  placeholder: 'Search agent name...',
-                  defaultValue: filters.search || ''
                 },
                 {
                   id: 'sort_by',
@@ -557,20 +557,22 @@ function AgentsTable({
     return (
       <Flex justifyContent="end" className="mt-4">
         <div className="flex items-center gap-2">
-          <Text>Page {page} of {total_pages}</Text>
+          <Text className="text-sm text-gray-500">Page {page} of {total_pages}</Text>
           <Button
             size="xs"
-            variant="secondary"
+            variant="light"
             disabled={page === 1}
             onClick={() => onPageChange(page - 1)}
+            className={`text-gray-600 ${page === 1 ? 'opacity-50' : ''}`}
           >
             Previous
           </Button>
           <Button
             size="xs"
-            variant="secondary"
+            variant="light"
             disabled={page === total_pages}
             onClick={() => onPageChange(page + 1)}
+            className={`text-gray-600 ${page === total_pages ? 'opacity-50' : ''}`}
           >
             Next
           </Button>
@@ -579,44 +581,63 @@ function AgentsTable({
     );
   };
   
+  // Agents Table styling
   if (!agents.length) {
     return (
-      <div className="text-center py-12">
-        <Text>No agents found. Please check database connectivity or create agents first.</Text>
+      <div className="text-center py-8 border-t border-gray-100">
+        <ServerIcon className="h-10 w-10 mx-auto mb-3 text-gray-300" />
+        <Text className="text-base text-gray-700 mb-2">No Agents Found</Text>
+        <Text className="text-sm text-gray-500 mb-5">
+          Please check database connectivity or create agents first.
+        </Text>
+        <Button 
+          variant="light"
+          onClick={() => router.push('/settings/agents/create')}
+          className="mx-auto text-primary-600"
+        >
+          Create New Agent
+        </Button>
       </div>
     );
   }
   
   return (
     <div>
-      <Table>
-        <TableHead>
-          <TableRow>
-            <TableHeaderCell>Name</TableHeaderCell>
-            <TableHeaderCell>Status</TableHeaderCell>
-            <TableHeaderCell className="text-right">Requests</TableHeaderCell>
-            <TableHeaderCell className="text-right">Errors</TableHeaderCell>
-            <TableHeaderCell>Last Updated</TableHeaderCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {agents.map((agent) => (
-            <TableRow 
-              key={agent.agent_id} 
-              className="cursor-pointer hover:bg-gray-50 transition-colors duration-150" 
-              onClick={() => handleRowClick(agent.agent_id)}
-            >
-              <TableCell className="font-medium text-blue-600 hover:underline">
-                {agent.name}
-              </TableCell>
-              <TableCell>{getStatusBadge(agent)}</TableCell>
-              <TableCell className="text-right">{agent.request_count.toLocaleString()}</TableCell>
-              <TableCell className="text-right">{agent.error_count.toLocaleString()}</TableCell>
-              <TableCell>{formatDate(agent.updated_at)}</TableCell>
+      <div className="border-t border-b border-gray-200">
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableHeaderCell>Name</TableHeaderCell>
+              <TableHeaderCell>Status</TableHeaderCell>
+              <TableHeaderCell className="text-right">Requests</TableHeaderCell>
+              <TableHeaderCell className="text-right">Errors</TableHeaderCell>
+              <TableHeaderCell>Last Updated</TableHeaderCell>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHead>
+          <TableBody>
+            {agents.map((agent) => {
+              // Add debugging log to see what's happening with the names
+              console.log(`Agent name: "${agent.name}", After prefix removal: "${agent.name.startsWith('Agent-') ? agent.name.substring(6) : agent.name}"`);
+              
+              return (
+                <TableRow 
+                  key={agent.agent_id} 
+                  className="cursor-pointer hover:bg-gray-50 transition-colors duration-150" 
+                  onClick={() => handleRowClick(agent.agent_id)}
+                >
+                  <TableCell className="font-medium text-primary-600">
+                    {agent.name}
+                  </TableCell>
+                  <TableCell>{getStatusBadge(agent)}</TableCell>
+                  <TableCell className="text-right">{agent.request_count.toLocaleString()}</TableCell>
+                  <TableCell className="text-right">{agent.error_count.toLocaleString()}</TableCell>
+                  <TableCell>{formatDate(agent.updated_at)}</TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
       
       {renderPagination()}
     </div>

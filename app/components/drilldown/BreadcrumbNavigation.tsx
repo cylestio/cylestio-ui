@@ -16,6 +16,7 @@ interface BreadcrumbNavigationProps {
   items: BreadcrumbItem[]
   className?: string
   preserveFilters?: boolean
+  includeHome?: boolean
 }
 
 /**
@@ -26,6 +27,7 @@ const BreadcrumbNavigation: React.FC<BreadcrumbNavigationProps> = ({
   items,
   className = '',
   preserveFilters = false,
+  includeHome = true,
 }) => {
   const searchParams = useSearchParams()
   const pathname = usePathname()
@@ -45,10 +47,15 @@ const BreadcrumbNavigation: React.FC<BreadcrumbNavigationProps> = ({
     return `${href}${href.includes('?') ? '&' : '?'}${query}`
   }
 
+  // Build complete breadcrumb items including Home
+  const completeItems = includeHome
+    ? [{ label: 'Home', href: '/', icon: <HomeIcon className="h-4 w-4" />, current: false }, ...items]
+    : items
+
   return (
     <nav className={`flex items-center text-sm ${className}`} aria-label="Breadcrumb">
       <ol className="flex items-center space-x-2">
-        {items.map((item, index) => (
+        {completeItems.map((item, index) => (
           <li key={index} className="flex items-center">
             {index > 0 && (
               <ChevronRightIcon 
@@ -57,8 +64,8 @@ const BreadcrumbNavigation: React.FC<BreadcrumbNavigationProps> = ({
               />
             )}
             
-            {index === 0 && !item.label.toLowerCase().includes('home') && (
-              <HomeIcon className="h-4 w-4 text-gray-500 mr-1" aria-hidden="true" />
+            {item.icon && (
+              <span className="mr-1">{item.icon}</span>
             )}
             
             {item.current ? (

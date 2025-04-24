@@ -174,6 +174,7 @@ export default function AgentSessionsPage({ params }: AgentSessionsPageProps) {
           { label: agentName, href: `/agents/${agentId}` },
           { label: 'Sessions', href: `/agents/${agentId}/sessions` },
         ]}
+        includeHome={true}
       />
       
       <div className="flex justify-between items-center mb-6">

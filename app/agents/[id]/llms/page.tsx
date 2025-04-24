@@ -169,6 +169,7 @@ export default function AgentLLMsPage({ params }: AgentLLMsPageProps) {
           { label: agentName, href: `/agents/${agentId}` },
           { label: 'LLM Usage', href: `/agents/${agentId}/llms` },
         ]}
+        includeHome={true}
       />
       
       <div className="flex justify-between items-center mb-6">
