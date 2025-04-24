@@ -219,149 +219,114 @@ export default function OverviewDashboard({ timeRange }: OverviewDashboardProps)
 
       // Track if we received any data at all
       let receivedAnyData = false;
-
-      // Fetch top-level metrics
       let currentMetrics: DashboardMetric[] = [];
+
+      // =======================================
+      // CARD 1: ACTIVE AGENTS
+      // =======================================
       try {
-        const params = { time_range: timeRange };
-        console.log(`Fetching dashboard metrics from: ${DASHBOARD.METRICS}${buildQueryParams(params)}`);
-        
-        const metricsData = await fetchAPI<MetricsResponse>(`${DASHBOARD.METRICS}${buildQueryParams(params)}`);
-        if (metricsData && metricsData.metrics && metricsData.metrics.length > 0) {
-          currentMetrics = metricsData.metrics;
-          setMetrics(currentMetrics);
-          // Calculate health score
-          setHealthScore(calculateHealthScore(currentMetrics));
-          receivedAnyData = true;
-        } else {
-          console.log('No metrics data received from API');
-          // If we don't have metrics data, set empty array rather than leaving previous data
-          currentMetrics = [];
-          setMetrics([]);
-        }
-      } catch (error) {
-        console.warn('Failed to fetch metrics data:', error);
-        // Don't set empty metrics on error to avoid hiding entire dashboard
-      }
-      
-      // Fetch top agents
-      try {
+        console.log('Fetching active agents data...');
         const agentsParams = {
           page: 1,
           page_size: 100, // Increase to get a more accurate count of active agents
-          sort_by: 'request_count',
-          sort_dir: 'desc'
+          sort_by: 'updated_at',
+          sort_dir: 'desc',
+          time_range: timeRange
         };
         
         const agentsData = await fetchAPI<TopAgentsResponse>(`${AGENTS.LIST}${buildQueryParams(agentsParams)}`);
-        if (agentsData && agentsData.items && agentsData.items.length > 0) {
+        if (agentsData && agentsData.items) {
+          console.log(`Received ${agentsData.items.length} agents`);
           setTopAgents(agentsData.items);
           
           // Count active agents (agents that sent events in last 24 hours)
           const activeAgents = agentsData.items.filter(agent => agent.status === 'active');
+          console.log(`Active agents count: ${activeAgents.length}`);
           
-          // Add active agents count to metrics if not already there
-          const activeAgentMetric = currentMetrics.find(m => m.metric === 'active_agents');
-          if (!activeAgentMetric) {
-            // Here we can try to calculate a trend based on historical data
-            const previousActiveAgentsCount = currentMetrics.find(m => m.metric === 'active_agents_previous')?.value || activeAgents.length;
-            const change = previousActiveAgentsCount > 0 
-              ? ((activeAgents.length - previousActiveAgentsCount) / previousActiveAgentsCount) * 100 
-              : 0;
-            const trend = change > 0 ? 'up' : (change < 0 ? 'down' : 'stable');
-            
-            currentMetrics = [
-              ...currentMetrics,
-              {
-                metric: 'active_agents',
-                value: activeAgents.length,
-                change: Math.abs(change),
-                trend: trend
-              }
-            ];
-          }
+          // Add active agents count to metrics
+          currentMetrics.push({
+            metric: 'active_agents',
+            value: activeAgents.length,
+            change: 0,
+            trend: 'stable'
+          });
+          
+          // Update metrics immediately so Active Agents card shows the correct value
+          setMetrics(currentMetrics);
           
           receivedAnyData = true;
+        } else {
+          console.log('No agents data received');
+          setTopAgents([]);
+          
+          // Still add a metric with zero count
+          currentMetrics.push({
+            metric: 'active_agents',
+            value: 0,
+            change: 0,
+            trend: 'stable'
+          });
+          setMetrics(currentMetrics);
         }
       } catch (error) {
-        console.warn('Failed to fetch top agents:', error);
+        console.error('Failed to fetch active agents:', error);
+        setTopAgents([]);
+        
+        // Still add a metric with zero count on error
+        currentMetrics.push({
+          metric: 'active_agents',
+          value: 0,
+          change: 0,
+          trend: 'stable'
+        });
+        setMetrics(currentMetrics);
       }
       
-      // Always fetch security alerts data regardless of metrics state
+      // =======================================
+      // CARD 2: SECURITY ALERTS
+      // =======================================
       try {
-        console.log('Fetching security alerts...');
-        const alertsResponse = await fetchAPI<{ count: number; time_range: { from: string; to: string; description: string } }>(`${SECURITY.ALERT_COUNT}?time_range=${timeRange}`);
-        const alertsCount = alertsResponse?.count || 0;
+        console.log('Fetching security alerts count...');
+        // Using /v1/alerts instead of /v1/alerts/count which had errors
+        const alertsResponse = await fetchAPI<{total_count: number; metrics: {total_count: number}; time_range: {from: string; to: string; description: string}}>(`${SECURITY.ALERTS}?time_range=${timeRange}`);
+        const alertsCount = alertsResponse?.total_count || alertsResponse?.metrics?.total_count || 0;
         console.log('Received security alerts count:', alertsCount);
         
-        // For comparison, calculate change without fetching previous period if it would be invalid
-        let previousAlertsCount = 0;
-        let change = 0;
-        let trend: 'up' | 'down' | 'stable' = 'stable';
-        
-        // Only fetch previous period for valid time ranges
-        if (timeRange === '24h' || timeRange === '7d' || timeRange === '30d') {
-          const previousPeriod = timeRange === '24h' ? '48h' : (timeRange === '7d' ? '14d' : '30d');
-          try {
-            const previousAlertsResponse = await fetchAPI<{ count: number }>(`${SECURITY.ALERT_COUNT}?time_range=${previousPeriod}`);
-            previousAlertsCount = previousAlertsResponse?.count || 0;
-            console.log('Previous period alerts count:', previousAlertsCount);
-            
-            // Calculate change percentage
-            if (previousAlertsCount > 0 || alertsCount > 0) {
-              const baseCount = Math.max(previousAlertsCount, 1); // Avoid division by zero
-              change = ((alertsCount - previousAlertsCount) / baseCount) * 100;
-              trend = change > 0 ? 'up' : (change < 0 ? 'down' : 'stable');
-            }
-          } catch (error) {
-            console.warn('Failed to fetch previous period alerts, skipping trend calculation');
-          }
-        }
-        
-        // Update metrics with security alerts
-        setMetrics(prevMetrics => {
-          const metricsWithoutAlerts = prevMetrics.filter(m => m.metric !== 'security_alerts');
-          const updatedMetrics = [
-            ...metricsWithoutAlerts,
-            {
-              metric: 'security_alerts',
-              value: alertsCount,
-              change: Math.abs(change),
-              trend: trend
-            }
-          ];
-          console.log('Updated metrics with security alerts:', updatedMetrics);
-          return updatedMetrics;
+        // Update metrics with security alerts count
+        currentMetrics.push({
+          metric: 'security_alerts',
+          value: alertsCount,
+          change: 0,
+          trend: 'stable'
         });
+        
+        // Update metrics immediately
+        setMetrics(currentMetrics);
+        console.log('Updated metrics with security alerts:', currentMetrics);
         
         receivedAnyData = true;
       } catch (error) {
         console.error('Failed to fetch security alerts count:', error);
-        // Don't reset to 0 on error, keep existing value if any
-        setMetrics(prevMetrics => {
-          const existingAlertMetric = prevMetrics.find(m => m.metric === 'security_alerts');
-          if (existingAlertMetric) {
-            return prevMetrics; // Keep existing metrics unchanged
-          }
-          // Only add a zero metric if there wasn't one before
-          const metricsWithoutAlerts = prevMetrics.filter(m => m.metric !== 'security_alerts');
-          return [
-            ...metricsWithoutAlerts,
-            {
-              metric: 'security_alerts',
-              value: 0,
-              change: 0,
-              trend: 'stable'
-            }
-          ];
+        // Add a fallback zero metric for security alerts
+        currentMetrics.push({
+          metric: 'security_alerts',
+          value: 0,
+          change: 0,
+          trend: 'stable'
         });
+        setMetrics(currentMetrics);
       }
       
-      // Fetch tool data directly from the tool interactions API
+      // =======================================
+      // CARD 3: AVAILABLE TOOLS
+      // =======================================
       try {
+        console.log('Fetching available tools data...');
         const toolsResponse = await fetchAPI<ToolInteractionsResponse>(`${METRICS.TOOL_INTERACTIONS}?time_range=${timeRange}`);
         
-        if (toolsResponse && toolsResponse.interactions) {
+        if (toolsResponse && toolsResponse.interactions && toolsResponse.interactions.length > 0) {
+          console.log(`Received ${toolsResponse.interactions.length} tool interactions`);
+          
           // Count unique tools
           const uniqueTools = new Set<string>();
           toolsResponse.interactions.forEach(interaction => {
@@ -370,37 +335,99 @@ export default function OverviewDashboard({ timeRange }: OverviewDashboardProps)
             }
           });
           
+          const uniqueToolsArray = Array.from(uniqueTools);
+          console.log(`Unique tools count: ${uniqueTools.size}`);
+          console.log(`Unique tools: ${uniqueToolsArray.join(', ')}`);
+          
           // Add tools count to metrics
-          if (!currentMetrics.find(m => m.metric === 'tools_count')) {
-            currentMetrics = [
-              ...currentMetrics,
-              {
-                metric: 'tools_count',
-                value: uniqueTools.size,
-                change: 0,
-                trend: 'stable'
-              }
-            ];
+          currentMetrics.push({
+            metric: 'tools_count',
+            value: uniqueTools.size,
+            change: 0,
+            trend: 'stable'
+          });
+          
+          // Update metrics state immediately
+          setMetrics(currentMetrics);
+          
+          // Process tool interactions for charts
+          const processedData = toolsResponse.interactions.reduce((acc: TimeSeriesData[], interaction) => {
+            const timestamp = interaction.request_timestamp;
+            const existingPoint = acc.find(point => point.timestamp === timestamp);
             
-            // Update metrics state immediately to reflect the changes
-            setMetrics(currentMetrics);
-          }
+            if (existingPoint) {
+              existingPoint.value += 1;
+            } else {
+              acc.push({
+                timestamp,
+                value: 1,
+                dimensions: {
+                  tool_name: interaction.tool_name
+                }
+              });
+            }
+            
+            return acc;
+          }, []);
+          
+          setToolExecutions(processedData);
+          receivedAnyData = true;
+        } else {
+          console.log('No tool interactions received');
+          // Add fallback metric for tools count
+          currentMetrics.push({
+            metric: 'tools_count',
+            value: 0,
+            change: 0,
+            trend: 'stable'
+          });
+          setMetrics(currentMetrics);
+          setToolExecutions([]);
         }
       } catch (error) {
-        console.warn('Failed to count unique tools:', error);
-        // Fallback to 0 if the API fails
-        if (!currentMetrics.find(m => m.metric === 'tools_count')) {
-          currentMetrics = [
-            ...currentMetrics,
-            {
-              metric: 'tools_count',
-              value: 0,
-              change: 0,
-              trend: 'stable'
-            }
-          ];
-          setMetrics(currentMetrics);
-        }
+        console.error('Failed to fetch available tools:', error);
+        // Add fallback metric for tools count
+        currentMetrics.push({
+          metric: 'tools_count',
+          value: 0,
+          change: 0,
+          trend: 'stable'
+        });
+        setMetrics(currentMetrics);
+        setToolExecutions([]);
+      }
+      
+      // =======================================
+      // CARD 4: ESTIMATED COST
+      // =======================================
+      try {
+        console.log('Fetching token usage cost data...');
+        const costResponse = await fetchAPI<{token_usage_cost: {totals: {total_cost: number}}}>(`${METRICS.TOKEN_USAGE_COST}?time_range=${timeRange}`);
+        const cost = costResponse?.token_usage_cost?.totals?.total_cost || 0;
+        console.log(`Received token usage cost: $${cost.toFixed(2)}`);
+        
+        // Add token_usage_cost to metrics
+        currentMetrics.push({
+          metric: 'token_usage_cost',
+          value: cost,
+          change: 0,
+          trend: 'stable'
+        });
+        
+        // Update metrics state immediately
+        setMetrics(currentMetrics);
+        
+        receivedAnyData = true;
+      } catch (error) {
+        console.error('Failed to fetch token usage cost:', error);
+        // Set a fallback value of 0
+        currentMetrics.push({
+          metric: 'token_usage_cost',
+          value: 0,
+          change: 0,
+          trend: 'stable'
+        });
+        setMetrics(currentMetrics);
       }
       
       // Calculate date range for API requests
@@ -447,77 +474,6 @@ export default function OverviewDashboard({ timeRange }: OverviewDashboardProps)
         }
       } catch (error) {
         console.warn('Failed to fetch token usage chart data:', error);
-      }
-      
-      // Fetch token usage cost data
-      try {
-        const costResponse = await fetchAPI<{ total?: number }>(`${METRICS.TOKEN_USAGE_COST}?time_range=${timeRange}`);
-        const cost = costResponse?.total || 0;
-        
-        // Add token_usage_cost to metrics
-        if (!currentMetrics.find(m => m.metric === 'token_usage_cost')) {
-          currentMetrics = [
-            ...currentMetrics,
-            {
-              metric: 'token_usage_cost',
-              value: cost,
-              change: 0,
-              trend: 'stable'
-            }
-          ];
-          
-          // Update metrics state immediately
-          setMetrics(currentMetrics);
-        }
-      } catch (error) {
-        console.warn('Failed to fetch token usage cost:', error);
-        // Set a fallback value of 0
-        if (!currentMetrics.find(m => m.metric === 'token_usage_cost')) {
-          currentMetrics = [
-            ...currentMetrics,
-            {
-              metric: 'token_usage_cost',
-              value: 0,
-              change: 0,
-              trend: 'stable'
-            }
-          ];
-          setMetrics(currentMetrics);
-        }
-      }
-      
-      // Fetch tool execution data
-      try {
-        const toolExecutionsResponse = await fetchAPI<ToolInteractionsResponse>(
-          `${METRICS.TOOL_INTERACTIONS}?time_range=${timeRange}&interaction_type=execution`
-        );
-        
-        if (toolExecutionsResponse && toolExecutionsResponse.interactions) {
-          // Process tool executions into time series data
-          const processedData = toolExecutionsResponse.interactions.reduce((acc: TimeSeriesData[], interaction) => {
-            const timestamp = interaction.request_timestamp;
-            const existingPoint = acc.find(point => point.timestamp === timestamp);
-            
-            if (existingPoint) {
-              existingPoint.value += 1;
-            } else {
-              acc.push({
-                timestamp,
-                value: 1
-              });
-            }
-            
-            return acc;
-          }, []);
-          
-          setToolExecutions(processedData);
-          receivedAnyData = true;
-        } else {
-          setToolExecutions([]);
-        }
-      } catch (error) {
-        console.error('Failed to fetch tool executions:', error);
-        setToolExecutions([]);
       }
       
       // Fetch session counts data
@@ -822,86 +778,81 @@ export default function OverviewDashboard({ timeRange }: OverviewDashboardProps)
             columns={{ default: 2, md: 2, lg: 4 }}
             spacing="md"
           >
-            <MetricCard
-              title="Active Agents"
-              value={topAgents.filter(a => a.status === 'active').length || 0}
-              icon={
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7 text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="5" />
-                  <path d="M12 7 L12 17" />
-                  <path d="M7 12 L17 12" />
-                  <path d="M3.5 8.5 L7 12 L3.5 15.5" />
-                  <path d="M20.5 8.5 L17 12 L20.5 15.5" />
-                  <path d="M8.5 3.5 L12 7 L15.5 3.5" />
-                  <path d="M8.5 20.5 L12 17 L15.5 20.5" />
-                </svg>
-              }
-              variant="primary"
-              valueClassName="text-2xl"
-              size="md"
-              trend={null}
-            />
-            
-            <MetricCard
-              title="Security Alerts"
-              value={(() => {
-                const alertValue = metrics.find(m => m.metric === 'security_alerts')?.value;
-                console.log('Security Alerts MetricCard - Full metrics array:', metrics);
-                console.log('Security Alerts MetricCard - Found metric:', metrics.find(m => m.metric === 'security_alerts'));
-                console.log('Security Alerts MetricCard - Final value:', alertValue);
-                return alertValue || 0;
-              })()}
-              icon={<ShieldExclamationIcon className="w-7 h-7 text-red-600" />}
-              variant="error"
-              valueClassName="text-2xl"
-              size="md"
-              trend={null}
-              footer={
-                <Link href="/security" className="text-xs text-blue-600 hover:text-blue-800 hover:underline flex items-center mt-2">
-                  <ShieldExclamationIcon className="h-3 w-3 mr-1" /> View Security Explorer
-                </Link>
-              }
-            />
-            
-            <MetricCard
-              title="Available Tools"
-              value={metrics.find(m => m.metric === 'tools_count')?.value || (toolExecutions.reduce((acc, item) => {
-                // Extract unique tool names from tool executions
-                const toolName = item.dimensions?.tool_name;
-                if (toolName && !acc.includes(toolName)) {
-                  acc.push(toolName);
+            <Link href="/agents" className="block hover:no-underline transition duration-200 transform hover:scale-[1.02]">
+              <MetricCard
+                title="Active Agents"
+                value={metrics.find(m => m.metric === 'active_agents')?.value || 0}
+                icon={
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7 text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="5" />
+                    <path d="M12 7 L12 17" />
+                    <path d="M7 12 L17 12" />
+                    <path d="M3.5 8.5 L7 12 L3.5 15.5" />
+                    <path d="M20.5 8.5 L17 12 L20.5 15.5" />
+                    <path d="M8.5 3.5 L12 7 L15.5 3.5" />
+                    <path d="M8.5 20.5 L12 17 L15.5 20.5" />
+                  </svg>
                 }
-                return acc;
-              }, []).length)}
-              icon={
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7 text-indigo-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="4" y="4" width="16" height="16" rx="2" />
-                  <path d="M9 9h6v6H9z" />
-                  <path d="M4 9h2" />
-                  <path d="M4 15h2" />
-                  <path d="M18 9h2" />
-                  <path d="M18 15h2" />
-                  <path d="M9 4v2" />
-                  <path d="M15 4v2" />
-                  <path d="M9 18v2" />
-                  <path d="M15 18v2" />
-                </svg>
-              }
-              variant="secondary"
-              valueClassName="text-2xl"
-              size="md"
-              trend={null}
-            />
+                variant="primary"
+                valueClassName="text-2xl"
+                size="md"
+                trend={undefined}
+                loading={loading}
+              />
+            </Link>
             
-            <MetricCard
-              title="Estimated Cost"
-              value={`$${(metrics.find(m => m.metric === 'token_usage_cost')?.value || 0).toFixed(2)}`}
-              icon={<CurrencyDollarIcon className="w-7 h-7 text-emerald-600" />}
-              variant="success"
-              valueClassName="text-2xl"
-              size="md"
-              trend={null}
-            />
+            <Link href="/security" className="block hover:no-underline transition duration-200 transform hover:scale-[1.02]">
+              <MetricCard
+                title="Security Alerts"
+                value={metrics.find(m => m.metric === 'security_alerts')?.value || 0}
+                icon={<ShieldExclamationIcon className="w-7 h-7 text-red-600" />}
+                variant="error"
+                valueClassName="text-2xl"
+                size="md"
+                trend={undefined}
+                loading={loading}
+
+              />
+            </Link>
+            
+            <Link href="/tools" className="block hover:no-underline transition duration-200 transform hover:scale-[1.02]">
+              <MetricCard
+                title="Available Tools"
+                value={metrics.find(m => m.metric === 'tools_count')?.value || 0}
+                icon={
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7 text-indigo-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="4" y="4" width="16" height="16" rx="2" />
+                    <path d="M9 9h6v6H9z" />
+                    <path d="M4 9h2" />
+                    <path d="M4 15h2" />
+                    <path d="M18 9h2" />
+                    <path d="M18 15h2" />
+                    <path d="M9 4v2" />
+                    <path d="M15 4v2" />
+                    <path d="M9 18v2" />
+                    <path d="M15 18v2" />
+                  </svg>
+                }
+                variant="secondary"
+                valueClassName="text-2xl"
+                size="md"
+                trend={undefined}
+                loading={loading}
+              />
+            </Link>
+            
+            <Link href="/analytics" className="block hover:no-underline transition duration-200 transform hover:scale-[1.02]">
+              <MetricCard
+                title="Estimated Cost"
+                value={`$${(metrics.find(m => m.metric === 'token_usage_cost')?.value || 0).toFixed(2)}`}
+                icon={<CurrencyDollarIcon className="w-7 h-7 text-emerald-600" />}
+                variant="success"
+                valueClassName="text-2xl"
+                size="md"
+                trend={undefined}
+                loading={loading}
+              />
+            </Link>
           </ResponsiveContainer>
         </div>
         
