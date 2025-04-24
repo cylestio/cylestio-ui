@@ -20,7 +20,7 @@ interface UseTimeRangeReturn {
 }
 
 export function useTimeRange(options: TimeRangeOptions = {}): UseTimeRangeReturn {
-  const { defaultRange = '24h' } = options;
+  const { defaultRange = '30d' } = options;
   
   const [range, setRange] = useState<TimeRange>(defaultRange);
   const [customStart, setCustomStart] = useState<Date | null>(null);

@@ -9,6 +9,10 @@ import ToolExecutionsTable from './ToolExecutionsTable';
 import { fetchAPI, buildQueryParams } from '../../lib/api';
 import LoadingState from '../LoadingState';
 import ErrorMessage from '../ErrorMessage';
+import PageTemplate from '../PageTemplate';
+import ContentSection from '../ContentSection';
+import { SPACING } from '../spacing';
+import RefreshButton from '../RefreshButton';
 
 // Types based on API response
 type ToolInteraction = {
@@ -115,13 +119,16 @@ export default function ToolExplorerContainer({ searchParams }: ToolExplorerCont
   const [error, setError] = useState<string | null>(null);
   
   // Filters
-  const [timeRange, setTimeRange] = useState(searchParams.get('time_range') || '7d');
+  const [timeRange, setTimeRange] = useState(searchParams.get('time_range') || '30d');
   const [toolName, setToolName] = useState(searchParams.get('tool_name') || '');
   const [toolType, setToolType] = useState(searchParams.get('tool_type') || '');
   const [status, setStatus] = useState(searchParams.get('status') || '');
   const [agentId, setAgentId] = useState(searchParams.get('agent_id') || '');
   const [fromTime, setFromTime] = useState(searchParams.get('from_time') || '');
   const [toTime, setToTime] = useState(searchParams.get('to_time') || '');
+  
+  // Add state for refresh key
+  const [refreshKey, setRefreshKey] = useState(0);
   
   // Fetch data based on filters
   useEffect(() => {
@@ -459,7 +466,7 @@ export default function ToolExplorerContainer({ searchParams }: ToolExplorerCont
   
   // Reset all filters
   const handleResetFilters = () => {
-    setTimeRange('7d');
+    setTimeRange('30d');
     setToolName('');
     setToolType('');
     setStatus('');
@@ -468,45 +475,73 @@ export default function ToolExplorerContainer({ searchParams }: ToolExplorerCont
     setToTime('');
   };
   
-  // Content display
-  if (isLoading) {
-    return <LoadingState message="Loading tool execution data..." />;
-  }
+  // After the handleResetFilters function, add a handleRefresh function
   
-  if (error) {
-    return <ErrorMessage message={error} onRetry={() => window.location.reload()} />;
-  }
+  const handleRefresh = () => {
+    setRefreshKey(prev => prev + 1);
+    setIsLoading(true);
+    // This will trigger the useEffect to re-fetch data
+  };
+  
+  // Content display
+  const breadcrumbs = [   
+    { label: 'Tools', current: true }
+  ];
   
   return (
-    <div className="w-full space-y-6">
-      <ToolsHeader 
-        summary={summary} 
-        onFilterPreset={handleFilterPreset}
-        timeRange={timeRange}
-        onTimeRangeChange={(value) => handleFilterChange('time_range', value)}
-      />
-      
-      <ToolsFilterBar
-        timeRange={timeRange}
-        toolName={toolName}
-        toolType={toolType}
-        status={status}
-        agentId={agentId}
-        fromTime={fromTime}
-        toTime={toTime}
-        onFilterChange={handleFilterChange}
-        onResetFilters={handleResetFilters}
-      />
-      
-      <ToolsBreakdownCharts 
-        summary={summary}
-        timeline={timeline}
-        agentBreakdown={agentBreakdown}
-      />
-      
-      <ToolExecutionsTable 
-        executions={executions} 
-      />
-    </div>
+    <PageTemplate
+      title="Tools Explorer"
+      description="Monitor, analyze, and debug tool interactions across your agents"
+      breadcrumbs={breadcrumbs}
+      timeRange={timeRange}
+      onTimeRangeChange={(value) => handleFilterChange('time_range', value)}
+      headerContent={<RefreshButton onClick={handleRefresh} />}
+      contentSpacing="default"
+    >
+      {isLoading ? (
+        <LoadingState variant="skeleton" contentType="data" />
+      ) : error ? (
+        <ErrorMessage message={error} severity="error" />
+      ) : (
+        <>
+          <ContentSection spacing="default">
+            <ToolsHeader 
+              summary={summary} 
+              onFilterPreset={handleFilterPreset}
+              timeRange={timeRange}
+              onTimeRangeChange={(value) => handleFilterChange('time_range', value)}
+            />
+          </ContentSection>
+          
+          <ContentSection spacing="default">
+            <ToolsFilterBar
+              timeRange={timeRange}
+              toolName={toolName}
+              toolType={toolType}
+              status={status}
+              agentId={agentId}
+              fromTime={fromTime}
+              toTime={toTime}
+              onFilterChange={handleFilterChange}
+              onResetFilters={handleResetFilters}
+            />
+          </ContentSection>
+          
+          <ContentSection spacing="default">
+            <ToolsBreakdownCharts 
+              summary={summary}
+              timeline={timeline}
+              agentBreakdown={agentBreakdown}
+            />
+          </ContentSection>
+          
+          <ContentSection spacing="default">
+            <ToolExecutionsTable 
+              executions={executions} 
+            />
+          </ContentSection>
+        </>
+      )}
+    </PageTemplate>
   );
 } 

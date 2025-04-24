@@ -3,6 +3,7 @@
 import { ReactNode } from 'react'
 import { Divider, Flex, Text, Title, Icon } from '@tremor/react'
 import { InformationCircleIcon } from '@heroicons/react/24/outline'
+import { SPACING } from './spacing'
 
 export interface SectionHeaderProps {
   title: string
@@ -32,7 +33,7 @@ export default function SectionHeader({
   }
   
   return (
-    <div className={`mb-6 ${className}`} id={id}>
+    <div className={`${SPACING.TAILWIND.SECTION_MB} ${className}`} id={id}>
       <Flex className="items-center justify-between mb-1">
         <Flex className="items-center space-x-2">
           {icon && <div className="text-primary-600">{icon}</div>}

@@ -147,7 +147,6 @@ export function AgentDetailContainer({ agentId }: AgentDetailContainerProps) {
       {/* Breadcrumb Navigation */}
       <BreadcrumbNavigation
         items={[
-          { label: 'Home', href: '/' },
           { label: 'Agents', href: '/agents' },
           { label: agent.name, current: true }
         ]}

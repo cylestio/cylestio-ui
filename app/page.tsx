@@ -3,9 +3,8 @@
 import { Suspense, useState } from 'react';
 import OverviewDashboard from './components/OverviewDashboard';
 import LoadingSpinner from './components/LoadingSpinner';
-import Breadcrumbs from './components/Breadcrumbs';
-import { Text, Select, SelectItem, Button } from '@tremor/react';
-import { ArrowPathIcon } from '@heroicons/react/24/outline';
+import PageTemplate from './components/PageTemplate';
+import RefreshButton from './components/RefreshButton';
 
 export default function Home() {
   const [timeRange, setTimeRange] = useState('30d');
@@ -16,43 +15,23 @@ export default function Home() {
     setDashboardKey(prev => prev + 1);
   };
 
+  const breadcrumbs = [
+    { label: 'Dashboard', current: true }
+  ];
+
   return (
-    <div className="space-y-2">
-      <div className="flex justify-between items-center">
-        <Breadcrumbs 
-          items={[
-            { label: 'Home', href: '/' },
-            { label: 'Dashboard', current: true }
-          ]}
-          includeHome={false}
-        />
-        <div className="flex items-center gap-2">
-          <Text>Time Range:</Text>
-          <Select
-            value={timeRange}
-            onValueChange={setTimeRange}
-            className="w-32 sm:w-40"
-          >
-            <SelectItem value="1h">Last Hour</SelectItem>
-            <SelectItem value="24h">Last 24 Hours</SelectItem>
-            <SelectItem value="7d">Last 7 Days</SelectItem>
-            <SelectItem value="30d">Last 30 Days</SelectItem>
-          </Select>
-          <Button
-            variant="light"
-            icon={ArrowPathIcon}
-            tooltip="Refresh data"
-            onClick={handleRefresh}
-            size="xs"
-          >
-            <span className="sr-only">Refresh</span>
-          </Button>
-        </div>
-      </div>
-      
+    <PageTemplate
+      title="Dashboard"
+      description="Overview of system performance, LLM usage, and key metrics at a glance"
+      breadcrumbs={breadcrumbs}
+      timeRange={timeRange}
+      onTimeRangeChange={setTimeRange}
+      contentSpacing="default"
+      headerContent={<RefreshButton onClick={handleRefresh} />}
+    >
       <Suspense fallback={<LoadingSpinner />}>
         <OverviewDashboard key={dashboardKey} timeRange={timeRange} />
       </Suspense>
-    </div>
+    </PageTemplate>
   );
 } 

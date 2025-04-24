@@ -9,6 +9,10 @@ import { EventsTimeline } from './EventsTimeline';
 import { EventsTable } from './EventsTable';
 import { fetchAPI, buildQueryParams } from '../../lib/api';
 import { TELEMETRY } from '../../lib/api-endpoints';
+import PageTemplate from '../PageTemplate';
+import ContentSection from '../ContentSection';
+import { SPACING } from '../spacing';
+import RefreshButton from '../RefreshButton';
 
 // Types based on the API specification
 type Event = {
@@ -58,7 +62,7 @@ export function EventsExplorerContainer({
   const [errorCount, setErrorCount] = useState(0);
   
   // State for filters
-  const [timeRange, setTimeRange] = useState(searchParams.get('time_range') || '1d');
+  const [timeRange, setTimeRange] = useState(searchParams.get('time_range') || '30d');
   const [eventType, setEventType] = useState(searchParams.get('event_type') || 'all');
   const [agentId, setAgentId] = useState(searchParams.get('agent_id') || 'all');
   const [level, setLevel] = useState(searchParams.get('level') || 'all');
@@ -74,6 +78,9 @@ export function EventsExplorerContainer({
   
   // Add a reference to track if manual fetch was triggered
   const manualFetchTriggered = useRef(false);
+  
+  // Add refresh key state
+  const [refreshKey, setRefreshKey] = useState(0);
   
   // Function to fetch events data
   const fetchEvents = async () => {
@@ -104,7 +111,7 @@ export function EventsExplorerContainer({
           startDate.setDate(startDate.getDate() - 30);
           break;
         default:
-          startDate.setDate(startDate.getDate() - 1);
+          startDate.setDate(startDate.getDate() - 30);
       }
       
       params.from_time = startDate.toISOString();
@@ -215,6 +222,13 @@ export function EventsExplorerContainer({
     router.push(`/events/${eventId}`);
   };
   
+  // Add refresh handler after fetchEvents function
+  const handleRefresh = () => {
+    setRefreshKey(prev => prev + 1);
+    manualFetchTriggered.current = true;
+    fetchEvents();
+  };
+  
   // Fetch data on initial render and when filters change
   useEffect(() => {
     // Skip fetch if it was manually triggered in handleFilterChange
@@ -226,40 +240,60 @@ export function EventsExplorerContainer({
     fetchEvents();
   }, [timeRange, eventType, agentId, level, offset, limit, sessionId, traceId]);
   
+  const breadcrumbs = [
+    { label: 'Events', href: '/events', current: true },
+  ];
+  
   return (
-    <div className="space-y-6">
-      <EventsHeader 
-        totalEvents={totalEvents} 
-        errorCount={errorCount}
-        timeRange={timeRange}
-        onTimeRangeChange={(newTimeRange) => handleFilterChange(newTimeRange)}
-      />
+    <PageTemplate
+      title="Events Explorer"
+      description="View, filter, and analyze events from across the system"
+      breadcrumbs={breadcrumbs}
+      timeRange={timeRange}
+      onTimeRangeChange={(newTimeRange) => handleFilterChange(newTimeRange)}
+      headerContent={<RefreshButton onClick={handleRefresh} />}
+      contentSpacing="default"
+    >
+      <ContentSection spacing="default">
+        <EventsHeader 
+          totalEvents={totalEvents} 
+          errorCount={errorCount}
+          timeRange={timeRange}
+          onTimeRangeChange={(newTimeRange) => handleFilterChange(newTimeRange)}
+        />
+      </ContentSection>
       
-      <EventsFilterBar 
-        timeRange={timeRange}
-        eventType={eventType}
-        agentId={agentId}
-        level={level}
-        searchQuery={searchQuery}
-        onFilterChange={handleFilterChange}
-      />
+      <ContentSection spacing="default">
+        <EventsFilterBar 
+          timeRange={timeRange}
+          eventType={eventType}
+          agentId={agentId}
+          level={level}
+          searchQuery={searchQuery}
+          onFilterChange={handleFilterChange}
+        />
+      </ContentSection>
       
-      <EventsTimeline 
-        timelineData={timelineData}
-        timeRange={timeRange}
-        loading={loading}
-      />
+      <ContentSection spacing="default">
+        <EventsTimeline 
+          timelineData={timelineData}
+          timeRange={timeRange}
+          loading={loading}
+        />
+      </ContentSection>
       
-      <EventsTable 
-        events={events}
-        loading={loading}
-        error={error}
-        limit={limit}
-        offset={offset}
-        totalEvents={totalEvents}
-        onPageChange={handlePageChange}
-        onViewEvent={handleViewEvent}
-      />
-    </div>
+      <ContentSection spacing="default">
+        <EventsTable 
+          events={events}
+          loading={loading}
+          error={error}
+          limit={limit}
+          offset={offset}
+          totalEvents={totalEvents}
+          onPageChange={handlePageChange}
+          onViewEvent={handleViewEvent}
+        />
+      </ContentSection>
+    </PageTemplate>
   );
 } 

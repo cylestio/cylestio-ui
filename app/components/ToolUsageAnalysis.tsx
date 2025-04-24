@@ -1223,27 +1223,8 @@ export default function ToolUsageAnalysis({
       <DashboardCard
         title="Tool Usage Analysis"
         icon={<WrenchScrewdriverIcon className="h-5 w-5" />}
-        description="Monitor and analyze tool usage patterns and performance"
         className={`${className}`}
         contentClassName="pb-4 overflow-visible"
-        actions={
-          <>
-            <Button 
-              size="xs" 
-              variant="light" 
-              icon={ArrowPathIcon} 
-              onClick={handleRefresh}
-              title="Refresh data"
-            >
-              Refresh
-            </Button>
-            {loading && (
-              <div className="animate-pulse text-xs text-gray-500">
-                Loading...
-              </div>
-            )}
-          </>
-        }
       >
         <TabGroup index={activeTab} onIndexChange={setActiveTab}>
           <TabList variant="line" className="mt-1">

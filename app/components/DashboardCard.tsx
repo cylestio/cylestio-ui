@@ -1,8 +1,9 @@
 'use client'
 
 import React, { ReactNode, useState } from 'react'
-import { Card, Title, Text, Flex } from '@tremor/react'
+import { Card, Text, Flex, Divider } from '@tremor/react'
 import { InformationCircleIcon, ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/outline'
+import { SPACING } from './spacing'
 
 export type DashboardCardProps = {
   title?: string
@@ -16,7 +17,7 @@ export type DashboardCardProps = {
   helpText?: string
   isLoading?: boolean
   showBorder?: boolean
-  variant?: 'default' | 'primary' | 'secondary' | 'neutral'
+  variant?: 'default' | 'primary' | 'success' | 'warning' | 'error'
   collapsible?: boolean
   defaultCollapsed?: boolean
   mobileOptimized?: boolean
@@ -25,33 +26,15 @@ export type DashboardCardProps = {
 const getVariantStyles = (variant: DashboardCardProps['variant'] = 'default') => {
   switch (variant) {
     case 'primary':
-      return {
-        header: 'bg-blue-50',
-        border: 'border-blue-200',
-        title: 'text-blue-700',
-        iconColor: 'text-blue-600'
-      }
-    case 'secondary':
-      return {
-        header: 'bg-purple-50',
-        border: 'border-purple-200',
-        title: 'text-purple-700',
-        iconColor: 'text-purple-600'
-      }
-    case 'neutral':
-      return {
-        header: 'bg-neutral-50',
-        border: 'border-neutral-200',
-        title: 'text-neutral-700',
-        iconColor: 'text-neutral-600'
-      }
+      return { border: 'border-primary-300', headerBg: 'bg-primary-50', iconColor: 'text-primary-500' }
+    case 'success':
+      return { border: 'border-success-300', headerBg: 'bg-success-50', iconColor: 'text-success-500' }
+    case 'warning':
+      return { border: 'border-warning-300', headerBg: 'bg-warning-50', iconColor: 'text-warning-500' }
+    case 'error':
+      return { border: 'border-error-300', headerBg: 'bg-error-50', iconColor: 'text-error-500' }
     default:
-      return {
-        header: '',
-        border: 'border-neutral-200',
-        title: 'text-neutral-800',
-        iconColor: 'text-neutral-500'
-      }
+      return { border: 'border-neutral-200', headerBg: 'bg-white', iconColor: 'text-gray-500' }
   }
 }
 
@@ -93,66 +76,74 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
       `}
     >
       {/* Card Header */}
-      <div className={`flex items-center justify-between ${description ? 'mb-2' : 'mb-4'}`}>
-        <div className="flex items-center">
-          {icon && <div className={`mr-2 ${variantStyles.iconColor}`}>{icon}</div>}
-          <Title className={mobileOptimized && isMobile ? 'dashboard-card-title-mobile' : ''}>{title}</Title>
-          
-          {helpText && (
-            <div className="relative ml-1.5 group">
-              <InformationCircleIcon className="h-4 w-4 text-neutral-400 cursor-help" />
-              <div className="absolute left-0 bottom-full mb-2 w-64 p-2 bg-white rounded shadow-lg border border-neutral-200 text-xs text-neutral-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity duration-200 z-50">
-                {helpText}
+      <div className={`-mx-4 -mt-4 ${SPACING.TAILWIND.CARD} ${variantStyles.headerBg} rounded-t-lg mb-3`}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center">
+            {icon && (
+              <span className={`${variantStyles.iconColor} flex-shrink-0 mr-2`}>
+                {icon}
+              </span>
+            )}
+            <h2 className="text-lg font-semibold leading-6 text-gray-900 m-0">{title}</h2>
+            
+            {description && (
+              <span className="ml-2">
+                <Text className="text-sm text-gray-500">{description}</Text>
+              </span>
+            )}
+            
+            {helpText && (
+              <div className="relative group ml-2 flex-shrink-0">
+                <InformationCircleIcon className="h-5 w-5 text-gray-400 hover:text-gray-500 cursor-help" />
+                <div className="absolute left-0 -bottom-1 transform translate-y-full w-64 bg-white border border-gray-200 rounded-md p-2 shadow-lg text-sm hidden group-hover:block z-10">
+                  {helpText}
+                </div>
               </div>
-            </div>
-          )}
-        </div>
-        
-        <div className="flex items-center gap-2">
-          {actions}
-          
-          {collapsible && (
-            <button 
-              onClick={toggleCollapse} 
-              className="p-1 text-neutral-400 hover:text-neutral-600 transition-colors duration-150"
-            >
-              {isCollapsed ? <ChevronDownIcon className="h-5 w-5" /> : <ChevronUpIcon className="h-5 w-5" />}
-            </button>
-          )}
-        </div>
-      </div>
-      
-      {/* Card Description */}
-      {description && (
-        <Text className="text-sm text-neutral-500 mb-4">
-          {description}
-        </Text>
-      )}
-      
-      {/* Card Content - collapsible if specified */}
-      <div 
-        className={`
-          ${contentClassName}
-          ${collapsible ? 'transition-all duration-300 ease-in-out' : ''}
-          ${collapsible && isCollapsed ? 'max-h-0 overflow-hidden opacity-0' : 'overflow-visible opacity-100'}
-        `}
-      >
-        {isLoading ? (
-          <div className="space-y-3 animate-pulse">
-            <div className="h-12 bg-neutral-100 rounded"></div>
-            <div className="h-28 bg-neutral-100 rounded"></div>
-            <div className="h-8 bg-neutral-100 rounded w-2/3"></div>
+            )}
           </div>
-        ) : (
-          children
-        )}
+          
+          <div className="flex items-center gap-2">
+            {actions && <div>{actions}</div>}
+            
+            {collapsible && (
+              <button 
+                onClick={toggleCollapse} 
+                className="text-gray-500 hover:text-gray-700 focus:outline-none"
+              >
+                {isCollapsed ? (
+                  <ChevronDownIcon className="h-5 w-5" />
+                ) : (
+                  <ChevronUpIcon className="h-5 w-5" />
+                )}
+              </button>
+            )}
+          </div>
+        </div>
       </div>
+      
+      {/* Card Content */}
+      {!isCollapsed && (
+        <div className={contentClassName}>
+          {isLoading ? (
+            <div className="space-y-3 animate-pulse">
+              <div className="h-12 bg-neutral-100 rounded"></div>
+              <div className="h-28 bg-neutral-100 rounded"></div>
+              <div className="h-8 bg-neutral-100 rounded w-2/3"></div>
+            </div>
+          ) : (
+            children
+          )}
+        </div>
+      )}
       
       {/* Card Footer */}
       {footer && !isCollapsed && (
-        <div className="mt-4 pt-3 border-t border-neutral-200">
-          {footer}
-        </div>
+        <>
+          <Divider className="my-3" />
+          <div className="pt-2">
+            {footer}
+          </div>
+        </>
       )}
     </Card>
   )

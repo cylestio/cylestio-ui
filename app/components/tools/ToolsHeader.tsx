@@ -7,12 +7,10 @@ import {
   Text, 
   BadgeDelta, 
   Grid, 
-  Title, 
-  Button, 
-  Select,
-  SelectItem
+  Button
 } from '@tremor/react';
 import { WrenchScrewdriverIcon, ClockIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
+import PageHeader from '../PageHeader';
 
 // Type definition for the summary data
 type ToolSummary = {
@@ -52,58 +50,22 @@ export default function ToolsHeader({
   timeRange, 
   onTimeRangeChange 
 }: ToolsHeaderProps) {
+  // Define breadcrumb items
+  const breadcrumbs = [
+    { label: 'Tools', href: '/tools', current: true },
+  ];
+
   return (
-    <div className="space-y-4">
-      <Flex justifyContent="between" alignItems="center">
-        <div>
-          <Title>Tool Explorer</Title>
-          <Text>Monitor and analyze tool executions across your platform</Text>
-        </div>
-        <Flex justifyContent="end" className="gap-4">
-          <Select 
-            value={timeRange} 
-            onValueChange={onTimeRangeChange}
-            className="w-32"
-          >
-            <SelectItem value="1h">Last Hour</SelectItem>
-            <SelectItem value="1d">Last Day</SelectItem>
-            <SelectItem value="7d">Last 7 Days</SelectItem>
-            <SelectItem value="30d">Last 30 Days</SelectItem>
-          </Select>
-          <Flex className="border rounded-md overflow-hidden">
-            <Button
-              variant={timeRange === '1h' ? "primary" : "secondary"}
-              onClick={() => onTimeRangeChange('1h')}
-              className="rounded-none border-0"
-            >
-              1h
-            </Button>
-            <Button
-              variant={timeRange === '1d' ? "primary" : "secondary"}
-              onClick={() => onTimeRangeChange('1d')}
-              className="rounded-none border-0"
-            >
-              1d
-            </Button>
-            <Button
-              variant={timeRange === '7d' ? "primary" : "secondary"}
-              onClick={() => onTimeRangeChange('7d')}
-              className="rounded-none border-0"
-            >
-              7d
-            </Button>
-            <Button
-              variant={timeRange === '30d' ? "primary" : "secondary"}
-              onClick={() => onTimeRangeChange('30d')}
-              className="rounded-none border-0"
-            >
-              30d
-            </Button>
-          </Flex>
-        </Flex>
-      </Flex>
+    <div>
+      <PageHeader
+        title="Tool Explorer"
+        description="Monitor and analyze tool executions across your platform"
+        breadcrumbs={breadcrumbs}
+        timeRange={timeRange}
+        onTimeRangeChange={onTimeRangeChange}
+      />
       
-      <Grid numItemsMd={3} className="gap-6 mt-6">
+      <Grid numItemsMd={3} className="gap-6 mb-6">
         <Card decoration="top" decorationColor="indigo">
           <Flex justifyContent="start" className="space-x-4">
             <WrenchScrewdriverIcon className="h-8 w-8 text-indigo-500" />
@@ -139,7 +101,7 @@ export default function ToolsHeader({
         </Card>
       </Grid>
       
-      <Flex justifyContent="start" className="gap-2">
+      <Flex justifyContent="start" className="gap-2 mb-6">
         <Button 
           variant="secondary" 
           onClick={() => onFilterPreset('all')}

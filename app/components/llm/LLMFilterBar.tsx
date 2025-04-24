@@ -90,9 +90,9 @@ export default function LLMFilterBar({
       onFilterChange({
         ...filters,
         timeRange: 'custom',
-        // Initialize with last 7 days if no custom range exists
+        // Initialize with last 30 days if no custom range exists
         customDateRange: filters.customDateRange || {
-          from: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+          from: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
           to: new Date()
         }
       });

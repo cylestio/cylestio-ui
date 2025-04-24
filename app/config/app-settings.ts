@@ -28,7 +28,7 @@ export const appSettings = {
    * Time range options for filtering
    */
   timeRanges: {
-    default: '7d',
+    default: '30d',
     options: ['24h', '7d', '30d']
   },
   

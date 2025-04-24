@@ -16,6 +16,10 @@ import {
 } from './index'
 
 import { DateRangePickerValue } from '@tremor/react'
+import PageTemplate from '../PageTemplate'
+import ContentSection from '../ContentSection'
+import { SPACING } from '../spacing'
+import RefreshButton from '../RefreshButton'
 
 import {
   getLLMAnalytics,
@@ -43,7 +47,7 @@ import type {
 } from './index'
 
 // Default time range
-const DEFAULT_TIME_RANGE = '7d'
+const DEFAULT_TIME_RANGE = '30d'
 
 // Default page size
 const DEFAULT_PAGE_SIZE = 25
@@ -193,6 +197,9 @@ export default function LLMExplorerContainer({
   // Router for URL manipulation
   const router = useRouter()
   const searchParamsObj = useSearchParams()
+  
+  // Add state for refresh key
+  const [refreshKey, setRefreshKey] = useState(0);
   
   // Parse search params on initial load
   useEffect(() => {
@@ -922,47 +929,71 @@ export default function LLMExplorerContainer({
     return { start_date, end_date };
   };
   
+  // Add refresh handler
+  const handleRefresh = () => {
+    setRefreshKey(prev => prev + 1);
+    fetchData(true);
+  };
+  
   return (
-    <div className="space-y-6 w-full max-w-full">
-      <LLMHeader
-        metrics={metrics}
-        activeTab={activeTab}
-        onTabChange={handleTabChange}
-        loading={loading}
-        className="w-full"
-      />
-      
-      <div className="w-full py-2 border-b">
-        <Tab.Group selectedIndex={activeTab} onChange={handleTabChange}>
-          <Tab.List className="flex space-x-1">
-            <Tab className={({ selected }) => classNames('px-4 py-2 text-sm font-medium', selected ? 'text-primary-600 border-b-2 border-primary-600' : 'text-gray-500 hover:text-gray-700')}>
-              Analytics
-            </Tab>
-            <Tab className={({ selected }) => classNames('px-4 py-2 text-sm font-medium', selected ? 'text-primary-600 border-b-2 border-primary-600' : 'text-gray-500 hover:text-gray-700')}>
-              Conversations
-            </Tab>
-          </Tab.List>
-        </Tab.Group>
-      </div>
-      
-      <LLMFilterBar
-        filters={filters}
-        onFilterChange={handleFilterChange}
-        availableModels={availableModels}
-        availableAgents={availableAgents}
-        loading={loading}
-        showSearch={activeTab === 1} // Enable search for conversations tab
-      />
-      
-      {selectedTraceId ? (
-        <LLMConversationFlow
-          traceId={selectedTraceId}
-          onClose={handleBackFromConversation}
+    <PageTemplate
+      title="LLM Explorer"
+      description="Analyze LLM requests, responses, and performance metrics"
+      breadcrumbs={[
+        { label: 'Home', href: '/' },
+        { label: 'LLM Explorer', current: true }
+      ]}
+      timeRange={filters.timeRange}
+      onTimeRangeChange={(value) => handleFilterChange({ ...filters, timeRange: value })}
+      headerContent={<RefreshButton onClick={handleRefresh} />}
+    >
+      <ContentSection spacing="default">
+        <LLMHeader
+          metrics={metrics}
+          activeTab={activeTab}
+          onTabChange={handleTabChange}
           loading={loading}
           className="w-full"
+          timeRange={filters.timeRange}
+          onTimeRangeChange={(value) => handleFilterChange({...filters, timeRange: value})}
         />
+        
+        <div className="w-full py-2 border-b">
+          <Tab.Group selectedIndex={activeTab} onChange={handleTabChange}>
+            <Tab.List className="flex space-x-1">
+              <Tab className={({ selected }) => classNames('px-4 py-2 text-sm font-medium', selected ? 'text-primary-600 border-b-2 border-primary-600' : 'text-gray-500 hover:text-gray-700')}>
+                Analytics
+              </Tab>
+              <Tab className={({ selected }) => classNames('px-4 py-2 text-sm font-medium', selected ? 'text-primary-600 border-b-2 border-primary-600' : 'text-gray-500 hover:text-gray-700')}>
+                Conversations
+              </Tab>
+            </Tab.List>
+          </Tab.Group>
+        </div>
+      </ContentSection>
+      
+      <ContentSection spacing="default">
+        <LLMFilterBar
+          filters={filters}
+          onFilterChange={handleFilterChange}
+          availableModels={availableModels}
+          availableAgents={availableAgents}
+          loading={loading}
+          showSearch={activeTab === 1} // Enable search for conversations tab
+        />
+      </ContentSection>
+      
+      {selectedTraceId ? (
+        <ContentSection spacing="default">
+          <LLMConversationFlow
+            traceId={selectedTraceId}
+            onClose={handleBackFromConversation}
+            loading={loading}
+            className="w-full"
+          />
+        </ContentSection>
       ) : (
-        <div className="w-full max-w-full">
+        <ContentSection spacing="default">
           {activeTab === 0 && (
             <div className="space-y-6">
               <LLMBreakdownCharts
@@ -988,8 +1019,8 @@ export default function LLMExplorerContainer({
               className="w-full"
             />
           )}
-        </div>
+        </ContentSection>
       )}
-    </div>
+    </PageTemplate>
   )
 } 

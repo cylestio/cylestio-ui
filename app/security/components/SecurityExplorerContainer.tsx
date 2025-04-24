@@ -14,13 +14,18 @@ import {
   Card,
   Badge,
   Flex,
+  Select,
+  SelectItem,
 } from '@tremor/react';
-import { ShieldExclamationIcon } from '@heroicons/react/24/outline';
-import EnhancedBreadcrumbs from '../../components/EnhancedBreadcrumbs';
+import { ShieldExclamationIcon, ClockIcon } from '@heroicons/react/24/outline';
 import SecurityDashboard from './SecurityDashboard';
 import SecurityAlertsTable from './SecurityAlertsTable';
 import SecurityFilterBar from './SecurityFilterBar';
 import { buildQueryParams } from '../../lib/api';
+import PageTemplate from '../../components/PageTemplate';
+import ContentSection from '../../components/ContentSection';
+import { SPACING } from '../../components/spacing';
+import RefreshButton from '../../components/RefreshButton';
 
 interface SecurityExplorerContainerProps {
   searchParams: URLSearchParams;
@@ -44,10 +49,13 @@ export default function SecurityExplorerContainer({ searchParams }: SecurityExpl
     alert_level: searchParams.get('alert_level') || '',
     llm_vendor: searchParams.get('llm_vendor') || '',
     search: searchParams.get('search') || '',
-    time_range: searchParams.get('time_range') || '7d',
+    time_range: searchParams.get('time_range') || '30d',
     page: parseInt(searchParams.get('page') || '1'),
     tab: searchParams.get('tab') || '0',
   });
+
+  // Add refresh key state
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Update URL when filters change
   useEffect(() => {
@@ -82,79 +90,86 @@ export default function SecurityExplorerContainer({ searchParams }: SecurityExpl
     });
   };
 
+  // Add refresh handler
+  const handleRefresh = () => {
+    setRefreshKey(prev => prev + 1);
+    // Force refresh by navigating to the same page
+    const queryString = buildQueryParams({
+      ...filters,
+      _refreshKey: refreshKey + 1
+    });
+    const newPath = queryString ? `/security${queryString}` : '/security';
+    router.replace(newPath, { scroll: false });
+  };
+
   // Breadcrumbs
   const breadcrumbItems = [
-    { label: 'Dashboard', href: '/' },
-    { label: 'Security', href: '/security', active: true },
+    { label: 'Security', href: '/security', current: true },
   ];
 
   return (
-    <div>
-      <EnhancedBreadcrumbs items={breadcrumbItems} />
+    <PageTemplate
+      title="Security Explorer"
+      description="Monitor, investigate, and respond to security-related issues across your LLM applications"
+      breadcrumbs={breadcrumbItems}
+      timeRange={filters.time_range}
+      onTimeRangeChange={(value) => handleFilterChange({ time_range: value })}
+      headerContent={<RefreshButton onClick={handleRefresh} />}
+      contentSpacing="default"
+    >
+      <ContentSection spacing="default">
+        <SecurityFilterBar 
+          filters={filters} 
+          onFilterChange={handleFilterChange} 
+        />
+      </ContentSection>
       
-      <Flex justifyContent="between" alignItems="center" className="mb-6">
-        <div>
-          <Flex alignItems="center" className="gap-2">
-            <ShieldExclamationIcon className="h-8 w-8 text-red-500" />
-            <Title>Security Explorer</Title>
-          </Flex>
-          <Text className="mt-1">Monitor, investigate, and respond to security-related issues across your LLM applications</Text>
-        </div>
-        
-        <div>
-          <Badge size="xl" color="red">Beta</Badge>
-        </div>
-      </Flex>
-      
-      <SecurityFilterBar 
-        filters={filters} 
-        onFilterChange={handleFilterChange} 
-      />
-      
-      <TabGroup className="mt-6" index={activeTab} onIndexChange={handleTabChange}>
-        <TabList>
-          <Tab>Dashboard</Tab>
-          <Tab>Security Alerts</Tab>
-          <Tab>Policy Violations</Tab>
-        </TabList>
-        
-        <TabPanels>
-          <TabPanel>
-            <SecurityDashboard 
-              timeRange={filters.time_range} 
-              filters={filters} 
-            />
-          </TabPanel>
+      <ContentSection spacing="default">
+        <TabGroup index={activeTab} onIndexChange={handleTabChange}>
+          <TabList>
+            <Tab>Dashboard</Tab>
+            <Tab>Security Alerts</Tab>
+            <Tab>Policy Violations</Tab>
+          </TabList>
           
-          <TabPanel>
-            <Card className="mt-6">
-              <SecurityAlertsTable 
-                filters={{
-                  ...filters,
-                  // Filter out sensitive_data alerts from the Alerts tab
-                  category_exclude: 'sensitive_data'
-                }}
-                onPageChange={handlePageChange} 
+          <TabPanels>
+            <TabPanel>
+              <SecurityDashboard 
+                timeRange={filters.time_range} 
+                filters={filters} 
               />
-            </Card>
-          </TabPanel>
-          
-          <TabPanel>
-            <Grid numItemsMd={1} className="mt-6 gap-6">
-              <Card>
+            </TabPanel>
+            
+            <TabPanel>
+              <Card className="mt-6">
                 <SecurityAlertsTable 
                   filters={{
                     ...filters,
-                    // Only show sensitive_data alerts in the Policies tab
-                    category: 'sensitive_data'
+                    // Filter out sensitive_data alerts from the Alerts tab
+                    category_exclude: 'sensitive_data'
                   }}
-                  onPageChange={handlePageChange}
+                  onPageChange={handlePageChange} 
                 />
               </Card>
-            </Grid>
-          </TabPanel>
-        </TabPanels>
-      </TabGroup>
-    </div>
+            </TabPanel>
+            
+            <TabPanel>
+              <Grid numItemsMd={1} className="mt-6 gap-6">
+                <Card>
+                  <SecurityAlertsTable 
+                    filters={{
+                      ...filters,
+                      // Only show sensitive_data alerts in the Policies tab
+                      category: 'sensitive_data'
+                    }}
+                    onPageChange={handlePageChange}
+                  />
+                </Card>
+              </Grid>
+            </TabPanel>
+          </TabPanels>
+        </TabGroup>
+      </ContentSection>
+    </PageTemplate>
   );
 } 

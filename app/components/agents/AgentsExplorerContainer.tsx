@@ -16,6 +16,14 @@ import appSettings from '../../config/app-settings';
 import { fetchAPI, buildQueryParams } from '../../lib/api';
 import { AGENTS } from '../../lib/api-endpoints';
 import { Agent, AgentListResponse, PaginationInfo, AgentFilterState, TimeRangeOption } from '../../types/agent';
+import PageHeader from '../PageHeader';
+import PageContainer from '../PageContainer';
+import PageTemplate from '../PageTemplate';
+import MetricsDisplay from '../MetricsDisplay';
+import ContentSection from '../ContentSection';
+import { ServerIcon, BoltIcon, ExclamationTriangleIcon, ClockIcon } from '@heroicons/react/24/outline';
+import { SPACING } from '../spacing';
+import RefreshButton from '../RefreshButton';
 
 // Helper function to determine if an agent is active based on its last activity
 const isAgentActive = (agent: Agent): boolean => {
@@ -48,7 +56,7 @@ const isAgentInTimeRange = (agent: Agent, timeRange: TimeRangeOption): boolean =
       timeThreshold = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
       break;
     default:
-      timeThreshold = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); // Default to 7 days
+      timeThreshold = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000); // Default to 30 days
   }
   
   return lastActive >= timeThreshold;
@@ -366,112 +374,139 @@ export function AgentsExplorerContainer() {
     {
       id: 'search',
       label: 'Search',
-      type: 'search' as const,
+      type: 'search',
       placeholder: 'Search agent name...',
       defaultValue: '' // Don't derive from filters to avoid circular dependency
     }
   ], [appSettings.agents.activeThresholdHours]); // Only depends on app settings
 
-  if (loading && agents.length === 0) {
-    return <LoadingState message="Loading agents..." />;
-  }
+  // Process data for metric cards
+  const metricsData = useMemo(() => {
+    const totalAgents = agents.length;
+    const activeAgents = agents.filter(agent => isAgentActive(agent)).length;
+    const errorAgents = agents.filter(agent => agent.status === 'error').length;
+    const inactiveAgents = totalAgents - activeAgents;
+    
+    return [
+      {
+        title: 'Total Agents',
+        value: totalAgents,
+        variant: 'primary' as const,
+        icon: <ServerIcon className="h-6 w-6" />
+      },
+      {
+        title: 'Active (last 24h)',
+        value: activeAgents,
+        variant: 'success' as const,
+        icon: <BoltIcon className="h-6 w-6" />
+      },
+      {
+        title: 'Error State',
+        value: errorAgents,
+        variant: 'error' as const,
+        icon: <ExclamationTriangleIcon className="h-6 w-6" />
+      },
+      {
+        title: 'Inactive',
+        value: inactiveAgents,
+        variant: 'neutral' as const,
+        icon: <ClockIcon className="h-6 w-6" />
+      }
+    ];
+  }, [agents]);
+  
+  const breadcrumbs = [
+    { label: 'Agents', current: true }
+  ];
 
+  // Add refresh key state
+  const [refreshKey, setRefreshKey] = useState(0);
+  
+  // Add refresh handler function after fetchAgents function
+  const handleRefresh = () => {
+    setRefreshKey(prev => prev + 1);
+    setLoading(true);
+    fetchAgents();
+  };
+  
   return (
-    <div>
-      <BreadcrumbNavigation
-        items={[
-          { label: 'Home', href: '/' },
-          { label: 'Agents', href: '/agents', current: true },
-        ]}
-        preserveFilters={true}
-      />
-      
-      <div className="mb-6 flex justify-between items-center">
-        <Title className="text-2xl font-bold">Agents Explorer</Title>
-        <div className="w-40">
-          <Select value={timeRange} onValueChange={handleTimeRangeChange}>
-            <SelectItem value="24h">Last 24 hours</SelectItem>
-            <SelectItem value="7d">Last 7 days</SelectItem>
-            <SelectItem value="30d">Last 30 days</SelectItem>
-          </Select>
-        </div>
-      </div>
-      
-      <div className="mb-6">
-        <AgentsOverview agents={agents} timeRange={timeRange} />
-      </div>
-      
-      <Card className="mb-6">
-        <div className="mb-4">
-          <FilterBar 
-            filters={filterOptions} 
-            onFilterChange={handleFilterChange}
-            preserveFiltersInUrl={true}
+    <PageTemplate
+      title="Agents Explorer"
+      description="Monitor, manage, and analyze your AI agents' activities and performance"
+      breadcrumbs={breadcrumbs}
+      timeRange={timeRange}
+      onTimeRangeChange={handleTimeRangeChange}
+      headerContent={<RefreshButton onClick={handleRefresh} />}
+      contentSpacing="default"
+    >
+      {loading ? (
+        <LoadingState variant="skeleton" contentType="table" />
+      ) : error ? (
+        <ErrorMessage 
+          message={error}
+          severity="error"
+          retryText="Retry"
+          onRetry={fetchAgents}
+        />
+      ) : (
+        <>
+          {/* Metrics Overview */}
+          <MetricsDisplay
+            metrics={metricsData}
+            metricCardComponent={DrilldownMetricCard}
+            columns={{ default: 1, sm: 2, lg: 4 }}
           />
-        </div>
-        
-        <AgentsTable 
-          agents={agents} 
-          pagination={pagination}
-          onPageChange={handlePageChange}
-        />
-      </Card>
-    </div>
-  );
-}
-
-// Inline AgentsOverview component
-function AgentsOverview({ agents, timeRange }: { agents: Agent[], timeRange: string }) {
-  // Calculate metrics based on filtered agents
-  const totalAgents = agents.length;
-  
-  // Active agents in the selected time range
-  const activeAgents = agents.filter(agent => isAgentActive(agent)).length;
-  
-  // Inactive agents in the selected time range
-  const inactiveAgents = totalAgents - activeAgents;
-  
-  // Agents with errors
-  const errorAgents = agents.filter(a => a.error_count > 0).length;
-  
-  // Total request count & errors
-  const totalRequests = agents.reduce((sum, agent) => sum + (agent.request_count || 0), 0);
-  const totalErrors = agents.reduce((sum, agent) => sum + (agent.error_count || 0), 0);
-  
-  // Get human-readable time range for display
-  const timeRangeDisplay = timeRange === '24h' ? '24 hours' : 
-                         timeRange === '7d' ? '7 days' : 
-                         timeRange === '30d' ? '30 days' : 
-                         '7 days';
-
-  return (
-    <div>
-      <Grid numItems={1} numItemsMd={2} numItemsLg={4} className="gap-4 mb-6">
-        <DrilldownMetricCard
-          title={`Total Agents (last ${timeRangeDisplay})`}
-          value={totalAgents.toString()}
-          variant="primary"
-        />
-        
-        <DrilldownMetricCard
-          title={`Active (last ${appSettings.agents.activeThresholdHours}h)`}
-          value={activeAgents.toString()}
-          variant="success"
-        />
-        
-        <DrilldownMetricCard
-          title="Error State"
-          value={errorAgents.toString()}
-          variant="error"
-        />
-        
-        <DrilldownMetricCard
-          title="Inactive"
-          value={inactiveAgents.toString()}
-          variant="neutral"
-        />
-      </Grid>
-    </div>
+          
+          {/* Filters Section */}
+          <ContentSection spacing="default">
+            <FilterBar
+              filters={[
+                {
+                  id: 'status',
+                  label: 'Status',
+                  type: 'select',
+                  options: [
+                    { value: 'all', label: 'All' },
+                    { value: 'active', label: 'Active' },
+                    { value: 'inactive', label: 'Inactive' }
+                  ],
+                  defaultValue: filters.status || 'all'
+                },
+                {
+                  id: 'search',
+                  label: 'Search',
+                  type: 'search',
+                  placeholder: 'Search agent name...',
+                  defaultValue: filters.search || ''
+                },
+                {
+                  id: 'sort_by',
+                  label: 'Sort By',
+                  type: 'select',
+                  options: [
+                    { value: 'updated_at', label: 'Last Updated' },
+                    { value: 'name', label: 'Name' },
+                    { value: 'request_count', label: 'Requests' }
+                  ],
+                  defaultValue: filters.sort_by || 'updated_at'
+                }
+              ]}
+              onFilterChange={handleFilterChange}
+              preserveFiltersInUrl={true}
+            />
+          </ContentSection>
+          
+          {/* Agents Table */}
+          <ContentSection spacing="default">
+            <AgentsTable 
+              agents={agents}
+              pagination={pagination}
+              onPageChange={handlePageChange}
+            />
+          </ContentSection>
+        </>
+      )}
+    </PageTemplate>
   );
 }
 

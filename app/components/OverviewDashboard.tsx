@@ -74,6 +74,8 @@ import TokenUsageBreakdown from './TokenUsageBreakdown'
 import ToolUsageAnalysis from './ToolUsageAnalysis'
 import ModelUsageAnalytics from './ModelUsageAnalytics'
 import { formatISOToLocalDisplay, formatChartDate as formatChartTimestamp } from '../lib/dateUtils'
+import { SPACING } from './spacing'
+import ContentSection from './ContentSection'
 
 // Define types based on the new API
 type DashboardMetric = {
@@ -288,14 +290,26 @@ export default function OverviewDashboard({ timeRange }: OverviewDashboardProps)
       try {
         console.log('Fetching security alerts count...');
         // Using /v1/alerts instead of /v1/alerts/count which had errors
-        const alertsResponse = await fetchAPI<{total_count: number; metrics: {total_count: number}; time_range: {from: string; to: string; description: string}}>(`${SECURITY.ALERTS}?time_range=${timeRange}`);
+        const alertsResponse = await fetchAPI<{total_count: number; metrics: {total_count: number; by_category: Record<string, number>}; time_range: {from: string; to: string; description: string}}>(`${SECURITY.ALERTS}?time_range=${timeRange}`);
         const alertsCount = alertsResponse?.total_count || alertsResponse?.metrics?.total_count || 0;
         console.log('Received security alerts count:', alertsCount);
         
-        // Update metrics with security alerts count
+        // Get count of sensitive_data category alerts (policy violations)
+        const sensitiveDataCount = alertsResponse?.metrics?.by_category?.sensitive_data || 0;
+        console.log('Sensitive data alerts count:', sensitiveDataCount);
+        
+        // Update metrics with security alerts count (total)
         currentMetrics.push({
           metric: 'security_alerts',
           value: alertsCount,
+          change: 0,
+          trend: 'stable'
+        });
+        
+        // Add policy violations count (sensitive_data category)
+        currentMetrics.push({
+          metric: 'policy_violations',
+          value: sensitiveDataCount,
           change: 0,
           trend: 'stable'
         });
@@ -310,6 +324,13 @@ export default function OverviewDashboard({ timeRange }: OverviewDashboardProps)
         // Add a fallback zero metric for security alerts
         currentMetrics.push({
           metric: 'security_alerts',
+          value: 0,
+          change: 0,
+          trend: 'stable'
+        });
+        // Add a fallback zero metric for policy violations
+        currentMetrics.push({
+          metric: 'policy_violations',
           value: 0,
           change: 0,
           trend: 'stable'
@@ -767,15 +788,15 @@ export default function OverviewDashboard({ timeRange }: OverviewDashboardProps)
   console.log('Current token usage cost metric:', tokenUsageCostMetric);
   
   return (
-    <div className="p-4 sm:p-6 pt-0">
+    <div className="pt-0">
       <div>
         {/* Time range filter moved to page.tsx for better layout */}
         
-        <div className="mb-4 md:mb-6">
+        <ContentSection spacing="default">
           {/* System Overview metric cards */}
           <ResponsiveContainer
             defaultLayout="grid"
-            columns={{ default: 2, md: 2, lg: 4 }}
+            columns={{ default: 2, md: 2, lg: 5 }}
             spacing="md"
           >
             <Link href="/agents" className="block hover:no-underline transition duration-200 transform hover:scale-[1.02]">
@@ -798,20 +819,42 @@ export default function OverviewDashboard({ timeRange }: OverviewDashboardProps)
                 size="md"
                 trend={undefined}
                 loading={loading}
+                className="h-full"
               />
             </Link>
             
             <Link href="/security" className="block hover:no-underline transition duration-200 transform hover:scale-[1.02]">
               <MetricCard
                 title="Security Alerts"
-                value={metrics.find(m => m.metric === 'security_alerts')?.value || 0}
+                value={(() => {
+                  // Get total security alerts
+                  const totalAlerts = metrics.find(m => m.metric === 'security_alerts')?.value || 0;
+                  // Get policy violations count (if available)
+                  const policyViolations = metrics.find(m => m.metric === 'policy_violations')?.value || 0;
+                  // Return security alerts excluding policy violations
+                  return Math.max(0, totalAlerts - policyViolations);
+                })()}
                 icon={<ShieldExclamationIcon className="w-7 h-7 text-red-600" />}
                 variant="error"
                 valueClassName="text-2xl"
                 size="md"
                 trend={undefined}
                 loading={loading}
-
+                className="h-full"
+              />
+            </Link>
+            
+            <Link href="/security?tab=2" className="block hover:no-underline transition duration-200 transform hover:scale-[1.02]">
+              <MetricCard
+                title="Policy Violations"
+                value={metrics.find(m => m.metric === 'policy_violations')?.value || 0}
+                icon={<ExclamationTriangleIcon className="w-7 h-7 text-amber-600" />}
+                variant="warning"
+                valueClassName="text-2xl"
+                size="md"
+                trend={undefined}
+                loading={loading}
+                className="h-full"
               />
             </Link>
             
@@ -838,6 +881,7 @@ export default function OverviewDashboard({ timeRange }: OverviewDashboardProps)
                 size="md"
                 trend={undefined}
                 loading={loading}
+                className="h-full"
               />
             </Link>
             
@@ -851,91 +895,35 @@ export default function OverviewDashboard({ timeRange }: OverviewDashboardProps)
                 size="md"
                 trend={undefined}
                 loading={loading}
+                className="h-full"
               />
             </Link>
           </ResponsiveContainer>
-        </div>
-        
-        {/* ResponsiveContainer removed along with System Health and LLM Requests components */}
-
-        {/* Continue with other sections... */}
+        </ContentSection>
         
         {/* Token Usage Breakdown Section */}
-        <div className="mt-6 mb-8">
+        <ContentSection spacing="default">
           <TokenUsageBreakdown 
             timeRange={timeRange}
             className="h-full" 
           />
-        </div>
+        </ContentSection>
         
         {/* Model Usage Analytics Section */}
-        <div className="mt-6 mb-8">
+        <ContentSection spacing="default">
           <ModelUsageAnalytics 
             timeRange={timeRange}
             className="h-full"
           />
-        </div>
+        </ContentSection>
         
         {/* Tool Usage Analysis Section */}
-        <div className="mt-6 mb-8">
+        <ContentSection spacing="default">
           <ToolUsageAnalysis 
             timeRange={timeRange}
             className="h-full"
           />
-        </div>
-        
-        {/* Security Alerts Section */}
-        <div className="mt-6 mb-8">
-          <Card className="p-6">
-            <Flex justifyContent="between" alignItems="center" className="mb-4">
-              <Flex alignItems="center" className="gap-2">
-                <ShieldExclamationIcon className="h-6 w-6 text-red-600" />
-                <Title>Security Alerts</Title>
-              </Flex>
-              <Link href="/security">
-                <Button size="xs" variant="light" icon={EyeIcon}>
-                  View All
-                </Button>
-              </Link>
-            </Flex>
-            
-            <Text className="mb-6">
-              Monitor your LLM application security and respond to potential threats
-            </Text>
-            
-            <Flex className="gap-4 flex-wrap">
-              <Card className="p-4 shadow-sm border border-red-100 flex-1" decoration="top" decorationColor="red">
-                <Text>Critical Alerts</Text>
-                <Metric className="text-red-600">
-                  {metrics.find(m => m.metric === 'security_alerts_critical')?.value || 0}
-                </Metric>
-                <Link href="/security?severity=critical">
-                  <Text className="text-xs text-blue-600 hover:text-blue-800 hover:underline mt-2">View Critical Alerts</Text>
-                </Link>
-              </Card>
-              
-              <Card className="p-4 shadow-sm border border-orange-100 flex-1" decoration="top" decorationColor="orange">
-                <Text>High Severity</Text>
-                <Metric className="text-orange-600">
-                  {metrics.find(m => m.metric === 'security_alerts_high')?.value || 0}
-                </Metric>
-                <Link href="/security?severity=high">
-                  <Text className="text-xs text-blue-600 hover:text-blue-800 hover:underline mt-2">View High Severity Alerts</Text>
-                </Link>
-              </Card>
-              
-              <Card className="p-4 shadow-sm border border-gray-100 flex-1" decoration="top" decorationColor="blue">
-                <Text>Total Alerts</Text>
-                <Metric>
-                  {metrics.find(m => m.metric === 'security_alerts')?.value || 0}
-                </Metric>
-                <Link href="/security">
-                  <Text className="text-xs text-blue-600 hover:text-blue-800 hover:underline mt-2">Security Explorer</Text>
-                </Link>
-              </Card>
-            </Flex>
-          </Card>
-        </div>
+        </ContentSection>
         
         {/* Continue with the rest of the dashboard ... */}
       </div>

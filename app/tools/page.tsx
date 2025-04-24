@@ -6,9 +6,5 @@ import ToolExplorerContainer from '../components/tools/ToolExplorerContainer';
 export default function ToolExplorerPage() {
   const searchParams = useSearchParams();
   
-  return (
-    <div className="w-full">
-      <ToolExplorerContainer searchParams={searchParams} />
-    </div>
-  );
+  return <ToolExplorerContainer searchParams={searchParams} />;
 } 
