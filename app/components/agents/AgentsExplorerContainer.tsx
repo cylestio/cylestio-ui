@@ -86,58 +86,51 @@ export function AgentsExplorerContainer() {
     time_range: timeRange
   });
 
-  // Get initial filters from URL - only once on initial load
+  // Get initial filters from URL - only once on initial mount
   const searchParams = useSearchParams();
   const didInitializeFromUrl = useRef(false);
-  
-  // Update filters from URL on initial load only
-  useEffect(() => {
-    if (didInitializeFromUrl.current) return;
-    
-    const initialFilters: AgentFilterState = {
-      page: parseInt(searchParams.get('page') || '1', 10),
-      status: searchParams.get('status') || undefined,
-      sort_by: searchParams.get('sort_by') || undefined,
-      sort_dir: (searchParams.get('sort_dir') as 'asc' | 'desc') || undefined,
-      search: searchParams.get('search') || undefined,
-      time_range: (searchParams.get('time_range') as TimeRangeOption) || timeRange
-    };
-    
-    setFilters(initialFilters);
-    if (initialFilters.time_range) {
-      setTimeRange(initialFilters.time_range as TimeRangeOption);
-    }
-    didInitializeFromUrl.current = true;
-  }, [searchParams, timeRange]); // Only run when searchParams change
+  const didMount = useRef(false); // NEW: track first render
 
-  // Update URL with current filters
-  const updatingUrl = useRef(false);
-  
+  // Initialize filters from URL only on first mount
   useEffect(() => {
-    // Only update URL after initial load and not during an existing update
-    if (!didInitializeFromUrl.current || updatingUrl.current) return;
-    
-    // Set flag to indicate we're updating
+    if (!didInitializeFromUrl.current) {
+      const initialFilters: AgentFilterState = {
+        page: parseInt(searchParams.get('page') || '1', 10),
+        status: searchParams.get('status') || undefined,
+        sort_by: searchParams.get('sort_by') || undefined,
+        sort_dir: (searchParams.get('sort_dir') as 'asc' | 'desc') || undefined,
+        search: searchParams.get('search') || undefined,
+        time_range: (searchParams.get('time_range') as TimeRangeOption) || timeRange
+      };
+      setFilters(initialFilters);
+      if (initialFilters.time_range) {
+        setTimeRange(initialFilters.time_range as TimeRangeOption);
+      }
+      didInitializeFromUrl.current = true;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run on mount
+
+  // Update URL with current filters, but skip first render
+  const updatingUrl = useRef(false);
+  useEffect(() => {
+    if (!didMount.current) {
+      didMount.current = true;
+      return;
+    }
+    if (updatingUrl.current) return;
     updatingUrl.current = true;
-    
     try {
       const queryParams = new URLSearchParams();
-      
-      // Add all non-empty filters to URL
       Object.entries(filters).forEach(([key, value]) => {
         if (value !== undefined && value !== null && value !== '') {
           queryParams.set(key, String(value));
         }
       });
-      
-      // Update URL with new query params
       const queryString = queryParams.toString();
       const newUrl = queryString ? `${pathname}?${queryString}` : pathname;
-      
-      // Use replace to avoid adding to browser history
       router.replace(newUrl, { scroll: false });
     } finally {
-      // Reset flag once update is complete (in next tick)
       setTimeout(() => {
         updatingUrl.current = false;
       }, 0);
