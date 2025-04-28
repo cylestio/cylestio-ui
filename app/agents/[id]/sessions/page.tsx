@@ -222,7 +222,13 @@ export default function AgentSessionsPage({ params }: AgentSessionsPageProps) {
           </TableHead>
           <TableBody>
             {sessions.map((session) => (
-              <TableRow key={session.session_id}>
+              <TableRow 
+                key={session.session_id} 
+                className="cursor-pointer hover:bg-gray-50"
+                onClick={() => {
+                  window.location.href = `/events/session/${session.session_id}`;
+                }}
+              >
                 <TableCell className="font-medium">{session.session_id}</TableCell>
                 <TableCell>{formatTimestamp(session.start_time)}</TableCell>
                 <TableCell>{formatDuration(session.duration_seconds)}</TableCell>
@@ -235,9 +241,9 @@ export default function AgentSessionsPage({ params }: AgentSessionsPageProps) {
                 <TableCell>
                   <StatusBadge status={session.status} />
                 </TableCell>
-                <TableCell>
-                  <Link href={`/agents/${agentId}/sessions/${session.session_id}`}>
-                    <div className="flex items-center text-blue-500 hover:underline cursor-pointer">
+                <TableCell onClick={(e) => e.stopPropagation()}>
+                  <Link href={`/events/session/${session.session_id}`}>
+                    <div className="flex items-center text-blue-500 hover:text-blue-700 hover:underline cursor-pointer bg-white px-2 py-1 rounded border border-blue-200">
                       <span className="mr-1">Details</span>
                       <ChevronRightIcon className="h-4 w-4" />
                     </div>

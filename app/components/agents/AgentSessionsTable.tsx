@@ -201,7 +201,6 @@ export function AgentSessionsTable({ agentId, timeRange }: AgentSessionsTablePro
   if (sessions.length === 0) {
     return (
       <div className="text-center py-8">
-        <Title>Recent Sessions</Title>
         <Text className="mt-2">No sessions found for this time period</Text>
       </div>
     );
@@ -209,11 +208,6 @@ export function AgentSessionsTable({ agentId, timeRange }: AgentSessionsTablePro
 
   return (
     <div>
-      <div className="mb-4">
-        <Title>Recent Sessions</Title>
-        <Text>Sessions for this agent in the selected time period</Text>
-      </div>
-
       <Table>
         <TableHead>
           <TableRow>
@@ -230,8 +224,14 @@ export function AgentSessionsTable({ agentId, timeRange }: AgentSessionsTablePro
         </TableHead>
         <TableBody>
           {sessions.map((session) => (
-            <TableRow key={session.session_id}>
-              <TableCell className="font-medium">{session.session_id.slice(0, 8)}...</TableCell>
+            <TableRow 
+              key={session.session_id} 
+              className="cursor-pointer hover:bg-gray-50"
+              onClick={() => {
+                window.location.href = `/events/session/${session.session_id}`;
+              }}
+            >
+              <TableCell className="font-medium">{session.session_id}</TableCell>
               <TableCell>{formatTimestamp(session.start_time)}</TableCell>
               <TableCell>{formatDuration(session.duration_seconds)}</TableCell>
               <TableCell>{session.event_count}</TableCell>
@@ -243,18 +243,12 @@ export function AgentSessionsTable({ agentId, timeRange }: AgentSessionsTablePro
               <TableCell>
                 <StatusBadge status={session.status} />
               </TableCell>
-              <TableCell>
-                <Link href={`/agents/${agentId}/sessions/${session.session_id}`}>
-                  <Button 
-                    variant="light" 
-                    color="blue"
-                    size="xs"
-                  >
-                    <div className="flex items-center gap-1">
-                      <ChevronRightIcon className="h-4 w-4" />
-                      <span>Details</span>
-                    </div>
-                  </Button>
+              <TableCell onClick={(e) => e.stopPropagation()}>
+                <Link href={`/events/session/${session.session_id}`}>
+                  <div className="flex items-center text-blue-500 hover:text-blue-700 hover:underline cursor-pointer bg-white px-2 py-1 rounded border border-blue-200">
+                    <span className="mr-1">Details</span>
+                    <ChevronRightIcon className="h-4 w-4" />
+                  </div>
                 </Link>
               </TableCell>
             </TableRow>

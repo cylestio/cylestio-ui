@@ -96,6 +96,7 @@ export const AGENTS = {
   LLM_USAGE: (id: string) => `/v1/agents/${id}/llms`,
   LLM_REQUESTS: (id: string) => `/v1/agents/${id}/llms/requests`,
   TOKEN_USAGE: (id: string) => `/v1/agents/${id}/tokens`,
+  COST: (id: string) => `/v1/agents/${id}/cost`,
   TOOL_USAGE: (id: string) => `/v1/agents/${id}/tools`,
   TOOL_EXECUTIONS: (id: string) => `/v1/agents/${id}/tools/executions`,
   SESSIONS: (id: string) => `/v1/agents/${id}/sessions`,

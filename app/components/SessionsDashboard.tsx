@@ -528,7 +528,7 @@ export function SessionsDashboard() {
               ) : (
                 sessions.map((session) => (
                   <TableRow key={session.session_id}>
-                    <TableCell>{session.session_id.slice(0, 8)}...</TableCell>
+                    <TableCell>{session.session_id}</TableCell>
                     <TableCell>
                       <Link 
                         href={`/agents/${session.agent_id}`}

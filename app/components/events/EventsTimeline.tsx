@@ -121,8 +121,7 @@ export function EventsTimeline({
   );
 
   return (
-    <Card>
-      <Title className="mb-4">Event Volume Over Time</Title>
+    <>
       <TabGroup index={activeTab} onIndexChange={setActiveTab}>
         <TabList variant="solid" className="mb-4">
           <Tab>Total</Tab>
@@ -202,6 +201,6 @@ export function EventsTimeline({
           </TabPanel>
         </TabPanels>
       </TabGroup>
-    </Card>
+    </>
   );
 } 

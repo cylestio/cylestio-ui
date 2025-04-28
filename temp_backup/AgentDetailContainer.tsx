@@ -31,15 +31,10 @@ import { AgentMetricsDashboard, AgentMetricsRow } from './AgentMetricsDashboard'
 import { AgentSessionsTable } from './AgentSessionsTable';
 import { AgentLLMUsage } from './AgentLLMUsage';
 import { AgentToolUsage } from './AgentToolUsage';
-import { AgentLLMRequestsTable } from './AgentLLMRequestsTable';
 import { fetchAPI } from '../../lib/api';
 import { AGENTS } from '../../lib/api-endpoints';
 import { Agent, TimeRangeOption } from '../../types/agent';
 import appSettings from '../../config/app-settings';
-import { AgentTokenUsage } from './AgentTokenUsage';
-import { AgentToolExecutions } from './AgentToolExecutions';
-import { AgentTraces } from './AgentTraces';
-import { AgentAlerts } from './AgentAlerts';
 
 // Extend the Agent type if needed for the component's specific requirements
 interface ExtendedAgent extends Agent {
@@ -60,21 +55,6 @@ export function AgentDetailContainer({ agentId }: AgentDetailContainerProps) {
     (searchParams.get('time_range') as TimeRangeOption) || 
     appSettings.timeRanges.default as TimeRangeOption
   );
-
-  // Function to calculate success rate
-  function calculateSuccessRate(agent: ExtendedAgent | null): string {
-    if (!agent || !agent.metrics) return 'N/A';
-    
-    const requests = agent.metrics.request_count || 0;
-    const errors = agent.metrics.error_count || 0;
-    
-    // If no requests or zero requests, return N/A
-    if (requests === 0) return 'N/A';
-    
-    // Calculate success rate: (requests - errors) / requests * 100
-    const successRate = ((requests - errors) / requests) * 100;
-    return `${successRate.toFixed(1)}%`;
-  }
 
   // Function to handle time range changes
   const handleTimeRangeChange = (value: string) => {
@@ -209,20 +189,31 @@ export function AgentDetailContainer({ agentId }: AgentDetailContainerProps) {
         <AgentMetricsRow 
           agentId={agentId} 
           timeRange={timeRange} 
-          agent={agent as any} 
+          agent={agent} 
         />
       </div>
       
       {/* Agent Details Tabs */}
       <TabGroup className="mb-6">
         <TabList>
+          <Tab>Overview</Tab>
           <Tab>Sessions</Tab>
           <Tab>LLM Usage</Tab>
           <Tab>Tools</Tab>
-          <Tab>Alerts</Tab>
         </TabList>
         
         <TabPanels>
+          {/* Overview Panel - Use different component to avoid duplicate metrics */}
+          <TabPanel>
+            {/* Additional overview content can go here */}
+            <div className="py-4">
+              <Text className="text-gray-700">
+                This agent has processed {agent.request_count || 0} requests with a 
+                success rate of {agent.metrics?.success_rate || "N/A"}%.
+              </Text>
+            </div>
+          </TabPanel>
+          
           {/* Sessions Panel */}
           <TabPanel>
             <AgentSessionsTable agentId={agentId} timeRange={timeRange} />
@@ -236,11 +227,6 @@ export function AgentDetailContainer({ agentId }: AgentDetailContainerProps) {
           {/* Tools Panel */}
           <TabPanel>
             <AgentToolUsage agentId={agentId} timeRange={timeRange} />
-          </TabPanel>
-          
-          {/* Alerts Panel */}
-          <TabPanel>
-            <AgentAlerts agentId={agentId} timeRange={timeRange} />
           </TabPanel>
         </TabPanels>
       </TabGroup>

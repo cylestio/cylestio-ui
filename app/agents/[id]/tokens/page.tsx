@@ -7,6 +7,8 @@ import Link from 'next/link';
 import BreadcrumbNavigation from '../../../components/drilldown/BreadcrumbNavigation';
 import LoadingState from '../../../components/LoadingState';
 import ErrorMessage from '../../../components/ErrorMessage';
+import { fetchAPI } from '../../../lib/api';
+import { AGENTS } from '../../../lib/api-endpoints';
 
 // Types
 type TokenData = {
@@ -35,88 +37,246 @@ interface AgentTokensPageProps {
 export default function AgentTokensPage({ params }: AgentTokensPageProps) {
   const agentId = params.id;
   
-  // State
-  const [agentName, setAgentName] = useState<string>('');
-  const [tokenData, setTokenData] = useState<TokenData[]>([]);
-  const [modelUsage, setModelUsage] = useState<ModelUsage[]>([]);
+  // State with guaranteed initial values
+  const [agentName, setAgentName] = useState<string>(agentId);
+  const [tokenData, setTokenData] = useState<TokenData[]>([
+    {
+      timestamp: new Date().toISOString(),
+      input_tokens: 0,
+      output_tokens: 0,
+      total_tokens: 0
+    },
+    {
+      timestamp: new Date(Date.now() - 86400000).toISOString(), // Yesterday
+      input_tokens: 0,
+      output_tokens: 0,
+      total_tokens: 0
+    }
+  ]);
+  const [modelUsage, setModelUsage] = useState<ModelUsage[]>([
+    {
+      model: "Loading...",
+      vendor: "",
+      request_count: 0,
+      input_tokens: 0,
+      output_tokens: 0,
+      total_tokens: 1,
+      estimated_cost: 0
+    }
+  ]);
   const [timeRange, setTimeRange] = useState<string>('7d');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [dataLoaded, setDataLoaded] = useState<boolean>(false);
 
   // Fetch data
   useEffect(() => {
+    let mounted = true;
+    
     const fetchData = async () => {
       try {
         setLoading(true);
         setError(null);
         
+        // Sequential fetching with better error handling
+        try {
         // Fetch agent basic info for the name
-        const agentResponse = await fetch(`/api/agents/${agentId}`);
-        if (!agentResponse.ok) {
-          throw new Error(`Failed to fetch agent: ${agentResponse.statusText}`);
-        }
-        const agentData = await agentResponse.json();
-        setAgentName(agentData.name);
-        
-        // For MVP, we'll create some sample token data
-        // In the future, this should be fetched from a real API endpoint
-        const now = new Date();
-        const sampleTokenData: TokenData[] = [];
-        for (let i = 0; i < 10; i++) {
-          const date = new Date(now);
-          date.setDate(date.getDate() - i);
-          const inputTokens = Math.floor(Math.random() * 5000) + 1000;
-          const outputTokens = Math.floor(Math.random() * 3000) + 500;
-          
-          sampleTokenData.push({
-            timestamp: date.toISOString(),
-            input_tokens: inputTokens,
-            output_tokens: outputTokens,
-            total_tokens: inputTokens + outputTokens
-          });
-        }
-        
-        // Sample model usage data
-        const sampleModelUsage: ModelUsage[] = [
-          {
-            model: 'gpt-4',
-            vendor: 'openai',
-            request_count: 350,
-            input_tokens: 18000,
-            output_tokens: 12000,
-            total_tokens: 30000,
-            estimated_cost: 1.20
-          },
-          {
-            model: 'gpt-3.5-turbo',
-            vendor: 'openai',
-            request_count: 650,
-            input_tokens: 10000,
-            output_tokens: 5000,
-            total_tokens: 15000,
-            estimated_cost: 0.20
+          const agentData = await fetchAPI<any>(AGENTS.DETAIL(agentId));
+          if (mounted) {
+            setAgentName(agentData?.name || agentId);
           }
-        ];
+        } catch (err) {
+          console.error("Error fetching agent details:", err);
+          // Continue with other requests - non-critical error
+        }
         
-        setTokenData(sampleTokenData.reverse());
-        setModelUsage(sampleModelUsage);
+        // Create a variable to collect token usage data
+        let tokenUsageData: any = null;
+        
+        try {
+          // Fetch main token usage data
+          const params = { time_range: timeRange };
+          const queryString = new URLSearchParams(params).toString();
+          const endpoint = `${AGENTS.TOKEN_USAGE(agentId)}${queryString ? `?${queryString}` : ''}`;
+          tokenUsageData = await fetchAPI<any>(endpoint);
+          console.log('Token usage data:', tokenUsageData);
+        
+          // Process model usage data
+          let modelUsageData: ModelUsage[] = [];
+          
+          if (tokenUsageData) {
+            // Check if the by_model property exists
+            if (tokenUsageData.by_model && typeof tokenUsageData.by_model === 'object') {
+              modelUsageData = Object.entries(tokenUsageData.by_model)
+                .map(([model, usage]: [string, any]) => ({
+                  model: model,
+                  vendor: usage.vendor || 'unknown',
+                  request_count: usage.request_count || 0,
+                  input_tokens: usage.prompt_tokens || 0,
+                  output_tokens: usage.completion_tokens || 0,
+                  total_tokens: usage.total_tokens || 0,
+                  estimated_cost: usage.cost || 0
+                }))
+                .filter(model => model.total_tokens > 0);
+            }
+            // Check if this is an array of models directly
+            else if (Array.isArray(tokenUsageData)) {
+              modelUsageData = tokenUsageData
+                .map((item: any) => ({
+                  model: item.model || 'unknown',
+                  vendor: item.vendor || 'unknown',
+                  request_count: item.request_count || 0,
+                  input_tokens: item.prompt_tokens || item.input_tokens || 0,
+                  output_tokens: item.completion_tokens || item.output_tokens || 0,
+                  total_tokens: item.total_tokens || 0,
+                  estimated_cost: item.cost || item.estimated_cost || 0
+                }))
+                .filter(model => model.total_tokens > 0);
+            }
+            // Check if there's a models array
+            else if (tokenUsageData.models && Array.isArray(tokenUsageData.models)) {
+              modelUsageData = tokenUsageData.models
+                .map((item: any) => ({
+                  model: item.model || 'unknown',
+                  vendor: item.vendor || 'unknown',
+                  request_count: item.request_count || 0,
+                  input_tokens: item.prompt_tokens || item.input_tokens || 0,
+                  output_tokens: item.completion_tokens || item.output_tokens || 0,
+                  total_tokens: item.total_tokens || 0,
+                  estimated_cost: item.cost || item.estimated_cost || 0
+                }))
+                .filter(model => model.total_tokens > 0);
+            }
+        }
+        
+          // Ensure we have at least one model for the chart
+          if (modelUsageData.length === 0) {
+            modelUsageData = [
+          {
+                model: "No Models Used",
+                vendor: "",
+                request_count: 0,
+                input_tokens: 0,
+                output_tokens: 0,
+                total_tokens: 1,
+                estimated_cost: 0
+              }
+            ];
+          }
+          
+          if (mounted) {
+            setModelUsage(modelUsageData);
+          }
+        } catch (err) {
+          console.error("Error fetching token usage data:", err);
+          // The model usage data will stay with the default values
+        }
+        
+        try {
+          // For the time series data, fetch with time grouping if available
+          const timeSeriesParams = { time_range: timeRange, group_by: 'time', interval: '1d' };
+          const timeSeriesQueryString = new URLSearchParams(timeSeriesParams).toString();
+          const timeSeriesEndpoint = `${AGENTS.TOKEN_USAGE(agentId)}${timeSeriesQueryString ? `?${timeSeriesQueryString}` : ''}`;
+          const timeSeriesData = await fetchAPI<any>(timeSeriesEndpoint);
+          console.log('Time series data:', timeSeriesData);
+          
+          // Process time series data
+          let tokenTrend: TokenData[] = [];
+          
+          if (timeSeriesData) {
+            // First check if the API returned items directly
+            if (Array.isArray(timeSeriesData)) {
+              tokenTrend = timeSeriesData.map((item: any) => ({
+                timestamp: item.timestamp,
+                input_tokens: item.input_tokens || item.prompt_tokens || 0,
+                output_tokens: item.output_tokens || item.completion_tokens || 0,
+                total_tokens: item.total_tokens || 0
+              }));
+            } 
+            // Then check if there's an items array
+            else if (timeSeriesData.items && Array.isArray(timeSeriesData.items)) {
+              tokenTrend = timeSeriesData.items.map((item: any) => ({
+                timestamp: item.timestamp,
+                input_tokens: item.input_tokens || item.prompt_tokens || 0,
+                output_tokens: item.output_tokens || item.completion_tokens || 0,
+                total_tokens: item.total_tokens || 0
+              }));
+            }
+            // If we have a single object with timestamps, convert that
+            else if (typeof timeSeriesData === 'object') {
+              // Check for timestamp-based keys and convert them to items
+              const timestampKeys = Object.keys(timeSeriesData).filter(key => 
+                key.match(/^\d{4}-\d{2}-\d{2}/) || // ISO date format
+                key.match(/^\d+$/) // Unix timestamp
+              );
+              
+              if (timestampKeys.length > 0) {
+                tokenTrend = timestampKeys.map(timestamp => {
+                  const value = timeSeriesData[timestamp];
+                  return {
+                    timestamp,
+                    input_tokens: value.input_tokens || value.prompt_tokens || 0,
+                    output_tokens: value.output_tokens || value.completion_tokens || 0,
+                    total_tokens: value.total_tokens || 0
+                  };
+                });
+              }
+            }
+          }
+          
+          // If we have no data, create default empty data points
+          if (tokenTrend.length === 0) {
+            // Create a week of empty data points
+            const days = 7;
+            tokenTrend = Array.from({ length: days }).map((_, index) => {
+              const date = new Date();
+              date.setDate(date.getDate() - (days - index - 1));
+              return {
+                timestamp: date.toISOString(),
+                input_tokens: 0,
+                output_tokens: 0,
+                total_tokens: 0
+              };
+            });
+          }
+          
+          if (mounted) {
+            setTokenData(tokenTrend);
+          }
+        } catch (err) {
+          console.error("Error fetching time series data:", err);
+          // The token data will stay with the default values
+        }
+        
+        if (mounted) {
+          setDataLoaded(true);
+        }
         
       } catch (err: any) {
+        console.error('Error in main fetchData function:', err);
+        if (mounted) {
         setError(err.message || 'An error occurred while fetching data');
+        }
       } finally {
+        if (mounted) {
         setLoading(false);
+        }
       }
     };
 
     fetchData();
+    
+    return () => {
+      mounted = false;
+    };
   }, [agentId, timeRange]);
 
-  // Calculate totals
+  // Calculate totals - these are safe since modelUsage always has at least one entry
   const totalInputTokens = modelUsage.reduce((sum, model) => sum + model.input_tokens, 0);
   const totalOutputTokens = modelUsage.reduce((sum, model) => sum + model.output_tokens, 0);
   const totalCost = modelUsage.reduce((sum, model) => sum + model.estimated_cost, 0);
   
-  // Prepare chart data
+  // Format chart data - these are also safe since tokenData and modelUsage have defaults
   const tokenTrendData = tokenData.map(item => ({
     date: new Date(item.timestamp).toLocaleDateString(),
     "Input Tokens": item.input_tokens,
@@ -128,7 +288,7 @@ export default function AgentTokensPage({ params }: AgentTokensPageProps) {
     value: model.total_tokens
   }));
 
-  if (loading) {
+  if (loading && !dataLoaded) {
     return <LoadingState message="Loading token usage data..." />;
   }
 

@@ -6,7 +6,9 @@ import {
   ClockIcon, 
   ExclamationTriangleIcon, 
   ShieldExclamationIcon,
-  BoltIcon
+  BoltIcon,
+  ChatBubbleBottomCenterTextIcon,
+  DocumentTextIcon
 } from '@heroicons/react/24/outline';
 import { useDataUpdates } from '../lib/hooks/useDataUpdates';
 import { DataUpdateType } from '../../src/lib/db/data-update-service';
@@ -32,22 +34,45 @@ export interface DashboardMetricsProps {
   cardClassName?: string;
 }
 
+// Define dashboard metrics response type
+type DashboardResponse = {
+  request_count: number;
+  token_usage: number;
+  avg_response_time_ms: number;
+  error_count: number;
+  security_alerts_count: number;
+  policy_violations_count: number;
+};
+
 // In a real implementation, this would fetch from the API
 async function fetchMetrics() {
   try {
-    const response = await fetch('/api/metrics');
-    if (!response.ok) {
+    // Call the real API endpoint
+    const response = await fetchAPI<DashboardResponse>('/v1/dashboard');
+    
+    if (!response) {
       throw new Error('Failed to fetch metrics');
     }
-    return await response.json();
+    
+    // Return data in the expected format
+    return {
+      totalRequests: response.request_count || 0,
+      avgResponseTime: response.avg_response_time_ms || 0,
+      blockedRequests: response.error_count || 0,  // Using error_count for blocked requests
+      suspiciousRequests: response.security_alerts_count || 0,  // Using security alerts for suspicious requests
+      tokenUsage: response.token_usage || 0,
+      policyViolations: response.policy_violations_count || 0
+    };
   } catch (error) {
-    console.error('Error fetching metrics:', error);
+    console.error('Error fetching metrics from API:', error);
     // Return fallback data for development
     return {
-      totalRequests: 1254,
-      avgResponseTime: 320,
-      blockedRequests: 12,
-      suspiciousRequests: 48
+      totalRequests: 0,
+      avgResponseTime: 0,
+      blockedRequests: 0,
+      suspiciousRequests: 0,
+      tokenUsage: 0,
+      policyViolations: 0
     };
   }
 }
@@ -62,7 +87,9 @@ export default function DashboardMetrics({
     totalRequests: 0,
     avgResponseTime: 0,
     blockedRequests: 0,
-    suspiciousRequests: 0
+    suspiciousRequests: 0,
+    tokenUsage: 0,
+    policyViolations: 0
   });
   const [loading, setLoading] = useState(true);
 
@@ -207,13 +234,33 @@ export default function DashboardMetrics({
         <ConnectionStatus />
       </div>
 
-      <Grid numItemsMd={2} numItemsLg={4} className="gap-6">
+      <Grid numItemsMd={2} numItemsLg={3} className="gap-6">
         <Card decoration="top" decorationColor="blue" className={cardClassName}>
           <Flex justifyContent="start" className="space-x-4">
             <BoltIcon className="h-8 w-8 text-blue-500" />
             <div>
               <Text>Total Requests</Text>
               <Metric>{metrics.totalRequests.toLocaleString()}</Metric>
+            </div>
+          </Flex>
+        </Card>
+        
+        <Card decoration="top" decorationColor="amber" className={cardClassName}>
+          <Flex justifyContent="start" className="space-x-4">
+            <ChatBubbleBottomCenterTextIcon className="h-8 w-8 text-amber-500" />
+            <div>
+              <Text>Token Usage</Text>
+              <Metric>{metrics.tokenUsage.toLocaleString()}</Metric>
+            </div>
+          </Flex>
+        </Card>
+        
+        <Card decoration="top" decorationColor="red" className={cardClassName}>
+          <Flex justifyContent="start" className="space-x-4">
+            <ExclamationTriangleIcon className="h-8 w-8 text-red-500" />
+            <div>
+              <Text>Errors</Text>
+              <Metric>{metrics.blockedRequests.toLocaleString()}</Metric>
             </div>
           </Flex>
         </Card>
@@ -228,22 +275,22 @@ export default function DashboardMetrics({
           </Flex>
         </Card>
         
-        <Card decoration="top" decorationColor="red" className={cardClassName}>
+        <Card decoration="top" decorationColor="rose" className={cardClassName}>
           <Flex justifyContent="start" className="space-x-4">
-            <ShieldExclamationIcon className="h-8 w-8 text-red-500" />
+            <ShieldExclamationIcon className="h-8 w-8 text-rose-500" />
             <div>
-              <Text>Blocked Requests</Text>
-              <Metric>{metrics.blockedRequests.toLocaleString()}</Metric>
+              <Text>Security Alerts</Text>
+              <Metric>{metrics.suspiciousRequests.toLocaleString()}</Metric>
             </div>
           </Flex>
         </Card>
         
-        <Card decoration="top" decorationColor="amber" className={cardClassName}>
+        <Card decoration="top" decorationColor="orange" className={cardClassName}>
           <Flex justifyContent="start" className="space-x-4">
-            <ExclamationTriangleIcon className="h-8 w-8 text-amber-500" />
+            <DocumentTextIcon className="h-8 w-8 text-orange-500" />
             <div>
-              <Text>Suspicious Requests</Text>
-              <Metric>{metrics.suspiciousRequests.toLocaleString()}</Metric>
+              <Text>Policy Violations</Text>
+              <Metric>{metrics.policyViolations.toLocaleString()}</Metric>
             </div>
           </Flex>
         </Card>

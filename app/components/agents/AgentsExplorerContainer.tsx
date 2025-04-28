@@ -21,9 +21,10 @@ import PageContainer from '../PageContainer';
 import PageTemplate from '../PageTemplate';
 import MetricsDisplay from '../MetricsDisplay';
 import ContentSection from '../ContentSection';
-import { ServerIcon, BoltIcon, ExclamationTriangleIcon, ClockIcon } from '@heroicons/react/24/outline';
+import { ServerIcon, BoltIcon, ExclamationTriangleIcon, ClockIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 import { SPACING } from '../spacing';
 import RefreshButton from '../RefreshButton';
+import { RiRobot2Line } from 'react-icons/ri';
 
 // Helper function to determine if an agent is active based on its last activity
 const isAgentActive = (agent: Agent): boolean => {
@@ -385,7 +386,7 @@ export function AgentsExplorerContainer() {
         title: 'Total Agents',
         value: totalAgents,
         variant: 'primary' as const,
-        icon: <ServerIcon className="h-6 w-6" />
+        icon: <RiRobot2Line className="h-6 w-6" />
       },
       {
         title: 'Active (last 24h)',
@@ -515,6 +516,41 @@ function AgentsTable({
 }) {
   const router = useRouter();
   
+  // Force cursor pointer on table rows
+  useEffect(() => {
+    // Apply styles directly to table rows
+    const applyPointerCursor = () => {
+      const tableRows = document.querySelectorAll('.AgentsTable tbody tr');
+      tableRows.forEach(row => {
+        // @ts-ignore
+        row.style.cursor = 'pointer';
+        
+        // Apply to all cells within the row too
+        const cells = row.querySelectorAll('td');
+        cells.forEach(cell => {
+          // @ts-ignore
+          cell.style.cursor = 'pointer';
+        });
+      });
+    };
+    
+    // Run immediately and also set up a small delay to ensure Tremor has finished rendering
+    applyPointerCursor();
+    const timer = setTimeout(applyPointerCursor, 100);
+    
+    // Add a mutation observer to catch any dynamically added rows
+    const observer = new MutationObserver(applyPointerCursor);
+    const tableBody = document.querySelector('.AgentsTable tbody');
+    if (tableBody) {
+      observer.observe(tableBody, { childList: true, subtree: true });
+    }
+    
+    return () => {
+      clearTimeout(timer);
+      observer.disconnect();
+    };
+  }, [agents]); // Re-apply when agents change
+  
   // Format status as badge
   const getStatusBadge = (agent: Agent) => {
     if (agent.error_count > 0) {
@@ -595,7 +631,7 @@ function AgentsTable({
   }
   
   return (
-    <div>
+    <div className="AgentsTable">
       <div className="border-t border-b border-gray-200">
         <Table>
           <TableHead>
@@ -605,6 +641,7 @@ function AgentsTable({
               <TableHeaderCell className="text-right">Requests</TableHeaderCell>
               <TableHeaderCell className="text-right">Errors</TableHeaderCell>
               <TableHeaderCell>Last Updated</TableHeaderCell>
+              <TableHeaderCell className="w-10"></TableHeaderCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -615,7 +652,7 @@ function AgentsTable({
               return (
                 <TableRow 
                   key={agent.agent_id} 
-                  className="cursor-pointer hover:bg-gray-50 transition-colors duration-150" 
+                  className="cursor-pointer clickable-row hover:bg-gray-50 transition-colors duration-150" 
                   onClick={() => handleRowClick(agent.agent_id)}
                 >
                   <TableCell className="font-medium text-primary-600">
@@ -625,6 +662,9 @@ function AgentsTable({
                   <TableCell className="text-right">{agent.request_count.toLocaleString()}</TableCell>
                   <TableCell className="text-right">{agent.error_count.toLocaleString()}</TableCell>
                   <TableCell>{formatDate(agent.updated_at)}</TableCell>
+                  <TableCell className="text-gray-400">
+                    <ChevronRightIcon className="h-4 w-4" />
+                  </TableCell>
                 </TableRow>
               );
             })}

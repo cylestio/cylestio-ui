@@ -224,6 +224,56 @@ body {
     @apply font-medium text-neutral-500 md:hidden;
   }
 
+  /* Tremor table cursor fix - targeting Tremor's specific DOM structure */
+  .cursor-pointer,
+  tr.cursor-pointer,
+  .tr.cursor-pointer,
+  tr.clickable-row,
+  .clickable-row {
+    cursor: pointer !important;
+  }
+  
+  /* Target Tremor table rows specifically */
+  .AgentsTable table tbody tr,
+  .AgentsTable tbody tr,
+  table.tremor-Table-table tbody tr,
+  .tremor-TableBody-row,
+  div[role="rowgroup"] div[role="row"],
+  .tremor-Table-root tbody tr {
+    cursor: pointer !important;
+  }
+  
+  /* Add visual indicators to show the table rows are clickable */
+  .AgentsTable table tbody tr:hover td:first-child {
+    text-decoration: underline;
+  }
+  
+  /* Add a more noticeable hover state */
+  .AgentsTable table tbody tr:hover,
+  table.tremor-Table-table tbody tr:hover {
+    background-color: rgba(59, 130, 246, 0.05) !important;
+    transform: translateY(-1px);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    transition: all 0.2s ease;
+  }
+  
+  /* Force the cursor to be a pointer on all Tremor table rows */
+  .tremor-TableRow-row * {
+    cursor: pointer !important;
+  }
+  
+  /* Add a subtle right arrow indicator to show navigation */
+  .AgentsTable table tbody tr td:last-child::after {
+    content: "→";
+    margin-left: 8px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+  }
+  
+  .AgentsTable table tbody tr:hover td:last-child::after {
+    opacity: 0.5;
+  }
+
   /* Specific mobile styles for dashboard cards */
   @media (max-width: 640px) {
     .dashboard-card-mobile {
