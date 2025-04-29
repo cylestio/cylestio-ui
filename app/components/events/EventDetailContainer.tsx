@@ -1,32 +1,28 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Card,
   Title,
   Text,
   Badge,
-  Grid,
   Flex,
-  Divider,
   TabGroup,
   TabList,
   Tab,
   TabPanels,
   TabPanel,
-  Accordion,
-  AccordionHeader,
-  AccordionBody,
   Button,
+  Divider,
 } from '@tremor/react';
 import {
-  ClockIcon,
-  UserIcon,
+  ClockIcon, 
+  ChatBubbleBottomCenterTextIcon,
   ExclamationTriangleIcon,
-  ArrowsRightLeftIcon,
-  DocumentTextIcon,
-  ShieldExclamationIcon,
   ArrowLeftIcon,
+  CommandLineIcon,
+  CpuChipIcon,
+  DocumentTextIcon,
 } from '@heroicons/react/24/outline';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -54,6 +50,20 @@ export function EventDetailContainer({ eventId }: { eventId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState(0);
+  const [jsonCopied, setJsonCopied] = useState(false);
+
+  // Function to copy text to clipboard
+  const copyToClipboard = async (text: string, type: 'json' | 'trace') => {
+    try {
+      await navigator.clipboard.writeText(text);
+      if (type === 'json') {
+        setJsonCopied(true);
+        setTimeout(() => setJsonCopied(false), 2000);
+      }
+    } catch (err) {
+      console.error('Failed to copy text: ', err);
+    }
+  };
 
   // Function to fetch event details
   const fetchEventDetails = async () => {
@@ -72,8 +82,11 @@ export function EventDetailContainer({ eventId }: { eventId: string }) {
           const relatedData = await fetchAPI<Event[]>(`${TELEMETRY.TRACES(eventData.trace_id)}`);
           
           if (relatedData) {
-            // Filter out the current event
-            setRelatedEvents(relatedData.filter(e => e.id !== eventData.id));
+            // Sort by timestamp (ascending - oldest first) and include current event
+            const sortedEvents = relatedData
+              .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+            
+            setRelatedEvents(sortedEvents);
           }
         } catch (relatedErr) {
           console.error('Error fetching related events:', relatedErr);
@@ -116,13 +129,17 @@ export function EventDetailContainer({ eventId }: { eventId: string }) {
   // Get event type icon
   const getEventIcon = (name: string) => {
     if (name.startsWith('llm.')) {
-      return <DocumentTextIcon className="h-5 w-5" />;
+      return <ChatBubbleBottomCenterTextIcon className="h-4 w-4 text-blue-500" />;
     } else if (name.startsWith('tool.')) {
-      return <ArrowsRightLeftIcon className="h-5 w-5" />;
+      return <CommandLineIcon className="h-4 w-4 text-amber-500" />;
     } else if (name.startsWith('security.')) {
-      return <ShieldExclamationIcon className="h-5 w-5" />;
+      return <ExclamationTriangleIcon className="h-4 w-4 text-rose-500" />;
+    } else if (name.startsWith('monitoring.')) {
+      return <CpuChipIcon className="h-4 w-4 text-emerald-500" />;
+    } else if (name.startsWith('framework.')) {
+      return <CpuChipIcon className="h-4 w-4 text-purple-500" />;
     } else {
-      return <ClockIcon className="h-5 w-5" />;
+      return <DocumentTextIcon className="h-4 w-4 text-gray-500" />;
     }
   };
 
@@ -153,6 +170,7 @@ export function EventDetailContainer({ eventId }: { eventId: string }) {
       'llm.call.start': 'LLM Call Started',
       'llm.call.finish': 'LLM Call Finished',
       'tool.call': 'Tool Call',
+      'tool.execution': 'Tool Execution',
       'tool.result': 'Tool Result',
       'tool.response': 'Tool Response',
       'session.start': 'Session Started',
@@ -163,6 +181,10 @@ export function EventDetailContainer({ eventId }: { eventId: string }) {
       'message.user': 'User Message',
       'message.assistant': 'Assistant Message',
       'framework.initialization': 'Framework Initialized',
+      'framework.patch': 'Framework Patched',
+      'framework.unpatch': 'Framework Unpatched',
+      'monitoring.start': 'Monitoring Started',
+      'monitoring.stop': 'Monitoring Stopped',
       'security.content.suspicious': 'Suspicious Content',
     };
     
@@ -174,7 +196,7 @@ export function EventDetailContainer({ eventId }: { eventId: string }) {
   // Render loading state
   if (loading) {
     return (
-      <Card className="mt-6">
+      <Card className="mt-4 shadow-sm rounded-lg">
         <Flex justifyContent="center" alignItems="center" className="h-24">
           <Text>Loading event details...</Text>
         </Flex>
@@ -185,9 +207,9 @@ export function EventDetailContainer({ eventId }: { eventId: string }) {
   // Render error state
   if (error) {
     return (
-      <Card className="mt-6">
+      <Card className="mt-4 shadow-sm rounded-lg">
         <Flex justifyContent="center" alignItems="center" className="h-24">
-          <ExclamationTriangleIcon className="h-6 w-6 text-red-500 mr-2" />
+          <ExclamationTriangleIcon className="h-5 w-5 text-red-500 mr-2" />
           <Text color="red">{error}</Text>
         </Flex>
       </Card>
@@ -197,7 +219,7 @@ export function EventDetailContainer({ eventId }: { eventId: string }) {
   // Render when no event is found
   if (!event) {
     return (
-      <Card className="mt-6">
+      <Card className="mt-4 shadow-sm rounded-lg">
         <Flex justifyContent="center" alignItems="center" className="h-24">
           <Text>No event found with ID: {eventId}</Text>
         </Flex>
@@ -206,273 +228,272 @@ export function EventDetailContainer({ eventId }: { eventId: string }) {
   }
 
   return (
-    <div className="space-y-6">
-      <Flex>
-        <Button 
-          variant="light" 
-          icon={ArrowLeftIcon}
-          onClick={() => router.back()}
-        >
-          Back to Events
-        </Button>
-      </Flex>
+    <div className="space-y-5">
+      {/* Back Link */}
+      <Link href="/events" className="inline-flex items-center text-blue-500 hover:text-blue-600 transition-colors">
+        <ArrowLeftIcon className="h-4 w-4 mr-1.5" />
+        <span>Back to Events</span>
+      </Link>
       
-      <Card>
-        <Flex alignItems="center" className="mb-4">
-          <Title>Event Details</Title>
-          <Badge color={getLevelColor(event.level)} className="ml-2">
-            {event.level.toUpperCase()}
-          </Badge>
-        </Flex>
+      {/* Header Section - Made elegant with background and better styling */}
+      <Card className="overflow-hidden bg-gradient-to-r from-gray-50/50 via-white to-gray-50/50 border-0">
+        {/* Title Bar with background */}
+        <div className="bg-gradient-to-r from-blue-50/80 via-indigo-50/50 to-blue-50/30 px-6 py-4 border-b border-gray-100">
+          <Flex justifyContent="between" alignItems="center">
+            <div className="flex items-center">
+              <Title className="text-lg font-medium text-gray-800">Event Details</Title>
+              <Badge color={getLevelColor(event.level)} size="xs" className="uppercase px-2 py-0.5 ml-3">
+                {event.level}
+              </Badge>
+            </div>
+            <Text className="text-gray-500 text-sm font-medium">ID: {event.id}</Text>
+          </Flex>
+        </div>
         
-        <Grid numItemsMd={2} numItemsLg={4} className="gap-6 mb-6">
-          <Flex alignItems="center">
-            <div className="mr-2">{getEventIcon(event.name)}</div>
-            <div>
-              <Text className="text-gray-500">Event Type</Text>
-              <Text className="font-medium">{getEventTypeDisplay(event.name)}</Text>
-            </div>
-          </Flex>
+        {/* Single-line Metadata Pills with elegant styling */}
+        <div className="flex items-center gap-4 px-6 py-4 overflow-x-auto bg-white border-b border-gray-100">
+          {/* Event Type Pill */}
+          <Pill 
+            icon={getEventIcon(event.name)}
+            text={getEventTypeDisplay(event.name)}
+            color="blue"
+          />
           
-          <Flex alignItems="center">
-            <div className="mr-2"><ClockIcon className="h-5 w-5" /></div>
-            <div>
-              <Text className="text-gray-500">Timestamp</Text>
-              <Text className="font-medium">{formatTimeAbsolute(event.timestamp)}</Text>
-            </div>
-          </Flex>
+          {/* Timestamp Pill */}
+          <Pill 
+            icon={<ClockIcon className="h-4 w-4" />}
+            text={formatTimeAbsolute(event.timestamp)}
+            color="gray"
+          />
           
-          <Flex alignItems="center">
-            <div className="mr-2"><UserIcon className="h-5 w-5" /></div>
-            <div>
-              <Text className="text-gray-500">Agent</Text>
-              <Link href={`/agents/${event.agent_id}`} className="text-blue-500 hover:underline">
-                {event.agent_id}
-              </Link>
-            </div>
-          </Flex>
-          
-          <Flex alignItems="center">
-            <div className="mr-2"><ArrowsRightLeftIcon className="h-5 w-5" /></div>
-            <div>
-              <Text className="text-gray-500">Trace</Text>
-              <Link href={`/events/trace/${event.trace_id}`} className="text-blue-500 hover:underline">
-                {event.trace_id}
-              </Link>
-            </div>
-          </Flex>
-        </Grid>
-        
-        <Divider />
-        
-        <TabGroup index={activeTab} onIndexChange={setActiveTab} className="mt-6">
-          <TabList>
-            <Tab>Details</Tab>
-            <Tab>Raw Data</Tab>
-            <Tab>Related Events ({relatedEvents.length})</Tab>
+          {/* Agent Pill */}
+          <Pill 
+            icon={<RobotIcon />}
+            text={event.agent_id}
+            color="gray"
+            isLink={true}
+            href={`/agents/${event.agent_id}`}
+          />
+        </div>
+      </Card>
+      
+      {/* Tabs Section */}
+      <Card className="shadow-sm rounded-lg overflow-hidden border border-gray-200">
+        <TabGroup index={activeTab} onIndexChange={setActiveTab}>
+          <TabList className="border-b border-gray-200 bg-gray-50/50">
+            <Tab className="px-5 py-2.5 text-sm font-medium hover:bg-gray-100/50 transition-colors focus:outline-none">
+              Details
+            </Tab>
+            <Tab className="px-5 py-2.5 text-sm font-medium hover:bg-gray-100/50 transition-colors focus:outline-none">
+              Related Events
+              {relatedEvents.length > 0 && (
+                <span className="ml-2 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs">
+                  {relatedEvents.length}
+                </span>
+              )}
+            </Tab>
           </TabList>
           
           <TabPanels>
-            <TabPanel>
-              <div className="mt-4">
-                <Title className="text-lg mb-2">Event Attributes</Title>
-                
-                <Accordion>
-                  <AccordionHeader>Basic Information</AccordionHeader>
-                  <AccordionBody>
-                    <Grid numItemsMd={2} className="gap-x-4 gap-y-2">
-                      <div>
-                        <Text className="text-gray-500">Event ID</Text>
-                        <Text>{event.id}</Text>
-                      </div>
-                      
-                      <div>
-                        <Text className="text-gray-500">Schema Version</Text>
-                        <Text>{event.schema_version}</Text>
-                      </div>
-                      
-                      <div>
-                        <Text className="text-gray-500">Span ID</Text>
-                        <Text>{event.span_id || 'N/A'}</Text>
-                      </div>
-                      
-                      <div>
-                        <Text className="text-gray-500">Parent Span ID</Text>
-                        <Text>{event.parent_span_id || 'None (Root Span)'}</Text>
-                      </div>
-                    </Grid>
-                  </AccordionBody>
-                </Accordion>
-                
-                {/* Render specific sections based on event type */}
-                {event.name.startsWith('llm.') && (
-                  <Accordion>
-                    <AccordionHeader>LLM Information</AccordionHeader>
-                    <AccordionBody>
-                      <Grid numItemsMd={2} className="gap-x-4 gap-y-2">
-                        <div>
-                          <Text className="text-gray-500">Model</Text>
-                          <Text>{event.attributes['llm.model'] || 'N/A'}</Text>
-                        </div>
-                        
-                        <div>
-                          <Text className="text-gray-500">Temperature</Text>
-                          <Text>{event.attributes['llm.temperature'] || 'N/A'}</Text>
-                        </div>
-                        
-                        <div>
-                          <Text className="text-gray-500">Input Tokens</Text>
-                          <Text>{event.attributes['llm.input_tokens'] || 'N/A'}</Text>
-                        </div>
-                        
-                        <div>
-                          <Text className="text-gray-500">Output Tokens</Text>
-                          <Text>{event.attributes['llm.output_tokens'] || 'N/A'}</Text>
-                        </div>
-                      </Grid>
-                    </AccordionBody>
-                  </Accordion>
-                )}
-                
-                {event.name.startsWith('tool.') && (
-                  <Accordion>
-                    <AccordionHeader>Tool Information</AccordionHeader>
-                    <AccordionBody>
-                      <Grid numItemsMd={2} className="gap-x-4 gap-y-2">
-                        <div>
-                          <Text className="text-gray-500">Tool Name</Text>
-                          <Text>{event.attributes['tool.name'] || 'N/A'}</Text>
-                        </div>
-                        
-                        <div>
-                          <Text className="text-gray-500">Execution Time (ms)</Text>
-                          <Text>{event.attributes['tool.execution_time_ms'] || 'N/A'}</Text>
-                        </div>
-                      </Grid>
-                      
-                      {event.attributes['tool.parameters'] && (
-                        <div className="mt-4">
-                          <Text className="text-gray-500">Parameters</Text>
-                          <Card className="mt-2 p-2 bg-gray-50">
-                            <pre className="text-xs overflow-auto max-h-48">
-                              {formatJSONData(event.attributes['tool.parameters'])}
-                            </pre>
-                          </Card>
-                        </div>
-                      )}
-                      
-                      {event.attributes['tool.result'] && (
-                        <div className="mt-4">
-                          <Text className="text-gray-500">Result</Text>
-                          <Card className="mt-2 p-2 bg-gray-50">
-                            <pre className="text-xs overflow-auto max-h-48">
-                              {formatJSONData(event.attributes['tool.result'])}
-                            </pre>
-                          </Card>
-                        </div>
-                      )}
-                    </AccordionBody>
-                  </Accordion>
-                )}
-                
-                {event.name.startsWith('security.') && (
-                  <Accordion>
-                    <AccordionHeader>Security Information</AccordionHeader>
-                    <AccordionBody>
-                      <Grid numItemsMd={2} className="gap-x-4 gap-y-2">
-                        <div>
-                          <Text className="text-gray-500">Category</Text>
-                          <Text>{event.attributes['security.category'] || 'N/A'}</Text>
-                        </div>
-                        
-                        <div>
-                          <Text className="text-gray-500">Severity</Text>
-                          <Text>{event.attributes['security.severity'] || 'N/A'}</Text>
-                        </div>
-                        
-                        <div>
-                          <Text className="text-gray-500">Alert Level</Text>
-                          <Text>{event.attributes['security.alert_level'] || 'N/A'}</Text>
-                        </div>
-                      </Grid>
-                      
-                      {event.attributes['security.content_sample'] && (
-                        <div className="mt-4">
-                          <Text className="text-gray-500">Content Sample</Text>
-                          <Card className="mt-2 p-2 bg-gray-50">
-                            <pre className="text-xs overflow-auto max-h-48">
-                              {event.attributes['security.content_sample']}
-                            </pre>
-                          </Card>
-                        </div>
-                      )}
-                    </AccordionBody>
-                  </Accordion>
-                )}
-                
-                <Accordion>
-                  <AccordionHeader>All Attributes</AccordionHeader>
-                  <AccordionBody>
-                    <Card className="p-2 bg-gray-50">
-                      <pre className="text-xs overflow-auto max-h-96">
-                        {formatJSONData(event.attributes)}
-                      </pre>
-                    </Card>
-                  </AccordionBody>
-                </Accordion>
+            {/* Details Tab - JSON Viewer */}
+            <TabPanel className="p-4">
+              <div className="mb-3 flex justify-between items-center">
+                <Text className="text-sm font-medium text-gray-700">Event Payload</Text>
+                <Button
+                  size="xs"
+                  variant="light"
+                  icon={DocumentTextIcon}
+                  onClick={() => copyToClipboard(formatJSONData(event), 'json')}
+                  className="text-xs"
+                >
+                  {jsonCopied ? 'Copied!' : 'Copy JSON'}
+                </Button>
+              </div>
+              
+              <div className="json-viewer bg-gray-50 border border-gray-200 rounded-lg overflow-auto max-h-[600px]">
+                <pre 
+                  className="text-xs text-gray-800 p-3 m-0 whitespace-pre-wrap"
+                  style={{ 
+                    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                    lineHeight: 1.5,
+                    tabSize: 2,
+                  }}
+                >
+                  <code dangerouslySetInnerHTML={{ 
+                    __html: syntaxHighlight(formatJSONData(event)) 
+                  }} />
+                </pre>
               </div>
             </TabPanel>
             
-            <TabPanel>
-              <div className="mt-4">
-                <Card className="p-2 bg-gray-50">
-                  <pre className="text-xs overflow-auto max-h-96">
-                    {formatJSONData(event)}
-                  </pre>
-                </Card>
-              </div>
-            </TabPanel>
-            
-            <TabPanel>
-              <div className="mt-4">
-                {relatedEvents.length === 0 ? (
-                  <Text>No related events found in this trace.</Text>
-                ) : (
-                  <div className="space-y-4">
-                    {relatedEvents.map((relatedEvent) => (
-                      <Card key={relatedEvent.id} className="p-3">
-                        <Flex justifyContent="between" alignItems="center">
-                          <Flex alignItems="center">
-                            <div className="mr-2">{getEventIcon(relatedEvent.name)}</div>
+            {/* Related Events Tab */}
+            <TabPanel className="p-4">
+              {relatedEvents.length === 0 ? (
+                <div className="text-center p-6 bg-gray-50 rounded-lg">
+                  <Text className="text-gray-500">No related events found in this trace.</Text>
+                </div>
+              ) : (
+                <div className="space-y-1 relative">
+                  {/* Timeline line with gradient effect */}
+                  <div className="absolute left-1 top-8 bottom-2 w-0.5 bg-gradient-to-b from-blue-200 via-blue-300 to-blue-200 rounded-full z-0"></div>
+                  
+                  <div className="flex justify-between mb-3 px-2">
+                    <Text className="text-xs text-gray-500">EARLIEST</Text>
+                    <Text className="text-xs text-gray-500">LATEST</Text>
+                  </div>
+                  
+                  {relatedEvents.map((relatedEvent, index) => {
+                    const isCurrentEvent = relatedEvent.id === event.id;
+                    const isFirst = index === 0;
+                    const isLast = index === relatedEvents.length - 1;
+                    
+                    return (
+                      <div 
+                        key={relatedEvent.id} 
+                        className={`flex items-center p-2.5 ${isCurrentEvent ? 'bg-blue-50/70 border border-blue-100' : 'border-b border-gray-100 hover:bg-gray-50'} rounded-lg transition-colors relative group`}
+                      >
+                        {/* Timeline connector lines - removed as main line is now continuous */}
+                        
+                        {/* Timeline node */}
+                        <div 
+                          className={`z-10 absolute left-1 transform -translate-x-1/2 w-3 h-3 rounded-full shadow-sm
+                            ${isCurrentEvent 
+                              ? 'border-2 border-blue-500 bg-blue-500 ring-4 ring-blue-100' 
+                              : 'border-2 border-blue-400 bg-white'}`}
+                        ></div>
+                        
+                        <div className="flex justify-between items-center w-full ml-5">
+                          <div className="flex items-center gap-3">
+                            <span className="flex-shrink-0">
+                              {getEventIcon(relatedEvent.name)}
+                            </span>
                             <div>
-                              <Text className="font-medium">{getEventTypeDisplay(relatedEvent.name)}</Text>
+                              <div className="flex items-center">
+                                <Text className={`text-sm ${isCurrentEvent ? 'font-semibold text-blue-700' : 'font-medium'}`}>
+                                  {getEventTypeDisplay(relatedEvent.name)}
+                                </Text>
+                                {isCurrentEvent && (
+                                  <Badge color="blue" size="xs" className="ml-2">Current</Badge>
+                                )}
+                              </div>
                               <Text className="text-xs text-gray-500">{formatTimeAbsolute(relatedEvent.timestamp)}</Text>
                             </div>
-                          </Flex>
+                          </div>
                           
-                          <Flex alignItems="center" className="space-x-2">
-                            <Badge color={getLevelColor(relatedEvent.level)}>
-                              {relatedEvent.level.toUpperCase()}
+                          <div className="flex items-center gap-2">
+                            <Badge 
+                              color={getLevelColor(relatedEvent.level)} 
+                              size="xs"
+                              className="uppercase px-1.5 py-0.5 text-[10px]"
+                            >
+                              {relatedEvent.level}
                             </Badge>
                             
-                            <Button
-                              size="xs"
-                              variant="light"
-                              onClick={() => router.push(`/events/${relatedEvent.id}`)}
-                            >
-                              View
-                            </Button>
-                          </Flex>
-                        </Flex>
-                      </Card>
-                    ))}
-                  </div>
-                )}
-              </div>
+                            {!isCurrentEvent && (
+                              <Link 
+                                href={`/events/${relatedEvent.id}`}
+                                className="text-gray-400 hover:text-blue-500 transition-colors"
+                              >
+                                <ArrowLeftIcon className="h-4 w-4 rotate-180" />
+                              </Link>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </TabPanel>
           </TabPanels>
         </TabGroup>
       </Card>
     </div>
+  );
+}
+
+// Custom RobotIcon component to match the menu icon
+function RobotIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-gray-700">
+      <rect x="5" y="4" width="14" height="16" rx="2" stroke="currentColor" strokeWidth="1.5"/>
+      <path d="M9 11V13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+      <path d="M15 11V13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+      <path d="M9 16H15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+      <path d="M7 4V2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+      <path d="M17 4V2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
+// Pill component for metadata display
+type PillProps = {
+  icon: React.ReactNode;
+  text: string;
+  color: 'blue' | 'gray';
+  isLink?: boolean;
+  href?: string;
+  isCopyable?: boolean;
+  onCopy?: () => void;
+  isCopied?: boolean;
+};
+
+function Pill({ icon, text, color, isLink, href, isCopyable, onCopy, isCopied }: PillProps) {
+  const bgColor = color === 'blue' ? 'bg-blue-50/80' : 'bg-gray-50/80';
+  const borderColor = color === 'blue' ? 'border-blue-200/70' : 'border-gray-200/70';
+  const textColor = color === 'blue' ? 'text-blue-700' : isLink ? 'text-blue-600' : 'text-gray-700';
+  
+  return (
+    <div className={`inline-flex items-center ${bgColor} ${textColor} px-3.5 py-2 rounded-md border ${borderColor} shadow-sm backdrop-blur-sm hover:shadow-md transition-all duration-200`}>
+      <span className="flex-shrink-0 mr-2">{icon}</span>
+      
+      {isLink && href ? (
+        <Link href={href} className="text-sm font-medium hover:underline whitespace-nowrap">
+          {text}
+        </Link>
+      ) : (
+        <span className={`text-sm ${color === 'blue' ? 'font-medium' : ''} ${isCopyable ? 'max-w-[120px] truncate' : ''}`} title={isCopyable ? text : undefined}>
+          {text}
+        </span>
+      )}
+      
+      {isCopyable && (
+        <>
+          <button 
+            onClick={onCopy}
+            className="ml-2.5 text-gray-400 hover:text-blue-600 transition-colors"
+            title="Copy"
+          >
+            <DocumentTextIcon className="h-3.5 w-3.5" />
+          </button>
+          {isCopied && (
+            <span className="text-xs text-green-600 ml-1.5">✓</span>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// Function to add syntax highlighting to JSON
+function syntaxHighlight(json: string) {
+  json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return json.replace(
+    /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+    (match) => {
+      let cls = 'text-blue-700'; // string
+      if (/^"/.test(match)) {
+        if (/:$/.test(match)) {
+          cls = 'text-gray-700 font-semibold'; // key
+        }
+      } else if (/true|false/.test(match)) {
+        cls = 'text-green-600'; // boolean
+      } else if (/null/.test(match)) {
+        cls = 'text-rose-600'; // null
+      } else {
+        cls = 'text-amber-600'; // number
+      }
+      return `<span class="${cls}">${match}</span>`;
+    }
   );
 } 
