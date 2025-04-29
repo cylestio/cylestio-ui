@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Card, Text, Button, Flex } from '@tremor/react';
+import { Card, Text, Button, Flex, Title } from '@tremor/react';
 
 import { fetchAPI, buildQueryParams } from '../../lib/api';
 import { TELEMETRY } from '../../lib/api-endpoints';
@@ -27,10 +27,14 @@ type Event = {
 
 export function EventsExplorerContainer({ 
   sessionId, 
-  traceId 
+  traceId,
+  eventIds,
+  isToolRelated = false
 }: { 
   sessionId?: string;
   traceId?: string;
+  eventIds?: string[];
+  isToolRelated?: boolean;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -56,7 +60,7 @@ export function EventsExplorerContainer({
   // Add refresh key state
   const [refreshKey, setRefreshKey] = useState(0);
   
-  // Function to fetch events data - simplified to only support session filtering
+  // Function to fetch events data based on various filters
   const fetchEvents = async () => {
     try {
       setLoading(true);
@@ -67,7 +71,7 @@ export function EventsExplorerContainer({
         offset
       };
       
-      // Set time range for context but not for filtering
+      // Set time range for context
       const currentTime = new Date();
       let startDate = new Date();
       startDate.setDate(startDate.getDate() - 30); // Default to 30 days
@@ -82,6 +86,21 @@ export function EventsExplorerContainer({
         endpoint = `/v1/telemetry/sessions/${sessionId}/events`;
       } else if (traceId) {
         endpoint = `/v1/telemetry/traces/${traceId}`;
+      } else if (eventIds && eventIds.length > 0) {
+        // Use the dedicated endpoint for fetching events by IDs
+        endpoint = TELEMETRY.EVENTS_BY_IDS;
+        
+        // API requires a POST request with an array of event IDs in the request body
+        const response = await fetchAPI<Event[]>(endpoint, {
+          method: 'POST',
+          body: JSON.stringify(eventIds)
+        });
+        
+        setEvents(response || []);
+        setTotalEvents(response?.length || 0);
+        setError(null);
+        setLoading(false);
+        return; // Early return since we've handled the request
       }
       
       // Fetch events
@@ -130,22 +149,88 @@ export function EventsExplorerContainer({
     }
     
     fetchEvents();
-  }, [offset, limit, sessionId, traceId]);
+  }, [offset, limit, sessionId, traceId, eventIds]);
   
   const breadcrumbs = [
     { label: 'Events', href: '/events', current: true },
   ];
   
+  // Add a custom title based on context
+  let title = "Events Explorer";
+  let description = "View, filter, and analyze events from across the system";
+  
+  if (sessionId) {
+    title = "Session Events";
+    description = "Events associated with a specific session";
+  } else if (traceId) {
+    title = "Trace Events";
+    description = "Events associated with a specific trace";
+  } else if (isToolRelated && eventIds && eventIds.length > 0) {
+    title = "Tool-related Events";
+    description = "Events associated with a tool execution";
+  } else if (eventIds && eventIds.length > 0) {
+    title = "Filtered Events";
+    description = "Events filtered by specific IDs";
+  }
+  
   return (
     <PageTemplate
-      title="Events Explorer"
-      description="View, filter, and analyze events from across the system"
+      title={title}
+      description={description}
       breadcrumbs={breadcrumbs}
       timeRange={timeRange}
       onTimeRangeChange={handleTimeRangeChange}
       headerContent={<RefreshButton onClick={handleRefresh} />}
       contentSpacing="default"
     >
+      {/* Show event IDs context banner - only for regular event filtering, not tool-related */}
+      {eventIds && eventIds.length > 0 && !traceId && !sessionId && !isToolRelated && (
+        <ContentSection spacing="default">
+          <Card className="mb-4 bg-blue-50 border border-blue-200">
+            <Flex justifyContent="between" alignItems="center">
+              <div>
+                <Text className="font-medium">
+                  Viewing events filtered by {eventIds.length} specific ID{eventIds.length !== 1 ? 's' : ''}
+                </Text>
+                <Text className="text-sm text-blue-600">
+                  {events.length} {events.length === 1 ? 'event' : 'events'} found
+                </Text>
+              </div>
+              <Button
+                variant="light"
+                onClick={() => router.push('/events')}
+              >
+                Clear Filter
+              </Button>
+            </Flex>
+          </Card>
+        </ContentSection>
+      )}
+      
+      {/* Show tool events context banner - only when it's tool-related */}
+      {isToolRelated && eventIds && eventIds.length > 0 && (
+        <ContentSection spacing="default">
+          <Card className="mb-4 bg-blue-50 border border-blue-200">
+            <Flex justifyContent="between" alignItems="center">
+              <div>
+                <Text className="font-medium">
+                  Viewing events related to a tool execution
+                </Text>
+                <Text className="text-sm text-blue-600">
+                  {events.length} events found
+                </Text>
+              </div>
+              <Button
+                variant="light"
+                onClick={() => router.push('/tools')}
+              >
+                Back to Tools
+              </Button>
+            </Flex>
+          </Card>
+        </ContentSection>
+      )}
+      
       {sessionId && (
         <ContentSection spacing="default">
           <Card className="mb-4 bg-blue-50 border border-blue-200">

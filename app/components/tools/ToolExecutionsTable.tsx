@@ -45,6 +45,7 @@ type ToolExecution = {
   input_summary: string;
   output_summary: string;
   error: string | null;
+  associated_event_ids?: string[];
 };
 
 type ToolExecutionsTableProps = {
@@ -157,8 +158,29 @@ export default function ToolExecutionsTable({ executions }: ToolExecutionsTableP
   };
   
   // View execution details
-  const handleViewDetails = (executionId: string) => {
-    router.push(`/tools/executions/${executionId}`);
+  const handleViewDetails = (executionId: string, executionData: ToolExecution) => {
+    // Debug: Log the execution data to check if associated_event_ids exists
+    console.log('Tool execution data:', executionData);
+    console.log('Has associated_event_ids?', 
+      executionData.hasOwnProperty('associated_event_ids') && 
+      Array.isArray(executionData.associated_event_ids) && 
+      executionData.associated_event_ids.length > 0
+    );
+    
+    // Check if we have associated events from the API
+    if (executionData.associated_event_ids && executionData.associated_event_ids.length > 0) {
+      // Navigate to Events page with tool_ids parameter
+      console.log('Redirecting to events with tool_ids:', executionData.associated_event_ids);
+      router.push(`/events?tool_ids=${executionData.associated_event_ids.join(',')}`);
+    } else if (executionData.trace_id) {
+      // If we have a trace ID but no events, go to trace page
+      console.log('No associated events, redirecting to trace:', executionData.trace_id);
+      router.push(`/traces/${executionData.trace_id}`);
+    } else {
+      // Fallback to tools explorer with a notification
+      console.error('No associated events or trace ID found for tool execution:', executionId);
+      router.push('/tools');
+    }
   };
   
   // Handle empty state
@@ -330,7 +352,7 @@ export default function ToolExecutionsTable({ executions }: ToolExecutionsTableP
                   <Button
                     size="xs"
                     variant="secondary"
-                    onClick={() => handleViewDetails(execution.id)}
+                    onClick={() => handleViewDetails(execution.id, execution)}
                   >
                     View Details
                   </Button>

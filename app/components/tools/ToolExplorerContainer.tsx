@@ -36,6 +36,7 @@ type ToolInteraction = {
   span_id: string;
   trace_id: string;
   agent_id: string;
+  associated_event_ids?: number[];
 };
 
 type ToolInteractionsResponse = {
@@ -61,6 +62,7 @@ type ToolExecutionSummary = {
   input_summary: string;
   output_summary: string;
   error: string | null;
+  associated_event_ids: string[];
 };
 
 type ToolSummary = {
@@ -176,7 +178,8 @@ export default function ToolExplorerContainer({ searchParams }: ToolExplorerCont
               ? `Parameters: ${interaction.parameters.join(', ')}` 
               : JSON.stringify(interaction.parameters),
             output_summary: interaction.result ? JSON.stringify(interaction.result).substring(0, 100) : 'No result',
-            error: interaction.error
+            error: interaction.error,
+            associated_event_ids: interaction.associated_event_ids?.map(id => id.toString()) || []
           }));
           
           setExecutions(executionSummaries);

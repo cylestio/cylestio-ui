@@ -8,6 +8,7 @@
 // Telemetry endpoints - The core data is stored in telemetry events
 export const TELEMETRY = {
   EVENTS: '/v1/telemetry/events',
+  EVENTS_BY_IDS: '/v1/telemetry/events/by-ids',
   EVENT_DETAIL: (id: string) => `/v1/telemetry/events/${id}`,
   TRACES: (traceId: string) => `/v1/telemetry/traces/${traceId}`,
   SUBMIT: '/v1/telemetry',

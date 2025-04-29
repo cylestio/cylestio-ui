@@ -98,23 +98,29 @@ export async function fetchAPI<T>(
 }
 
 /**
- * Helper function to build query parameters
+ * Build query parameters for API requests
+ * Handles special cases like arrays (ids=[1,2,3] becomes ids=1,2,3)
  */
 export function buildQueryParams(params: Record<string, any>): string {
+  if (!params || Object.keys(params).length === 0) {
+    return '';
+  }
+  
   const queryParams = new URLSearchParams();
   
-  // Add each parameter to the query string if it has a value
-  Object.entries(params).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && value !== '') {
-      // Ensure time parameters are in ISO 8601 format with UTC timezone
-      if ((key === 'from_time' || key === 'to_time' || key === 'from' || key === 'to') && value instanceof Date) {
-        // Convert Date objects to ISO 8601 string with UTC timezone
-        queryParams.append(key, value.toISOString());
-      } else {
-        queryParams.append(key, String(value));
-      }
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null) {
+      continue;
     }
-  });
+    
+    if (Array.isArray(value)) {
+      queryParams.append(key, value.join(','));
+    } else if (value instanceof Date) {
+      queryParams.append(key, value.toISOString());
+    } else {
+      queryParams.append(key, String(value));
+    }
+  }
   
   const queryString = queryParams.toString();
   return queryString ? `?${queryString}` : '';
