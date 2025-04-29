@@ -13,13 +13,15 @@ export interface ModelDistributionChartProps {
   className?: string;
   valueFormatter?: (value: number) => string;
   showLegend?: boolean;
+  customColors?: Record<string, string>;
 }
 
 export function ModelDistributionChart({
   data,
   className = '',
   valueFormatter = (value: number) => `${value}`,
-  showLegend = true
+  showLegend = true,
+  customColors
 }: ModelDistributionChartProps) {
   if (!data || !Array.isArray(data) || data.length === 0) {
     return (
@@ -52,10 +54,16 @@ export function ModelDistributionChart({
   const chartData = data.map((item, index) => {
     const percentage = (item.count / total) * 100;
     const colorIndex = index % refinedColors.length;
+    
+    // Use custom color if provided and available for this item, otherwise use default color
+    const color = customColors && customColors[item.name] 
+      ? customColors[item.name] 
+      : refinedColors[colorIndex];
+      
     return {
       ...item,
       percentage,
-      color: refinedColors[colorIndex]
+      color
     };
   });
   

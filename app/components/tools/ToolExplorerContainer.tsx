@@ -2,8 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { ReadonlyURLSearchParams } from 'next/navigation';
-import ToolsHeader from './ToolsHeader';
-import ToolsFilterBar from './ToolsFilterBar';
 import ToolsBreakdownCharts from './ToolsBreakdownCharts';
 import ToolExecutionsTable from './ToolExecutionsTable';
 import { fetchAPI, buildQueryParams } from '../../lib/api';
@@ -429,54 +427,13 @@ export default function ToolExplorerContainer({ searchParams }: ToolExplorerCont
   
   // Handle filter changes
   const handleFilterChange = (filterName: string, value: string) => {
-    switch (filterName) {
-      case 'time_range':
-        setTimeRange(value);
-        break;
-      case 'tool_name':
-        setToolName(value);
-        break;
-      case 'tool_type':
-        setToolType(value);
-        break;
-      case 'status':
-        setStatus(value);
-        break;
-      case 'agent_id':
-        setAgentId(value);
-        break;
-      case 'from_time':
-        setFromTime(value);
-        break;
-      case 'to_time':
-        setToTime(value);
-        break;
+    // Only keep time range filter since we removed the other filter UI components
+    if (filterName === 'time_range') {
+      setTimeRange(value);
     }
   };
   
-  // Handle filter preset selection
-  const handleFilterPreset = (preset: 'all' | 'failed' | 'slow') => {
-    setStatus(preset === 'failed' ? 'error' : '');
-    // Set additional filters based on preset
-    if (preset === 'slow') {
-      // This would typically involve custom duration filtering
-      // which might be handled differently in the backend
-    }
-  };
-  
-  // Reset all filters
-  const handleResetFilters = () => {
-    setTimeRange('30d');
-    setToolName('');
-    setToolType('');
-    setStatus('');
-    setAgentId('');
-    setFromTime('');
-    setToTime('');
-  };
-  
-  // After the handleResetFilters function, add a handleRefresh function
-  
+  // Handle refresh
   const handleRefresh = () => {
     setRefreshKey(prev => prev + 1);
     setIsLoading(true);
@@ -490,8 +447,8 @@ export default function ToolExplorerContainer({ searchParams }: ToolExplorerCont
   
   return (
     <PageTemplate
-      title="Tools Explorer"
-      description="Monitor, analyze, and debug tool interactions across your agents"
+      title="Tool Explorer"
+      description="Monitor and analyze tool executions across your platform"
       breadcrumbs={breadcrumbs}
       timeRange={timeRange}
       onTimeRangeChange={(value) => handleFilterChange('time_range', value)}
@@ -504,29 +461,6 @@ export default function ToolExplorerContainer({ searchParams }: ToolExplorerCont
         <ErrorMessage message={error} severity="error" />
       ) : (
         <>
-          <ContentSection spacing="default">
-            <ToolsHeader 
-              summary={summary} 
-              onFilterPreset={handleFilterPreset}
-              timeRange={timeRange}
-              onTimeRangeChange={(value) => handleFilterChange('time_range', value)}
-            />
-          </ContentSection>
-          
-          <ContentSection spacing="default">
-            <ToolsFilterBar
-              timeRange={timeRange}
-              toolName={toolName}
-              toolType={toolType}
-              status={status}
-              agentId={agentId}
-              fromTime={fromTime}
-              toTime={toTime}
-              onFilterChange={handleFilterChange}
-              onResetFilters={handleResetFilters}
-            />
-          </ContentSection>
-          
           <ContentSection spacing="default">
             <ToolsBreakdownCharts 
               summary={summary}
