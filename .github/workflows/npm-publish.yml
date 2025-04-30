@@ -5,10 +5,7 @@ on:
     types: [created]
 
 env:
-  NODE_VERSION: '18.x'
-  # Explicitly disable tests
-  SKIP_TESTS: 'true'
-  DISABLE_TESTS: 'true'
+  NODE_VERSION: '20.x'
   NODE_ENV: 'production'
 
 jobs:
@@ -26,42 +23,29 @@ jobs:
           cache: 'npm'
       
       - name: Install dependencies
-        run: npm ci --no-audit --ignore-scripts
+        run: npm ci
+      
+      - name: Run linting
+        run: npm run lint
         
-      - name: Create .npmrc to disable tests
-        run: |
-          echo "ignore-scripts=true" > .npmrc
-          echo "script-shell=true" >> .npmrc
-      
-      - name: Disable Test Files
-        run: |
-          echo "// Tests disabled" > jest.config.js
-          if [ -d "tests" ]; then
-            find tests -name "*.test.ts*" -type f -exec rm -f {} \;
-            mkdir -p tests/unit/lib
-            echo "/**
-            * This is a placeholder file to prevent test failures.
-            * Tests are temporarily disabled during the UI revamp period.
-            */
-            
-            describe('Database', () => {
-              test('placeholder test', () => {
-                expect(true).toBe(true);
-              });
-            });" > tests/unit/lib/db.test.ts
-          fi
-      
+      - name: Run type checking
+        run: npm run type-check
+        
+      - name: Security audit
+        run: npm run security:check
+        
       - name: Build package
         run: npm run build:package
         env:
-          SKIP_TESTS: 'true'
           NODE_ENV: 'production'
       
+      - name: Verify package
+        run: npm run verify:package
+      
       - name: Publish to npm
-        run: npm publish --ignore-scripts
+        run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_KEY }}
-          SKIP_TESTS: 'true'
           NODE_ENV: 'production'
           
   notify:

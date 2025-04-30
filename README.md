@@ -45,29 +45,40 @@ function Dashboard() {
 
 For complete documentation, visit:
 
+- [Quick Start Guide](docs/QUICKSTART.md)
 - [Installation Guide](docs/installation.md)
 - [API Reference](docs/api-reference.md)
 - [Customization Guide](docs/customization.md)
-- [API Integration Guide](docs/API_INTEGRATION_GUIDE.md) - **IMPORTANT: Always use real API endpoints**
+- [API Integration Guide](docs/API_INTEGRATION_GUIDE.md)
+- [Troubleshooting](docs/TROUBLESHOOTING.md)
 
 ## Integration with Cylestio Monitor
 
 ```jsx
 import { useEffect, useState } from 'react'
 import { CylestioMonitor } from '@cylestio/monitor'
-import { DashboardMetrics, DashboardCharts } from '@cylestio/ui-dashboard'
+import { DashboardMetrics, DashboardCharts, LoadingSpinner } from '@cylestio/ui-dashboard'
 
 function MonitoringDashboard() {
   const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const monitor = new CylestioMonitor({
       apiKey: process.env.NEXT_PUBLIC_CYLESTIO_API_KEY,
+      endpoint: process.env.NEXT_PUBLIC_CYLESTIO_ENDPOINT,
     })
 
     const fetchData = async () => {
-      const result = await monitor.getAgentMetrics()
-      setData(result)
+      setLoading(true)
+      try {
+        const result = await monitor.getAgentMetrics()
+        setData(result)
+      } catch (error) {
+        console.error('Error fetching data:', error)
+      } finally {
+        setLoading(false)
+      }
     }
 
     fetchData()
@@ -75,12 +86,12 @@ function MonitoringDashboard() {
     return () => clearInterval(interval)
   }, [])
 
-  if (!data) return <div>Loading...</div>
+  if (loading) return <LoadingSpinner size="lg" />
 
   return (
     <div className="p-4">
-      <DashboardMetrics data={data.metrics} />
-      <DashboardCharts data={data.charts} />
+      <DashboardMetrics data={data?.metrics} />
+      <DashboardCharts data={data?.charts} />
     </div>
   )
 }
@@ -91,6 +102,26 @@ function MonitoringDashboard() {
 - React 17+
 - Next.js 13+ (with App Router)
 - Node.js 16+
+
+## Development
+
+To contribute to this package:
+
+1. Clone the repository
+2. Install dependencies: `npm install`
+3. Start the development server: `npm run dev`
+4. Build the package: `npm run build:package`
+5. Verify the package: `npm run verify:package`
+
+## Publishing
+
+This package is published to npm via GitHub Actions when a new release is created.
+
+To create a new release:
+
+1. Update the version in `package.json`
+2. Update the `CHANGELOG.md`
+3. Create a new GitHub release with the version as the tag name
 
 ## Contributing
 

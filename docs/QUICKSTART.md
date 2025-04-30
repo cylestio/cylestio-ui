@@ -1,8 +1,68 @@
 # Cylestio UI Quick Start Guide
 
-This guide will help you set up and run the Cylestio UI for local development.
+This guide will help you get started with the Cylestio UI Dashboard.
 
-## Setup
+## Using as an NPM Package
+
+The easiest way to use Cylestio UI is to install it from npm:
+
+```bash
+npm install @cylestio/ui-dashboard
+```
+
+### Basic Implementation
+
+```jsx
+import { 
+  Sidebar, 
+  DashboardMetrics, 
+  DashboardCharts 
+} from '@cylestio/ui-dashboard';
+
+export default function Dashboard() {
+  // Example data
+  const metricsData = [
+    { title: 'Total Agents', value: '47', change: 12, changeType: 'increase' },
+    { title: 'Active Sessions', value: '153', change: 8, changeType: 'increase' },
+    { title: 'Alerts', value: '3', change: 2, changeType: 'decrease' },
+    { title: 'Response Time', value: '245ms', change: 18, changeType: 'decrease' },
+  ];
+
+  return (
+    <div className="flex h-screen">
+      <Sidebar />
+      <main className="flex-1 p-6">
+        <DashboardMetrics data={metricsData} />
+        <DashboardCharts data={yourChartsData} />
+      </main>
+    </div>
+  );
+}
+```
+
+### Configuration
+
+1. Make sure your project includes the peer dependencies:
+   - React 17+ or 18+
+   - Next.js 13+ or 14+
+
+2. If using Tailwind CSS, update your `tailwind.config.js`:
+
+```js
+module.exports = {
+  content: [
+    './pages/**/*.{js,ts,jsx,tsx}',
+    './components/**/*.{js,ts,jsx,tsx}',
+    './app/**/*.{js,ts,jsx,tsx}',
+    './node_modules/@cylestio/ui-dashboard/**/*.{js,ts,jsx,tsx}', // Add this line
+  ],
+  // rest of your config
+};
+```
+
+## Development of Cylestio UI (Contributors)
+
+If you're contributing to this repository, follow these steps for local development:
 
 1. **Clone the repository**
 
@@ -23,7 +83,7 @@ You can run the UI in two modes:
 - With the real API server (requires API access)
 - With the mock API server (for isolated UI development)
 
-## Development with Real API
+### Development with Real API
 
 This mode requires access to the actual Cylestio API server running on port 8000.
 
@@ -43,7 +103,7 @@ npm run dev
 
 The UI will be available at http://localhost:3000 and will connect to the real API at http://localhost:8000.
 
-## Development with Mock API
+### Development with Mock API
 
 This mode doesn't require the real API server and uses a mock implementation instead.
 
@@ -85,12 +145,6 @@ env-cmd -f .env.custom npm run dev
 
 ## Next Steps
 
-Once your development environment is running:
-
-- Check out the dashboard at http://localhost:3000/dashboard
-- Try the agents page at http://localhost:3000/agents
-- View events at http://localhost:3000/events
-
-For more detailed information, see:
-- [Mock API Setup](./MOCK_API_SETUP.md)
-- [Data Loading Fix](./DATA_LOADING_FIX.md) 
+- Check out the [Installation Guide](./installation.md) for detailed setup instructions
+- See the [API Reference](./api-reference.md) for component documentation
+- View the [Customization Guide](./customization.md) for styling options 
