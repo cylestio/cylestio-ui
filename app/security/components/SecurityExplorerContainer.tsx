@@ -3,28 +3,18 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Title,
-  Text,
   Tab,
   TabGroup,
   TabList,
   TabPanel,
   TabPanels,
-  Grid,
   Card,
-  Badge,
-  Flex,
-  Select,
-  SelectItem,
 } from '@tremor/react';
-import { ShieldExclamationIcon, ClockIcon } from '@heroicons/react/24/outline';
 import SecurityDashboard from './SecurityDashboard';
 import SecurityAlertsTable from './SecurityAlertsTable';
-import SecurityFilterBar from './SecurityFilterBar';
 import { buildQueryParams } from '../../lib/api';
 import PageTemplate from '../../components/PageTemplate';
 import ContentSection from '../../components/ContentSection';
-import { SPACING } from '../../components/spacing';
 import RefreshButton from '../../components/RefreshButton';
 
 interface SecurityExplorerContainerProps {
@@ -44,11 +34,6 @@ export default function SecurityExplorerContainer({ searchParams }: SecurityExpl
   });
   
   const [filters, setFilters] = useState({
-    severity: searchParams.get('severity') || '',
-    category: searchParams.get('category') || '',
-    alert_level: searchParams.get('alert_level') || '',
-    llm_vendor: searchParams.get('llm_vendor') || '',
-    search: searchParams.get('search') || '',
     time_range: searchParams.get('time_range') || '30d',
     page: parseInt(searchParams.get('page') || '1'),
     tab: searchParams.get('tab') || '0',
@@ -70,15 +55,6 @@ export default function SecurityExplorerContainer({ searchParams }: SecurityExpl
     setFilters({
       ...filters,
       tab: index.toString(),
-    });
-  };
-
-  // Handle filter changes
-  const handleFilterChange = (newFilters: Record<string, any>) => {
-    setFilters({
-      ...filters,
-      ...newFilters,
-      page: 1, // Reset to page 1 when filters change
     });
   };
 
@@ -113,17 +89,10 @@ export default function SecurityExplorerContainer({ searchParams }: SecurityExpl
       description="Monitor, investigate, and respond to security-related issues across your LLM applications"
       breadcrumbs={breadcrumbItems}
       timeRange={filters.time_range}
-      onTimeRangeChange={(value) => handleFilterChange({ time_range: value })}
+      onTimeRangeChange={(value) => setFilters({...filters, time_range: value})}
       headerContent={<RefreshButton onClick={handleRefresh} />}
       contentSpacing="default"
     >
-      <ContentSection spacing="default">
-        <SecurityFilterBar 
-          filters={filters} 
-          onFilterChange={handleFilterChange} 
-        />
-      </ContentSection>
-      
       <ContentSection spacing="default">
         <TabGroup index={activeTab} onIndexChange={handleTabChange}>
           <TabList>
@@ -154,18 +123,16 @@ export default function SecurityExplorerContainer({ searchParams }: SecurityExpl
             </TabPanel>
             
             <TabPanel>
-              <Grid numItemsMd={1} className="mt-6 gap-6">
-                <Card>
-                  <SecurityAlertsTable 
-                    filters={{
-                      ...filters,
-                      // Only show sensitive_data alerts in the Policies tab
-                      category: 'sensitive_data'
-                    }}
-                    onPageChange={handlePageChange}
-                  />
-                </Card>
-              </Grid>
+              <Card className="mt-6">
+                <SecurityAlertsTable 
+                  filters={{
+                    ...filters,
+                    // Only show sensitive_data alerts in the Policies tab
+                    category: 'sensitive_data'
+                  }}
+                  onPageChange={handlePageChange}
+                />
+              </Card>
             </TabPanel>
           </TabPanels>
         </TabGroup>

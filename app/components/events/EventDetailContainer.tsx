@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Card,
   Title,
@@ -28,6 +28,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { fetchAPI } from '../../lib/api';
 import { TELEMETRY } from '../../lib/api-endpoints';
+import Breadcrumbs from '../Breadcrumbs';
 
 // Define types based on API
 type Event = {
@@ -43,7 +44,7 @@ type Event = {
   attributes: Record<string, any>;
 };
 
-export function EventDetailContainer({ eventId }: { eventId: string }) {
+export function EventDetailContainer({ eventId, fromSecurity = false }: { eventId: string, fromSecurity?: boolean }) {
   const router = useRouter();
   const [event, setEvent] = useState<Event | null>(null);
   const [relatedEvents, setRelatedEvents] = useState<Event[]>([]);
@@ -206,6 +207,22 @@ export function EventDetailContainer({ eventId }: { eventId: string }) {
     return { from: null, traceId: null };
   };
 
+  // Update the breadcrumbs to include security when coming from security
+  const breadcrumbItems = useMemo(() => {
+    const items = [
+      { label: 'Home', href: '/' },
+      { label: 'Events', href: '/events' },
+      { label: `Event ${eventId.substring(0, 8)}`, href: `/events/${eventId}`, current: true },
+    ];
+    
+    // If coming from security, add security breadcrumb
+    if (fromSecurity) {
+      items.splice(1, 0, { label: 'Security', href: '/security?tab=1' });
+    }
+    
+    return items;
+  }, [eventId, fromSecurity]);
+
   // Render loading state
   if (loading) {
     return (
@@ -244,19 +261,34 @@ export function EventDetailContainer({ eventId }: { eventId: string }) {
   const { from, traceId } = getReferrer();
 
   return (
-    <div className="space-y-5">
-      {/* Back Link - conditionally show different back link based on referrer */}
-      {from === 'conversation' && traceId ? (
-        <Link href={`/llm/conversations/${traceId}`} className="inline-flex items-center text-blue-500 hover:text-blue-600 transition-colors">
-          <ArrowLeftIcon className="h-4 w-4 mr-1.5" />
-          <span>Back to Conversation</span>
-        </Link>
-      ) : (
-        <Link href="/events" className="inline-flex items-center text-blue-500 hover:text-blue-600 transition-colors">
-          <ArrowLeftIcon className="h-4 w-4 mr-1.5" />
-          <span>Back to Events</span>
-        </Link>
-      )}
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <Breadcrumbs items={breadcrumbItems} />
+        
+        {/* Back button that changes based on where the user came from */}
+        {fromSecurity ? (
+          <Link href="/security?tab=1">
+            <Button 
+              variant="light" 
+              size="sm" 
+              icon={ArrowLeftIcon}
+              className="text-blue-600"
+            >
+              Back to Security Alerts
+            </Button>
+          </Link>
+        ) : (
+          <Link href="/events">
+            <Button 
+              variant="light" 
+              size="sm" 
+              icon={ArrowLeftIcon}
+            >
+              Back to Events
+            </Button>
+          </Link>
+        )}
+      </div>
       
       {/* Header Section - Made elegant with background and better styling */}
       <Card className="overflow-hidden bg-gradient-to-r from-gray-50/50 via-white to-gray-50/50 border-0">
