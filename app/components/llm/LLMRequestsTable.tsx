@@ -23,7 +23,10 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   ArrowPathIcon,
-  EyeIcon
+  EyeIcon,
+  UserIcon,
+  LinkIcon,
+  ChatBubbleLeftRightIcon
 } from '@heroicons/react/24/outline'
 import Link from 'next/link'
 
@@ -46,6 +49,7 @@ export type LLMRequest = {
   role?: 'user' | 'assistant' | 'system';
   content?: string;
   parent_id?: string;
+  event_id?: number | string;
 }
 
 export type LLMRequestsPagination = {
@@ -197,7 +201,16 @@ export default function LLMRequestsTable({
                   </TableCell>
                   
                   <TableCell>
-                    <Text>{request.agent_name || request.agent_id || '-'}</Text>
+                    {request.agent_name ? (
+                      <div className="flex items-center gap-1">
+                        <UserIcon className="h-4 w-4 text-gray-500" />
+                        <Badge color="blue" size="xs" className="px-2 py-1 rounded-full">
+                          {request.agent_name}
+                        </Badge>
+                      </div>
+                    ) : (
+                      <Text>{request.agent_id || '-'}</Text>
+                    )}
                   </TableCell>
                   
                   <TableCell>
@@ -214,12 +227,17 @@ export default function LLMRequestsTable({
                   </TableCell>
                   
                   <TableCell>
-                    <Text>
-                      {(request.input_tokens || 0).toLocaleString()} / {(request.output_tokens || 0).toLocaleString()}
-                    </Text>
-                    <Text className="text-xs text-gray-500">
-                      Total: {((request.input_tokens || 0) + (request.output_tokens || 0)).toLocaleString()}
-                    </Text>
+                    <div className="flex items-center gap-1">
+                      <DocumentTextIcon className="h-4 w-4 text-gray-500" />
+                      <div>
+                        <Text>
+                          {(request.input_tokens || 0).toLocaleString()} / {(request.output_tokens || 0).toLocaleString()}
+                        </Text>
+                        <Text className="text-xs text-gray-500">
+                          Total: {((request.input_tokens || 0) + (request.output_tokens || 0)).toLocaleString()}
+                        </Text>
+                      </div>
+                    </div>
                   </TableCell>
                   
                   <TableCell>
@@ -235,19 +253,24 @@ export default function LLMRequestsTable({
                           variant="light"
                           color="blue"
                           size="xs"
+                          icon={ChatBubbleLeftRightIcon}
                           onClick={(e) => {
                             onViewConversation(request.trace_id);
                           }}
+                          className="shadow-sm hover:shadow-md transition-shadow duration-200"
                         >
-                          Watch full conversation
+                          View conversation
                         </Button>
                       ) : (
-                        <Link
-                          href={`/trace/${request.trace_id}`}
-                          className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800"
-                        >
-                          Trace
-                        </Link>
+                        <div className="flex items-center gap-1">
+                          <LinkIcon className="h-4 w-4 text-blue-500" />
+                          <Link
+                            href={`/trace/${request.trace_id}`}
+                            className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800"
+                          >
+                            Trace
+                          </Link>
+                        </div>
                       )}
                     </Flex>
                   </TableCell>

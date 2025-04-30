@@ -2,13 +2,14 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { Card, Text, Button, Flex, Title } from '@tremor/react';
 
-import { EventsHeader } from './EventsHeader';
-import { EventsFilterBar } from './EventsFilterBar';
-import { EventsTimeline } from './EventsTimeline';
-import { EventsTable } from './EventsTable';
 import { fetchAPI, buildQueryParams } from '../../lib/api';
 import { TELEMETRY } from '../../lib/api-endpoints';
+import PageTemplate from '../PageTemplate';
+import ContentSection from '../ContentSection';
+import RefreshButton from '../RefreshButton';
+import { EventsTable } from './EventsTable';
 
 // Types based on the API specification
 type Event = {
@@ -24,45 +25,26 @@ type Event = {
   attributes: Record<string, any>;
 };
 
-type TimelineInterval = {
-  timestamp: string;
-  total: number;
-  by_type: Record<string, number>;
-  by_status: Record<string, number>;
-};
-
-type TimelineResponse = {
-  intervals: TimelineInterval[];
-  meta: {
-    timestamp: string;
-    time_period: string;
-    interval: string;
-    filters_applied: Record<string, any>;
-  };
-};
-
 export function EventsExplorerContainer({ 
   sessionId, 
-  traceId 
+  traceId,
+  eventIds,
+  isToolRelated = false
 }: { 
   sessionId?: string;
   traceId?: string;
+  eventIds?: string[];
+  isToolRelated?: boolean;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   
   // State for events data
   const [events, setEvents] = useState<Event[]>([]);
-  const [timelineData, setTimelineData] = useState<TimelineInterval[]>([]);
   const [totalEvents, setTotalEvents] = useState(0);
-  const [errorCount, setErrorCount] = useState(0);
   
-  // State for filters
-  const [timeRange, setTimeRange] = useState(searchParams.get('time_range') || '1d');
-  const [eventType, setEventType] = useState(searchParams.get('event_type') || 'all');
-  const [agentId, setAgentId] = useState(searchParams.get('agent_id') || 'all');
-  const [level, setLevel] = useState(searchParams.get('level') || 'all');
-  const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
+  // Simplified state - keep only time range for page header
+  const [timeRange, setTimeRange] = useState('30d');
   
   // State for pagination
   const [limit, setLimit] = useState(20);
@@ -75,7 +57,10 @@ export function EventsExplorerContainer({
   // Add a reference to track if manual fetch was triggered
   const manualFetchTriggered = useRef(false);
   
-  // Function to fetch events data
+  // Add refresh key state
+  const [refreshKey, setRefreshKey] = useState(0);
+  
+  // Function to fetch events data based on various filters
   const fetchEvents = async () => {
     try {
       setLoading(true);
@@ -86,34 +71,13 @@ export function EventsExplorerContainer({
         offset
       };
       
-      // Set time range
+      // Set time range for context
       const currentTime = new Date();
       let startDate = new Date();
-      
-      switch (timeRange) {
-        case '1h':
-          startDate.setHours(startDate.getHours() - 1);
-          break;
-        case '1d':
-          startDate.setDate(startDate.getDate() - 1);
-          break;
-        case '7d':
-          startDate.setDate(startDate.getDate() - 7);
-          break;
-        case '30d':
-          startDate.setDate(startDate.getDate() - 30);
-          break;
-        default:
-          startDate.setDate(startDate.getDate() - 1);
-      }
+      startDate.setDate(startDate.getDate() - 30); // Default to 30 days
       
       params.from_time = startDate.toISOString();
       params.to_time = currentTime.toISOString();
-      
-      // Add filters
-      if (eventType !== 'all') params.event_name = eventType;
-      if (agentId !== 'all') params.agent_id = agentId;
-      if (level !== 'all') params.level = level;
       
       // Handle specific contexts
       let endpoint = TELEMETRY.EVENTS;
@@ -122,6 +86,21 @@ export function EventsExplorerContainer({
         endpoint = `/v1/telemetry/sessions/${sessionId}/events`;
       } else if (traceId) {
         endpoint = `/v1/telemetry/traces/${traceId}`;
+      } else if (eventIds && eventIds.length > 0) {
+        // Use the dedicated endpoint for fetching events by IDs
+        endpoint = TELEMETRY.EVENTS_BY_IDS;
+        
+        // API requires a POST request with an array of event IDs in the request body
+        const response = await fetchAPI<Event[]>(endpoint, {
+          method: 'POST',
+          body: JSON.stringify(eventIds)
+        });
+        
+        setEvents(response || []);
+        setTotalEvents(response?.length || 0);
+        setError(null);
+        setLoading(false);
+        return; // Early return since we've handled the request
       }
       
       // Fetch events
@@ -129,22 +108,6 @@ export function EventsExplorerContainer({
       
       setEvents(eventsData || []);
       setTotalEvents(eventsData?.length || 0);
-      setErrorCount(eventsData?.filter(event => event.level.toLowerCase() === 'error' || event.level.toLowerCase() === 'critical').length || 0);
-      
-      // Fetch timeline data
-      const timelineParams: Record<string, any> = {
-        time_range: timeRange,
-        interval: getInterval(timeRange)
-      };
-      
-      if (eventType !== 'all') timelineParams.event_type = eventType;
-      if (agentId !== 'all') timelineParams.agent_id = agentId;
-      
-      const timelineResponse = await fetchAPI<TimelineResponse>(`${TELEMETRY.EVENTS}-timeline${buildQueryParams(timelineParams)}`);
-      
-      if (timelineResponse) {
-        setTimelineData(timelineResponse.intervals);
-      }
       
       setError(null);
     } catch (err) {
@@ -155,54 +118,9 @@ export function EventsExplorerContainer({
     }
   };
   
-  // Get appropriate interval based on time range
-  const getInterval = (range: string): string => {
-    switch (range) {
-      case '1h': return '5m';
-      case '1d': return '1h';
-      case '7d': return '6h';
-      case '30d': return '1d';
-      default: return '1h';
-    }
-  };
-  
-  // Handle filter changes
-  const handleFilterChange = (
-    newTimeRange?: string,
-    newEventType?: string,
-    newAgentId?: string,
-    newLevel?: string,
-    newSearchQuery?: string
-  ) => {
-    // Update state
-    if (newTimeRange) setTimeRange(newTimeRange);
-    if (newEventType) setEventType(newEventType);
-    if (newAgentId) setAgentId(newAgentId);
-    if (newLevel) setLevel(newLevel);
-    if (newSearchQuery !== undefined) setSearchQuery(newSearchQuery);
-    
-    // Reset pagination
-    setOffset(0);
-    
-    // Update URL query parameters
-    const params = new URLSearchParams(window.location.search);
-    if (newTimeRange) params.set('time_range', newTimeRange);
-    if (newEventType && newEventType !== 'all') params.set('event_type', newEventType);
-    else if (newEventType === 'all') params.delete('event_type');
-    if (newAgentId && newAgentId !== 'all') params.set('agent_id', newAgentId);
-    else if (newAgentId === 'all') params.delete('agent_id');
-    if (newLevel && newLevel !== 'all') params.set('level', newLevel);
-    else if (newLevel === 'all') params.delete('level');
-    if (newSearchQuery) params.set('search', newSearchQuery);
-    else if (newSearchQuery === '') params.delete('search');
-    
-    // Use router.replace to update URL without full page refresh
-    const queryString = params.toString();
-    router.replace(`/events${queryString ? '?' + queryString : ''}`, { scroll: false });
-    
-    // Mark that we're triggering a manual fetch
-    manualFetchTriggered.current = true;
-    fetchEvents();
+  // Handle time range changes for page header only
+  const handleTimeRangeChange = (newTimeRange: string) => {
+    setTimeRange(newTimeRange);
   };
   
   // Handle pagination
@@ -215,51 +133,168 @@ export function EventsExplorerContainer({
     router.push(`/events/${eventId}`);
   };
   
-  // Fetch data on initial render and when filters change
+  // Add refresh handler after fetchEvents function
+  const handleRefresh = () => {
+    setRefreshKey(prev => prev + 1);
+    manualFetchTriggered.current = true;
+    fetchEvents();
+  };
+  
+  // Fetch data on initial render and when pagination changes
   useEffect(() => {
-    // Skip fetch if it was manually triggered in handleFilterChange
+    // Skip fetch if it was manually triggered
     if (manualFetchTriggered.current) {
       manualFetchTriggered.current = false;
       return;
     }
     
     fetchEvents();
-  }, [timeRange, eventType, agentId, level, offset, limit, sessionId, traceId]);
+  }, [offset, limit, sessionId, traceId, eventIds]);
+  
+  const breadcrumbs = [
+    { label: 'Events', href: '/events', current: true },
+  ];
+  
+  // Add a custom title based on context
+  let title = "Events Explorer";
+  let description = "View, filter, and analyze events from across the system";
+  
+  if (sessionId) {
+    title = "Session Events";
+    description = "Events associated with a specific session";
+  } else if (traceId) {
+    title = "Trace Events";
+    description = "Events associated with a specific trace";
+  } else if (isToolRelated && eventIds && eventIds.length > 0) {
+    title = "Tool-related Events";
+    description = "Events associated with a tool execution";
+  } else if (eventIds && eventIds.length > 0) {
+    title = "Filtered Events";
+    description = "Events filtered by specific IDs";
+  }
   
   return (
-    <div className="space-y-6">
-      <EventsHeader 
-        totalEvents={totalEvents} 
-        errorCount={errorCount}
-        timeRange={timeRange}
-        onTimeRangeChange={(newTimeRange) => handleFilterChange(newTimeRange)}
-      />
+    <PageTemplate
+      title={title}
+      description={description}
+      breadcrumbs={breadcrumbs}
+      timeRange={timeRange}
+      onTimeRangeChange={handleTimeRangeChange}
+      headerContent={<RefreshButton onClick={handleRefresh} />}
+      contentSpacing="default"
+    >
+      {/* Show event IDs context banner - only for regular event filtering, not tool-related */}
+      {eventIds && eventIds.length > 0 && !traceId && !sessionId && !isToolRelated && (
+        <ContentSection spacing="default">
+          <Card className="mb-4 bg-blue-50 border border-blue-200">
+            <Flex justifyContent="between" alignItems="center">
+              <div>
+                <Text className="font-medium">
+                  Viewing events filtered by {eventIds.length} specific ID{eventIds.length !== 1 ? 's' : ''}
+                </Text>
+                <Text className="text-sm text-blue-600">
+                  {events.length} {events.length === 1 ? 'event' : 'events'} found
+                </Text>
+              </div>
+              <Button
+                variant="light"
+                onClick={() => router.push('/events')}
+              >
+                Clear Filter
+              </Button>
+            </Flex>
+          </Card>
+        </ContentSection>
+      )}
       
-      <EventsFilterBar 
-        timeRange={timeRange}
-        eventType={eventType}
-        agentId={agentId}
-        level={level}
-        searchQuery={searchQuery}
-        onFilterChange={handleFilterChange}
-      />
+      {/* Show tool events context banner - only when it's tool-related */}
+      {isToolRelated && eventIds && eventIds.length > 0 && (
+        <ContentSection spacing="default">
+          <Card className="mb-4 bg-blue-50 border border-blue-200">
+            <Flex justifyContent="between" alignItems="center">
+              <div>
+                <Text className="font-medium">
+                  Viewing events related to a tool execution
+                </Text>
+                <Text className="text-sm text-blue-600">
+                  {events.length} events found
+                </Text>
+              </div>
+              <Button
+                variant="light"
+                onClick={() => router.push('/tools')}
+              >
+                Back to Tools
+              </Button>
+            </Flex>
+          </Card>
+        </ContentSection>
+      )}
       
-      <EventsTimeline 
-        timelineData={timelineData}
-        timeRange={timeRange}
-        loading={loading}
-      />
+      {sessionId && (
+        <ContentSection spacing="default">
+          <Card className="mb-4 bg-blue-50 border border-blue-200">
+            <Flex justifyContent="between" alignItems="center">
+              <Text className="font-medium">Filtered by Session ID: {sessionId}</Text>
+              <Button 
+                variant="light"
+                size="xs"
+                onClick={() => router.push('/events')}
+              >
+                Clear Filter
+              </Button>
+            </Flex>
+          </Card>
+        </ContentSection>
+      )}
       
-      <EventsTable 
-        events={events}
-        loading={loading}
-        error={error}
-        limit={limit}
-        offset={offset}
-        totalEvents={totalEvents}
-        onPageChange={handlePageChange}
-        onViewEvent={handleViewEvent}
-      />
-    </div>
+      {!sessionId && (
+        <ContentSection spacing="default">
+          <Card className="p-4">
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              const form = e.target as HTMLFormElement;
+              const input = form.elements.namedItem('sessionId') as HTMLInputElement;
+              const sessionId = input.value;
+              if (sessionId) {
+                router.push(`/events/session/${sessionId}`);
+              }
+            }}>
+              <div className="space-y-4">
+                <div>
+                  <Text className="font-medium mb-2">Filter by Session ID</Text>
+                  <Text className="text-sm text-gray-500 mb-4">
+                    Enter a session ID to view its events
+                  </Text>
+                </div>
+                <div className="flex gap-2">
+                  <input 
+                    type="text" 
+                    name="sessionId"
+                    className="flex-1 border rounded px-3 py-2"
+                    placeholder="Enter Session ID"
+                  />
+                  <Button type="submit">View Session</Button>
+                </div>
+              </div>
+            </form>
+          </Card>
+        </ContentSection>
+      )}
+      
+      {/* Events table */}
+      <ContentSection spacing="default">
+        <EventsTable 
+          events={events}
+          loading={loading}
+          error={error}
+          limit={limit}
+          offset={offset}
+          totalEvents={totalEvents}
+          onPageChange={handlePageChange}
+          onViewEvent={handleViewEvent}
+        />
+      </ContentSection>
+    </PageTemplate>
   );
 } 

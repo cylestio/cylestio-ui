@@ -2231,18 +2231,11 @@ export default function ModelUsageAnalytics({ className = '', timeRange = '30d' 
 
   // Return component JSX
     return (
-      <DashboardCard className={className}>
-        <Flex justifyContent="between" alignItems="center" className="mb-4">
-          <Title>Model Usage Analytics</Title>
-          <Button
-            icon={ArrowPathIcon}
-            variant="light"
-            onClick={fetchModelData}
-          disabled={isLoading}
-          >
-            Refresh
-          </Button>
-        </Flex>
+      <DashboardCard 
+        className={className}
+        title="Model Usage Analytics"
+        icon={<ChartBarIcon className="h-5 w-5" />}
+      >
       
       {isLoading && <LoadingState className="py-8" />}
       

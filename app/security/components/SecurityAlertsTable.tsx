@@ -13,9 +13,6 @@ import {
   Button,
   Flex,
   Title,
-  TextInput,
-  Select,
-  SelectItem,
 } from '@tremor/react';
 import {
   EyeIcon,
@@ -38,15 +35,9 @@ interface SecurityAlertsTableProps {
 type Alert = {
   id: string;
   timestamp: string;
-  schema_version: string;
-  trace_id: string;
-  span_id: string;
-  parent_span_id: string | null;
-  event_name: string;
-  log_level: string;
-  alert_level: string;
-  category: string;
   severity: string;
+  category: string;
+  alert_level: string;
   description: string;
   llm_vendor: string;
   content_sample: string;
@@ -54,6 +45,12 @@ type Alert = {
   keywords: string[];
   event_id: number;
   agent_id: string;
+  schema_version: string;
+  trace_id: string;
+  span_id: string;
+  parent_span_id: string | null;
+  event_name: string;
+  log_level: string;
 };
 
 type PaginationInfo = {
@@ -104,17 +101,6 @@ export default function SecurityAlertsTable({ filters, onPageChange }: SecurityA
     }
   };
   
-  // Get appropriate color for alert level
-  const getAlertLevelColor = (level: string) => {
-    switch (level.toLowerCase()) {
-      case 'critical': return 'rose';
-      case 'dangerous': return 'orange';
-      case 'suspicious': return 'amber';
-      case 'none': return 'gray';
-      default: return 'gray';
-    }
-  };
-  
   // Format category for display
   const formatCategory = (category: string) => {
     return category
@@ -129,62 +115,65 @@ export default function SecurityAlertsTable({ filters, onPageChange }: SecurityA
         setLoading(true);
         
         // Build query params
-        const params = {
-          page: filters.page || 1,
-          page_size: 10,
-          time_range: filters.time_range || '7d',
-        };
+        const params = new URLSearchParams();
         
         if (filters.severity) {
-          Object.assign(params, { severity: filters.severity });
+          params.append('severity', filters.severity);
         }
         
         if (filters.category) {
-          Object.assign(params, { category: filters.category });
+          params.append('category', filters.category);
+        }
+        
+        if (filters.category_exclude) {
+          params.append('category_exclude', filters.category_exclude);
         }
         
         if (filters.alert_level) {
-          Object.assign(params, { alert_level: filters.alert_level });
+          params.append('alert_level', filters.alert_level);
         }
         
         if (filters.llm_vendor) {
-          Object.assign(params, { llm_vendor: filters.llm_vendor });
+          params.append('llm_vendor', filters.llm_vendor);
         }
         
         if (filters.search) {
-          Object.assign(params, { pattern: filters.search });
+          params.append('search', filters.search);
+        }
+        
+        if (filters.time_range) {
+          params.append('time_range', filters.time_range);
         }
         
         if (filters.agent_id) {
-          Object.assign(params, { agent_id: filters.agent_id });
+          params.append('agent_id', filters.agent_id);
         }
         
-        // Convert params to query string
-        const queryParams = new URLSearchParams();
-        Object.entries(params).forEach(([key, value]) => {
-          if (value !== undefined && value !== null && value !== '') {
-            queryParams.append(key, String(value));
-          }
-        });
+        if (filters.page) {
+          params.append('page', filters.page.toString());
+        }
         
-        const data = await fetchAPI<AlertsResponse>(`${SECURITY.ALERTS}?${queryParams.toString()}`);
+        // Fetch alerts data
+        const data = await fetchAPI<AlertsResponse>(`${SECURITY.ALERTS}?${params.toString()}`);
         
-        // Handle category_exclude filter client-side if specified
-        let filteredAlerts = data.alerts;
-        if (filters.category_exclude) {
-          filteredAlerts = filteredAlerts.filter(alert => 
-            alert.category !== filters.category_exclude
+        if (data && data.alerts && Array.isArray(data.alerts)) {
+          // Sort alerts by timestamp in descending order (newest first)
+          const sortedAlerts = [...data.alerts].sort((a, b) => 
+            new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
           );
+          setAlerts(sortedAlerts);
+          setPagination(data.pagination);
+        } else {
+          console.error('Invalid alerts data format:', data);
+          setAlerts([]);
+          setPagination({
+            page: 1,
+            page_size: 10,
+            total: 0,
+            pages: 0,
+          });
         }
         
-        setAlerts(filteredAlerts);
-        setPagination({
-          ...data.pagination,
-          // Adjust total count if we've filtered client-side
-          total: filters.category_exclude 
-            ? filteredAlerts.length 
-            : data.pagination.total
-        });
         setError(null);
       } catch (err) {
         console.error('Error fetching security alerts:', err);
@@ -219,56 +208,26 @@ export default function SecurityAlertsTable({ filters, onPageChange }: SecurityA
   
   return (
     <div>
-      <Table>
-        <TableHead>
-          <TableRow>
-            <TableHeaderCell>Severity</TableHeaderCell>
-            <TableHeaderCell>Category</TableHeaderCell>
-            <TableHeaderCell>Alert Level</TableHeaderCell>
-            <TableHeaderCell>Description</TableHeaderCell>
-            <TableHeaderCell>LLM Vendor</TableHeaderCell>
-            <TableHeaderCell>Time</TableHeaderCell>
-            <TableHeaderCell>Actions</TableHeaderCell>
+      <Table className="border border-gray-200 rounded-lg overflow-hidden w-full table-fixed">
+        <TableHead className="bg-gray-50">
+          <TableRow className="border-b border-gray-200">
+            <TableHeaderCell className="font-semibold text-gray-700 w-[12%]">Time</TableHeaderCell>
+            <TableHeaderCell className="font-semibold text-gray-700 w-[8%]">Severity</TableHeaderCell>
+            <TableHeaderCell className="font-semibold text-gray-700 w-[12%]">Category</TableHeaderCell>
+            <TableHeaderCell className="font-semibold text-gray-700 w-[12%]">Agent ID</TableHeaderCell>
+            <TableHeaderCell className="font-semibold text-gray-700 w-[28%]">Description</TableHeaderCell>
+            <TableHeaderCell className="font-semibold text-gray-700 w-[10%]">LLM Vendor</TableHeaderCell>
+            <TableHeaderCell className="font-semibold text-gray-700 w-[8%]">Actions</TableHeaderCell>
           </TableRow>
         </TableHead>
         
         <TableBody>
           {alerts.map((alert) => (
-            <TableRow key={alert.id} className="hover:bg-gray-50">
-              <TableCell>
-                <Badge color={getSeverityColor(alert.severity)} size="sm">
-                  {alert.severity}
-                </Badge>
-              </TableCell>
-              
-              <TableCell>
-                <Text>{formatCategory(alert.category)}</Text>
-              </TableCell>
-              
-              <TableCell>
-                <Badge color={getAlertLevelColor(alert.alert_level)} size="sm">
-                  {alert.alert_level}
-                </Badge>
-              </TableCell>
-              
-              <TableCell>
-                <Link href={`/security/alerts/${alert.id}`}>
-                  <Text className="font-medium hover:text-blue-500 cursor-pointer">
-                    {alert.description.substring(0, 60) + (alert.description.length > 60 ? '...' : '')}
-                  </Text>
-                  {alert.keywords && alert.keywords.length > 0 && (
-                    <Text className="text-xs text-gray-500 mt-1">
-                      Keywords: {alert.keywords.slice(0, 3).join(', ')}
-                      {alert.keywords.length > 3 ? ` +${alert.keywords.length - 3} more` : ''}
-                    </Text>
-                  )}
-                </Link>
-              </TableCell>
-              
-              <TableCell>
-                <Text>{alert.llm_vendor}</Text>
-              </TableCell>
-              
+            <TableRow 
+              key={alert.id} 
+              className="border-b border-gray-100 transition-colors hover:bg-blue-50/30 cursor-pointer"
+              onClick={() => window.location.href = `/events/${alert.event_id}?from=security`}
+            >
               <TableCell>
                 <Flex justifyContent="start" alignItems="center" className="gap-1">
                   <ClockIcon className="h-4 w-4 text-gray-500" />
@@ -277,12 +236,47 @@ export default function SecurityAlertsTable({ filters, onPageChange }: SecurityA
               </TableCell>
               
               <TableCell>
-                <Link href={`/security/alerts/${alert.id}`}>
+                <Badge color={getSeverityColor(alert.severity)} size="sm">
+                  {alert.severity}
+                </Badge>
+              </TableCell>
+              
+              <TableCell>
+                <Text className="font-medium">{formatCategory(alert.category)}</Text>
+              </TableCell>
+              
+              <TableCell>
+                <Link href={`/agents/${alert.agent_id}`} onClick={(e) => e.stopPropagation()} className="text-blue-600 hover:text-blue-800">
+                  {alert.agent_id}
+                </Link>
+              </TableCell>
+              
+              <TableCell className="max-w-xs">
+                <div className="truncate">
+                  <Text className="font-medium text-gray-900">
+                    {alert.description.substring(0, 60) + (alert.description.length > 60 ? '...' : '')}
+                  </Text>
+                  {alert.keywords && alert.keywords.length > 0 && (
+                    <Text className="text-xs text-gray-500 mt-1 truncate">
+                      Keywords: {alert.keywords.slice(0, 3).join(', ')}
+                      {alert.keywords.length > 3 ? ` +${alert.keywords.length - 3} more` : ''}
+                    </Text>
+                  )}
+                </div>
+              </TableCell>
+              
+              <TableCell>
+                <Text>{alert.llm_vendor}</Text>
+              </TableCell>
+              
+              <TableCell>
+                <Link href={`/events/${alert.event_id}?from=security`} onClick={(e) => e.stopPropagation()}>
                   <Button 
                     variant="light" 
                     size="xs" 
                     icon={EyeIcon}
-                    tooltip="View Alert Details"
+                    tooltip="View Event Details"
+                    className="text-blue-600 hover:text-blue-800"
                   >
                     View
                   </Button>
@@ -294,7 +288,7 @@ export default function SecurityAlertsTable({ filters, onPageChange }: SecurityA
       </Table>
       
       {pagination.pages > 1 && (
-        <Flex justifyContent="between" className="mt-4">
+        <Flex justifyContent="between" className="mt-6">
           <Text>
             Showing {alerts.length} of {pagination.total} alerts
           </Text>
@@ -304,6 +298,7 @@ export default function SecurityAlertsTable({ filters, onPageChange }: SecurityA
               icon={ChevronLeftIcon}
               disabled={pagination.page === 1}
               onClick={() => onPageChange(pagination.page - 1)}
+              className="border border-gray-200"
             >
               Previous
             </Button>
@@ -313,6 +308,7 @@ export default function SecurityAlertsTable({ filters, onPageChange }: SecurityA
               iconPosition="right"
               disabled={pagination.page === pagination.pages}
               onClick={() => onPageChange(pagination.page + 1)}
+              className="border border-gray-200"
             >
               Next
             </Button>

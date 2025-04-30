@@ -5,10 +5,10 @@ import {
   Flex, 
   Metric,
   Card,
-  Grid
+  Grid,
 } from '@tremor/react'
 import { DocumentTextIcon, CurrencyDollarIcon, ChartBarIcon } from '@heroicons/react/24/outline'
-import SectionHeader from '../SectionHeader'
+import PageHeader from '../PageHeader'
 
 // Define the types for the metrics
 export type LLMHeaderMetrics = {
@@ -26,6 +26,8 @@ export interface LLMHeaderProps {
   onTabChange: (index: number) => void;
   loading?: boolean;
   className?: string;
+  timeRange?: string;
+  onTimeRangeChange?: (value: string) => void;
 }
 
 export default function LLMHeader({ 
@@ -33,16 +35,27 @@ export default function LLMHeader({
   activeTab, 
   onTabChange, 
   loading = false,
-  className = ''
+  className = '',
+  timeRange = '30d',
+  onTimeRangeChange
 }: LLMHeaderProps) {
+  // Define breadcrumb items
+  const breadcrumbs = [
+    { label: 'LLM', href: '/llm', current: true },
+  ];
+
   return (
-    <div className={`space-y-6 ${className}`}>
-      <SectionHeader
+    <div className={className}>
+      <PageHeader
         title="LLM Explorer"
         description="Analyze LLM usage, track token consumption, and monitor costs"
+        breadcrumbs={breadcrumbs}
+        timeRange={timeRange}
+        onTimeRangeChange={onTimeRangeChange}
+        showTimeRangeFilter={!!onTimeRangeChange}
       />
       
-      <Grid numItemsMd={3} className="gap-6">
+      <Grid numItemsMd={3} className="gap-6 mb-6">
         <Card decoration="top" decorationColor="blue">
           <Flex justifyContent="start" className="gap-2">
             <DocumentTextIcon className="h-6 w-6 text-blue-500" />

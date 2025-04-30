@@ -27,14 +27,24 @@ import {
 import BreadcrumbNavigation from '../drilldown/BreadcrumbNavigation';
 import LoadingState from '../LoadingState';
 import ErrorMessage from '../ErrorMessage';
-import { AgentMetricsDashboard } from './AgentMetricsDashboard';
+import { AgentMetricsDashboard, AgentMetricsRow } from './AgentMetricsDashboard';
 import { AgentSessionsTable } from './AgentSessionsTable';
 import { AgentLLMUsage } from './AgentLLMUsage';
 import { AgentToolUsage } from './AgentToolUsage';
+import { AgentLLMRequestsTable } from './AgentLLMRequestsTable';
 import { fetchAPI } from '../../lib/api';
 import { AGENTS } from '../../lib/api-endpoints';
 import { Agent, TimeRangeOption } from '../../types/agent';
 import appSettings from '../../config/app-settings';
+import { AgentTokenUsage } from './AgentTokenUsage';
+import { AgentToolExecutions } from './AgentToolExecutions';
+import { AgentTraces } from './AgentTraces';
+import { AgentAlerts } from './AgentAlerts';
+
+// Extend the Agent type if needed for the component's specific requirements
+interface ExtendedAgent extends Agent {
+  type?: string;
+}
 
 interface AgentDetailContainerProps {
   agentId: string;
@@ -43,13 +53,28 @@ interface AgentDetailContainerProps {
 export function AgentDetailContainer({ agentId }: AgentDetailContainerProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [agent, setAgent] = useState<Agent | null>(null);
+  const [agent, setAgent] = useState<ExtendedAgent | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [timeRange, setTimeRange] = useState<TimeRangeOption>(
     (searchParams.get('time_range') as TimeRangeOption) || 
     appSettings.timeRanges.default as TimeRangeOption
   );
+
+  // Function to calculate success rate
+  function calculateSuccessRate(agent: ExtendedAgent | null): string {
+    if (!agent || !agent.metrics) return 'N/A';
+    
+    const requests = agent.metrics.request_count || 0;
+    const errors = agent.metrics.error_count || 0;
+    
+    // If no requests or zero requests, return N/A
+    if (requests === 0) return 'N/A';
+    
+    // Calculate success rate: (requests - errors) / requests * 100
+    const successRate = ((requests - errors) / requests) * 100;
+    return `${successRate.toFixed(1)}%`;
+  }
 
   // Function to handle time range changes
   const handleTimeRangeChange = (value: string) => {
@@ -77,10 +102,15 @@ export function AgentDetailContainer({ agentId }: AgentDetailContainerProps) {
         // Check if component is still mounted before updating state
         if (!isMounted) return;
         
+        // Add debug logging
+        console.log("Agent data from API:", data);
+        
         // Normalize agent data structure for consistent usage
         // Ensure metrics properties are accessible directly if needed
         setAgent({
           ...data,
+          // Force name to match URL parameter if in development
+          name: process.env.NODE_ENV === 'development' ? agentId : data.name,
           request_count: data.request_count || data.metrics?.request_count || 0,
           token_usage: data.token_usage || data.metrics?.token_usage || 0,
           error_count: data.error_count || data.metrics?.error_count || 0
@@ -147,16 +177,24 @@ export function AgentDetailContainer({ agentId }: AgentDetailContainerProps) {
       {/* Breadcrumb Navigation */}
       <BreadcrumbNavigation
         items={[
-          { label: 'Home', href: '/' },
           { label: 'Agents', href: '/agents' },
-          { label: agent.name, current: true }
+          { label: agent.name || agentId, current: true }
         ]}
         className="mb-4"
+        includeHome={true}
       />
       
       {/* Time Range Selector and Title Row */}
       <div className="flex justify-between items-center mb-6">
-        <Title className="text-2xl font-bold">{agent.name}</Title>
+        <div>
+          <Flex alignItems="center" className="gap-2">
+            <Title className="text-2xl font-bold">{agent.name || agentId}</Title>
+            <Badge color={agent.status === 'active' ? 'green' : 'gray'} size="sm">
+              {agent.status === 'active' ? 'Active' : 'Inactive'}
+            </Badge>
+          </Flex>
+          <Text className="text-gray-500 mt-1">Last active {new Date(agent.updated_at).toLocaleString()}</Text>
+        </div>
         <div className="w-40">
           <Select value={timeRange} onValueChange={handleTimeRangeChange}>
             <SelectItem value="24h">Last 24 hours</SelectItem>
@@ -166,77 +204,25 @@ export function AgentDetailContainer({ agentId }: AgentDetailContainerProps) {
         </div>
       </div>
       
-      {/* Agent Header Card */}
-      <Card className="mb-6">
-        <Flex justifyContent="between" alignItems="center">
-          <Flex alignItems="center">
-            <div className="bg-primary-50 p-3 rounded-full mr-4">
-              <UserCircleIcon className="h-6 w-6 text-primary-500" />
-            </div>
-            <div>
-              <Text>{agent.type || 'Other'} Agent</Text>
-              <Text className="text-gray-500">Last active {new Date(agent.updated_at).toLocaleString()}</Text>
-            </div>
-          </Flex>
-          
-          <Badge color={agent.status === 'active' ? 'green' : 'gray'} size="xl">
-            {agent.status === 'active' ? 'Active' : 'Inactive'}
-          </Badge>
-        </Flex>
-        
-        {agent.description && (
-          <>
-            <Divider className="my-4" />
-            <Text>{agent.description}</Text>
-          </>
-        )}
-        
-        <Divider className="my-4" />
-        
-        <Grid numItemsMd={2} numItemsLg={4} className="gap-4">
-          <Card decoration="top" decorationColor="blue">
-            <Text>Total Requests</Text>
-            <Metric>{agent.request_count.toLocaleString()}</Metric>
-          </Card>
-          
-          <Card decoration="top" decorationColor="emerald">
-            <Text>Success Rate</Text>
-            <Metric>
-              {agent.metrics?.success_rate 
-                ? `${agent.metrics.success_rate}%` 
-                : agent.request_count > 0 && agent.error_count > 0 
-                  ? `${Math.round(((agent.request_count - agent.error_count) / agent.request_count) * 100)}%` 
-                  : 'N/A'}
-            </Metric>
-          </Card>
-          
-          <Card decoration="top" decorationColor="amber">
-            <Text>Token Usage</Text>
-            <Metric>{agent.token_usage.toLocaleString()}</Metric>
-          </Card>
-          
-          <Card decoration="top" decorationColor="red">
-            <Text>Errors</Text>
-            <Metric>{agent.error_count.toLocaleString()}</Metric>
-          </Card>
-        </Grid>
-      </Card>
+      {/* Performance Metrics Row - above tabs */}
+      <div className="mb-6">
+        <AgentMetricsRow 
+          agentId={agentId} 
+          timeRange={timeRange} 
+          agent={agent as any} 
+        />
+      </div>
       
       {/* Agent Details Tabs */}
       <TabGroup className="mb-6">
         <TabList>
-          <Tab>Overview</Tab>
           <Tab>Sessions</Tab>
           <Tab>LLM Usage</Tab>
           <Tab>Tools</Tab>
+          <Tab>Alerts</Tab>
         </TabList>
         
         <TabPanels>
-          {/* Overview Panel */}
-          <TabPanel>
-            <AgentMetricsDashboard agentId={agentId} timeRange={timeRange} />
-          </TabPanel>
-          
           {/* Sessions Panel */}
           <TabPanel>
             <AgentSessionsTable agentId={agentId} timeRange={timeRange} />
@@ -250,6 +236,11 @@ export function AgentDetailContainer({ agentId }: AgentDetailContainerProps) {
           {/* Tools Panel */}
           <TabPanel>
             <AgentToolUsage agentId={agentId} timeRange={timeRange} />
+          </TabPanel>
+          
+          {/* Alerts Panel */}
+          <TabPanel>
+            <AgentAlerts agentId={agentId} timeRange={timeRange} />
           </TabPanel>
         </TabPanels>
       </TabGroup>

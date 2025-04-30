@@ -61,13 +61,11 @@ export default function Sidebar({ navigation: customNavigation, title = 'Cylesti
     <div className={`flex flex-col w-64 bg-white border-r border-gray-200 ${className}`}>
       <div className="flex flex-col items-center justify-center h-24 border-b border-gray-200 p-4">
         <Image
-          src="/images/cylestio_logo.png"
+          src="/images/cylestio_logo_full.png"
           alt="Cylestio Logo"
-          width={48}
+          width={150}
           height={48}
-          className="mb-2"
         />
-        <h1 className="text-lg font-semibold text-gray-800">{title}</h1>
       </div>
       <div className="flex flex-col flex-1 overflow-y-auto">
         <nav className="flex-1 px-2 py-4 space-y-1">

@@ -1,38 +1,55 @@
 'use client'
 
 import React, { ReactNode } from 'react'
+import { SPACING } from './spacing'
 
 export type BreakpointSize = 'sm' | 'md' | 'lg' | 'xl' | '2xl'
 export type ResponsiveLayoutType = 'stack' | 'grid' | 'flex'
+
+type ColumnConfig = {
+  default: number
+  xs?: number
+  sm?: number
+  md?: number
+  lg?: number
+  xl?: number
+  xxl?: number
+}
 
 export interface ResponsiveContainerProps {
   children: ReactNode
   className?: string
   defaultLayout?: ResponsiveLayoutType
   layoutByBreakpoint?: Partial<Record<BreakpointSize, ResponsiveLayoutType>>
-  columns?: {
-    default: number
-    sm?: number
-    md?: number
-    lg?: number
-    xl?: number
-    '2xl'?: number
-  }
-  spacing?: 'none' | 'sm' | 'md' | 'lg'
+  columns?: ColumnConfig
+  spacing?: 'none' | 'xs' | 'sm' | 'md' | 'lg' | 'xl'
   equalHeight?: boolean
   centerContent?: boolean
   collapseBelow?: BreakpointSize
   reducedContentOnMobile?: boolean
 }
 
-const getSpacingClasses = (spacing: ResponsiveContainerProps['spacing']) => {
-  const spacingMap = {
-    none: 'gap-0',
-    sm: 'gap-3',
-    md: 'gap-6',
-    lg: 'gap-8'
+const getResponsiveColumnClasses = (columns: ColumnConfig) => {
+  const baseClasses = []
+  
+  // Default columns (mobile first)
+  if (columns.default) {
+    baseClasses.push(`grid-cols-${columns.default}`)
   }
-  return spacingMap[spacing || 'md']
+  
+  // Responsive breakpoints
+  if (columns.xs) baseClasses.push(`xs:grid-cols-${columns.xs}`)
+  if (columns.sm) baseClasses.push(`sm:grid-cols-${columns.sm}`)
+  if (columns.md) baseClasses.push(`md:grid-cols-${columns.md}`)
+  if (columns.lg) baseClasses.push(`lg:grid-cols-${columns.lg}`)
+  if (columns.xl) baseClasses.push(`xl:grid-cols-${columns.xl}`)
+  if (columns.xxl) baseClasses.push(`2xl:grid-cols-${columns.xxl}`)
+  
+  return baseClasses.join(' ')
+}
+
+const getSpacingClasses = (spacing: ResponsiveContainerProps['spacing']) => {
+  return spacing ? getResponsiveSpacing(spacing) : SPACING.TAILWIND.GRID_GAP
 }
 
 const getLayoutClasses = (
@@ -116,7 +133,7 @@ const ResponsiveContainer: React.FC<ResponsiveContainerProps> = ({
   className = '',
   defaultLayout = 'grid',
   layoutByBreakpoint,
-  columns = { default: 2 },
+  columns = { default: 1, md: 2, lg: 3 },
   spacing = 'md',
   equalHeight = false,
   centerContent = false,
@@ -144,6 +161,18 @@ const ResponsiveContainer: React.FC<ResponsiveContainerProps> = ({
       {children}
     </div>
   )
+}
+
+const getResponsiveSpacing = (size: 'none' | 'xs' | 'sm' | 'md' | 'lg' | 'xl') => {
+  const spacingMap = {
+    none: 'gap-0',
+    xs: 'gap-2 sm:gap-3',
+    sm: 'gap-3 sm:gap-4',
+    md: 'gap-4 sm:gap-6',
+    lg: 'gap-6 sm:gap-8',
+    xl: 'gap-8 sm:gap-10'
+  }
+  return spacingMap[size]
 }
 
 export default ResponsiveContainer 

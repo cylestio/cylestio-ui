@@ -21,7 +21,14 @@ export function TokenUsageByModelChart({ data, formatValue, colors }: TokenUsage
   const OUTPUT_COLOR = colors?.[1] || "rgba(139, 92, 246, 0.4)"; // Transparent light purple
   
   useEffect(() => {
-    if (!data || data.length === 0) return;
+    // Ensure there's always some data to render
+    const chartData = data && data.length > 0 ? data : [
+      { 
+        name: "No Data", 
+        'Input Tokens': 1, 
+        'Output Tokens': 1 
+      }
+    ];
     
     const canvas = canvasRef.current;
     const container = containerRef.current;
@@ -34,6 +41,13 @@ export function TokenUsageByModelChart({ data, formatValue, colors }: TokenUsage
       
       // Update canvas size to match container
       const { width, height } = container.getBoundingClientRect();
+      
+      // Skip rendering if container dimensions are too small
+      if (width < 50 || height < 50) {
+        console.warn('Container dimensions too small for chart rendering');
+        return;
+      }
+      
       canvas.width = width * window.devicePixelRatio;
       canvas.height = height * window.devicePixelRatio;
       canvas.style.width = `${width}px`;
@@ -57,8 +71,10 @@ export function TokenUsageByModelChart({ data, formatValue, colors }: TokenUsage
       const chartHeight = height - chartPadding.top - chartPadding.bottom;
       
       // Find the max value for scaling and ensure it's not zero
-      let maxTotal = Math.max(...data.map(d => d['Input Tokens'] + d['Output Tokens']));
-      maxTotal = maxTotal || 1; // Ensure we don't divide by zero
+      let maxTotal = Math.max(...chartData.map(d => 
+        (d['Input Tokens'] || 0) + (d['Output Tokens'] || 0)
+      ));
+      maxTotal = Math.max(maxTotal, 1); // Ensure we don't divide by zero
       
       const yScale = chartHeight / maxTotal;
       
@@ -294,33 +310,72 @@ export function TokenUsageByModelChart({ data, formatValue, colors }: TokenUsage
     // Add mouseleave handler to redraw chart
     canvas.addEventListener('mouseleave', drawChart);
     
-    // Handle window resize
+    // Add window resize handler
     const handleResize = () => {
-      drawChart();
+      if (canvas && containerRef.current) {
+        const { width, height } = containerRef.current.getBoundingClientRect();
+        if (width > 0 && height > 0) { // Only redraw if container has valid dimensions
+          drawChart();
+        }
+      }
     };
     
     window.addEventListener('resize', handleResize);
+    
+    // Set up a periodic redraw to handle container size changes
+    const redrawInterval = setInterval(() => {
+      if (canvas && containerRef.current) {
+        const { width, height } = containerRef.current.getBoundingClientRect();
+        if (width > 0 && height > 0) { // Only redraw if container has valid dimensions
+          drawChart();
+        }
+      }
+    }, 1000); // Check every second
     
     // Cleanup
     return () => {
       canvas.removeEventListener('mousemove', handleMouseMove);
       canvas.removeEventListener('mouseleave', drawChart);
       window.removeEventListener('resize', handleResize);
+      clearInterval(redrawInterval);
     };
-  }, [data, formatValue, colors]);
-  
-  // Return with a container for when no data is available
-  if (!data || data.length === 0) {
-    return (
-      <div className="h-full w-full flex items-center justify-center text-gray-500">
-        No model usage data available
-      </div>
-    );
-  }
+  }, [data, formatValue, colors, INPUT_COLOR, OUTPUT_COLOR]);
   
   return (
-    <div ref={containerRef} className="relative w-full h-full">
-      <canvas ref={canvasRef} className="w-full h-full" />
+    <div 
+      ref={containerRef} 
+      style={{ 
+        width: '100%', 
+        height: '100%', 
+        position: 'relative',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center'
+      }}
+    >
+      <canvas 
+        ref={canvasRef} 
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%'
+        }}
+      />
+      {/* Fallback message in case canvas fails to render */}
+      {!data || data.length === 0 ? (
+        <div 
+          style={{
+            position: 'absolute',
+            textAlign: 'center',
+            color: '#6B7280',
+            pointerEvents: 'none'
+          }}
+        >
+          No data available
+        </div>
+      ) : null}
     </div>
   );
 } 

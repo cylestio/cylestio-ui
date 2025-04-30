@@ -45,6 +45,8 @@ import {
 } from '@heroicons/react/24/outline';
 import Link from 'next/link';
 import { SimpleDonutChart } from './SimpleDonutChart';
+import { AgentSessionsTable } from './agents/AgentSessionsTable';
+import { AgentTracesTable } from './agents/AgentTracesTable';
 
 type AgentDetailProps = {
   agentId: string;
@@ -232,14 +234,14 @@ export function AgentDetail({ agentId }: AgentDetailProps) {
       }
       
       // Fetch sessions
-      const sessionsResponse = await fetch(`/v1/agents/${agentId}/sessions?time_range=${timeRange}&page=1&page_size=5`);
+      const sessionsResponse = await fetch(`/v1/agents/${agentId}/sessions?time_range=${timeRange}&page=1&page_size=10`);
       if (sessionsResponse.ok) {
         const sessionsData = await sessionsResponse.json();
         setSessions(sessionsData.items || []);
       }
       
       // Fetch traces
-      const tracesResponse = await fetch(`/v1/agents/${agentId}/traces?time_range=${timeRange}&page=1&page_size=5`);
+      const tracesResponse = await fetch(`/v1/agents/${agentId}/traces?time_range=${timeRange}&page=1&page_size=10`);
       if (tracesResponse.ok) {
         const tracesData = await tracesResponse.json();
         setTraces(tracesData.items || []);
@@ -613,6 +615,44 @@ export function AgentDetail({ agentId }: AgentDetailProps) {
                   </Link>
                 </div>
               </Card>
+              
+              {/* Recent Sessions Summary */}
+              <Card>
+                <Title>Recent Sessions</Title>
+                {sessions.length === 0 ? (
+                  <Text className="mt-4">No sessions found for this agent.</Text>
+                ) : (
+                  <div className="mt-4">
+                    <Flex justifyContent="between" className="border-b border-gray-200 pb-2">
+                      <Text className="font-medium">Start Time</Text>
+                      <Text className="font-medium">End Time</Text>
+                      <Text className="font-medium">Session ID</Text>
+                      <Text className="font-medium">Status</Text>
+                    </Flex>
+                    <div className="space-y-2 mt-2 max-h-64 overflow-auto">
+                      {sessions.slice(0, 5).map((session) => (
+                        <Flex key={session.session_id} justifyContent="between" className="py-1 border-b border-gray-100">
+                          <Text>{formatTimestamp(session.start_time)}</Text>
+                          <Text>{session.end_time ? formatTimestamp(session.end_time) : "In progress"}</Text>
+                          <Text className="truncate max-w-[120px]">{session.session_id}</Text>
+                          <StatusBadge status={session.status} />
+                        </Flex>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="mt-4 text-right">
+                  <Link href="#" onClick={(e) => {
+                    e.preventDefault();
+                    const tabElement = document.querySelectorAll('[role="tab"]')[3];
+                    if (tabElement instanceof HTMLElement) {
+                      tabElement.click();
+                    }
+                  }} className="text-blue-500 hover:text-blue-700">
+                    View all sessions
+                  </Link>
+                </div>
+              </Card>
             </Grid>
           </TabPanel>
           
@@ -687,11 +727,6 @@ export function AgentDetail({ agentId }: AgentDetailProps) {
                     </TableBody>
                   </Table>
                 )}
-                <div className="mt-4 text-right">
-                  <Link href={`/llm?agentId=${agent.agent_id}`} className="text-blue-500 hover:text-blue-700">
-                    View all LLM requests
-                  </Link>
-                </div>
               </Card>
             </Grid>
           </TabPanel>
@@ -780,85 +815,13 @@ export function AgentDetail({ agentId }: AgentDetailProps) {
           <TabPanel>
             <Grid numItemsMd={1} className="gap-6 mt-6">
               <Card>
-                <Title>Recent Sessions</Title>
-                {sessions.length === 0 ? (
-                  <Text className="mt-4">No sessions found for this agent.</Text>
-                ) : (
-                  <Table className="mt-4">
-                    <TableHead>
-                      <TableRow>
-                        <TableHeaderCell>Session ID</TableHeaderCell>
-                        <TableHeaderCell>Start Time</TableHeaderCell>
-                        <TableHeaderCell>Duration</TableHeaderCell>
-                        <TableHeaderCell>Events</TableHeaderCell>
-                        <TableHeaderCell>LLM Requests</TableHeaderCell>
-                        <TableHeaderCell>Tool Executions</TableHeaderCell>
-                        <TableHeaderCell>Errors</TableHeaderCell>
-                        <TableHeaderCell>Status</TableHeaderCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {sessions.map((session) => (
-                        <TableRow key={session.session_id}>
-                          <TableCell>{session.session_id}</TableCell>
-                          <TableCell>{formatTimestamp(session.start_time)}</TableCell>
-                          <TableCell>{session.duration_seconds} sec</TableCell>
-                          <TableCell>{session.event_count}</TableCell>
-                          <TableCell>{session.llm_request_count}</TableCell>
-                          <TableCell>{session.tool_execution_count}</TableCell>
-                          <TableCell>{session.error_count}</TableCell>
-                          <TableCell>
-                            <StatusBadge status={session.status} />
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-                <div className="mt-4 text-right">
-                  <Link href={`/sessions?agentId=${agent.agent_id}`} className="text-blue-500 hover:text-blue-700">
-                    View all sessions
-                  </Link>
-                </div>
-                </Card>
+                <Title>Agent Sessions</Title>
+                <AgentSessionsTable agentId={agentId} timeRange={timeRange} />
+              </Card>
               
               <Card>
                 <Title>Recent Traces</Title>
-                {traces.length === 0 ? (
-                  <Text className="mt-4">No traces found for this agent.</Text>
-                ) : (
-                  <Table className="mt-4">
-                    <TableHead>
-                      <TableRow>
-                        <TableHeaderCell>Trace ID</TableHeaderCell>
-                        <TableHeaderCell>Start Time</TableHeaderCell>
-                        <TableHeaderCell>Duration</TableHeaderCell>
-                        <TableHeaderCell>Events</TableHeaderCell>
-                        <TableHeaderCell>Initial Event</TableHeaderCell>
-                        <TableHeaderCell>Status</TableHeaderCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {traces.map((trace) => (
-                        <TableRow key={trace.trace_id}>
-                          <TableCell>{trace.trace_id}</TableCell>
-                          <TableCell>{formatTimestamp(trace.start_time)}</TableCell>
-                          <TableCell>{trace.duration_ms} ms</TableCell>
-                          <TableCell>{trace.event_count}</TableCell>
-                          <TableCell>{trace.initial_event_type}</TableCell>
-                          <TableCell>
-                            <StatusBadge status={trace.status} />
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-                <div className="mt-4 text-right">
-                  <Link href={`/traces?agentId=${agent.agent_id}`} className="text-blue-500 hover:text-blue-700">
-                    View all traces
-                  </Link>
-                </div>
+                <AgentTracesTable agentId={agentId} timeRange={timeRange} />
               </Card>
             </Grid>
           </TabPanel>
@@ -870,23 +833,34 @@ export function AgentDetail({ agentId }: AgentDetailProps) {
               {alerts.length === 0 ? (
                 <Text className="mt-4">No security alerts found for this agent.</Text>
               ) : (
-                <Table className="mt-4">
-                  <TableHead>
-                    <TableRow>
-                      <TableHeaderCell>Alert ID</TableHeaderCell>
-                      <TableHeaderCell>Timestamp</TableHeaderCell>
-                      <TableHeaderCell>Type</TableHeaderCell>
-                      <TableHeaderCell>Severity</TableHeaderCell>
-                      <TableHeaderCell>Description</TableHeaderCell>
-                      <TableHeaderCell>Status</TableHeaderCell>
-                      <TableHeaderCell>Event ID</TableHeaderCell>
+                <Table className="mt-4 border border-gray-200 rounded-lg overflow-hidden w-full table-fixed bg-white">
+                  <TableHead className="bg-gray-50">
+                    <TableRow className="border-b border-gray-200">
+                      <TableHeaderCell className="font-semibold text-gray-700 w-[15%]">Alert ID</TableHeaderCell>
+                      <TableHeaderCell className="font-semibold text-gray-700 w-[15%]">Timestamp</TableHeaderCell>
+                      <TableHeaderCell className="font-semibold text-gray-700 w-[10%]">Type</TableHeaderCell>
+                      <TableHeaderCell className="font-semibold text-gray-700 w-[10%]">Severity</TableHeaderCell>
+                      <TableHeaderCell className="font-semibold text-gray-700 w-[25%]">Description</TableHeaderCell>
+                      <TableHeaderCell className="font-semibold text-gray-700 w-[10%]">Status</TableHeaderCell>
+                      <TableHeaderCell className="font-semibold text-gray-700 w-[15%]">Actions</TableHeaderCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {alerts.map((alert) => (
-                      <TableRow key={alert.alert_id}>
-                        <TableCell>{alert.alert_id}</TableCell>
-                        <TableCell>{formatTimestamp(alert.timestamp)}</TableCell>
+                      <TableRow 
+                        key={alert.alert_id}
+                        className="border-b border-gray-100 transition-colors hover:bg-blue-50/30 cursor-pointer"
+                        onClick={() => {
+                          window.location.href = `/events/${alert.related_event_id}`;
+                        }}
+                      >
+                        <TableCell className="font-medium">{alert.alert_id}</TableCell>
+                        <TableCell>
+                          <Flex justifyContent="start" alignItems="center" className="gap-1">
+                            <ClockIcon className="h-4 w-4 text-gray-500" />
+                            <Text>{formatTimestamp(alert.timestamp)}</Text>
+                          </Flex>
+                        </TableCell>
                         <TableCell>{alert.type}</TableCell>
                         <TableCell>
                           <Badge color={getSeverityColor(alert.severity)}>{alert.severity}</Badge>
@@ -899,9 +873,16 @@ export function AgentDetail({ agentId }: AgentDetailProps) {
                             {alert.status}
                           </Badge>
                         </TableCell>
-                        <TableCell>
-                          <Link href={`/events/${alert.related_event_id}`} className="text-blue-500 hover:text-blue-700">
-                            {alert.related_event_id}
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <Link href={`/events/${alert.related_event_id}`}>
+                            <Button 
+                              variant="light" 
+                              size="xs" 
+                              icon={ChevronRightIcon}
+                              className="text-blue-600 hover:text-blue-800"
+                            >
+                              View
+                            </Button>
                           </Link>
                         </TableCell>
                       </TableRow>
@@ -933,14 +914,14 @@ export function AgentDetail({ agentId }: AgentDetailProps) {
               <Text className="mb-4">View all events related to this agent in the Events Explorer. This will take you to a dedicated view where you can analyze and filter all telemetry events.</Text>
               
               <Card>
-                <Table>
-                  <TableHead>
-                    <TableRow>
-                      <TableHeaderCell>Type</TableHeaderCell>
-                      <TableHeaderCell>Level</TableHeaderCell>
-                      <TableHeaderCell>Time</TableHeaderCell>
-                      <TableHeaderCell>Trace ID</TableHeaderCell>
-                      <TableHeaderCell>Actions</TableHeaderCell>
+                <Table className="border border-gray-200 rounded-lg overflow-hidden w-full table-fixed bg-white">
+                  <TableHead className="bg-gray-50">
+                    <TableRow className="border-b border-gray-200">
+                      <TableHeaderCell className="font-semibold text-gray-700 w-[20%]">Type</TableHeaderCell>
+                      <TableHeaderCell className="font-semibold text-gray-700 w-[15%]">Level</TableHeaderCell>
+                      <TableHeaderCell className="font-semibold text-gray-700 w-[25%]">Time</TableHeaderCell>
+                      <TableHeaderCell className="font-semibold text-gray-700 w-[25%]">Trace ID</TableHeaderCell>
+                      <TableHeaderCell className="font-semibold text-gray-700 w-[15%]">Actions</TableHeaderCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>

@@ -9,11 +9,14 @@ import {
   Button,
   Flex,
   Grid,
+  Text,
+  Divider,
 } from '@tremor/react';
 import {
   MagnifyingGlassIcon,
   ArrowPathIcon,
   XMarkIcon,
+  FunnelIcon,
 } from '@heroicons/react/24/outline';
 import { fetchAPI } from '../../lib/api';
 
@@ -30,6 +33,7 @@ type EventsFilterBarProps = {
     level?: string,
     searchQuery?: string
   ) => void;
+  sessionId?: string;
 };
 
 export function EventsFilterBar({
@@ -39,9 +43,11 @@ export function EventsFilterBar({
   level,
   searchQuery,
   onFilterChange,
+  sessionId
 }: EventsFilterBarProps) {
   const [agents, setAgents] = useState<{ id: string; name: string }[]>([]);
   const [localSearchQuery, setLocalSearchQuery] = useState(searchQuery);
+  const [localSessionId, setLocalSessionId] = useState(sessionId || '');
   const [loading, setLoading] = useState(false);
 
   // Fetch available agents
@@ -82,8 +88,27 @@ export function EventsFilterBar({
     setLocalSearchQuery('');
   };
 
+  // Handle session ID submission
+  const handleSessionIdSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (localSessionId) {
+      // Redirect to session events page if session ID provided
+      window.location.href = `/events/session/${localSessionId}`;
+    }
+  };
+
   return (
     <Card>
+      {/* Session ID display when already filtered */}
+      {sessionId && (
+        <div className="mb-4 p-2 bg-blue-50 border border-blue-200 rounded">
+          <Text className="text-blue-700">
+            <span className="font-bold">Session ID:</span> {sessionId}
+          </Text>
+        </div>
+      )}
+
+      {/* Main filters */}
       <form onSubmit={handleSearchSubmit}>
         <Grid numItemsMd={5} numItemsLg={5} className="gap-4">
           <div>
@@ -165,6 +190,34 @@ export function EventsFilterBar({
           </div>
         </Grid>
       </form>
+
+      {/* Session ID filter - only show when not already filtered by session */}
+      {!sessionId && (
+        <>
+          <Divider className="my-4" />
+          <div className="bg-blue-50 p-3 rounded border border-blue-200">
+            <Text className="font-medium mb-2">Filter By Session ID</Text>
+            <form onSubmit={handleSessionIdSubmit}>
+              <Flex className="gap-2">
+                <TextInput
+                  value={localSessionId}
+                  onChange={(e) => setLocalSessionId(e.target.value)}
+                  placeholder="Enter Session ID..."
+                  className="flex-1"
+                />
+                <Button
+                  type="submit"
+                  variant="primary"
+                  icon={FunnelIcon}
+                  disabled={!localSessionId}
+                >
+                  Apply
+                </Button>
+              </Flex>
+            </form>
+          </div>
+        </>
+      )}
     </Card>
   );
 } 

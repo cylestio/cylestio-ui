@@ -48,7 +48,7 @@ export default function ToolExecutionDetailContainer({ executionId }: ToolExecut
       setError(null);
       
       try {
-        const response = await fetchAPI(`/v1/telemetry/tools/executions/${executionId}`);
+        const response = await fetchAPI(`/tools/executions/${executionId}`);
         setExecutionDetail(response as ToolExecutionDetail);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch tool execution details');

@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Title, Text, DonutChart, ProgressBar, Flex, Metric, Legend } from '@tremor/react';
-import { CommandLineIcon } from '@heroicons/react/24/outline';
+import { Card, Title, Text, Table, TableHead, TableRow, TableHeaderCell, TableBody, TableCell, Badge } from '@tremor/react';
+import { CommandLineIcon, ArrowRightIcon } from '@heroicons/react/24/outline';
 import Link from 'next/link';
 import LoadingState from '../../components/LoadingState';
 import ErrorMessage from '../../components/ErrorMessage';
@@ -33,7 +33,6 @@ export function AgentToolUsage({ agentId, timeRange }: AgentToolUsageProps) {
 
   // Fetch tool usage data
   useEffect(() => {
-    // Skip API call if we don't have an agent ID
     if (!agentId) {
       setLoading(false);
       setError("No agent ID provided");
@@ -50,7 +49,6 @@ export function AgentToolUsage({ agentId, timeRange }: AgentToolUsageProps) {
           `${AGENTS.TOOL_USAGE(agentId)}?time_range=${timeRange}`
         );
         
-        // Check if component is still mounted before updating state
         if (!isMounted) return;
         
         setToolUsage(data.items || []);
@@ -68,35 +66,10 @@ export function AgentToolUsage({ agentId, timeRange }: AgentToolUsageProps) {
 
     fetchToolUsage();
     
-    // Cleanup function to handle component unmounting
     return () => {
       isMounted = false;
     };
   }, [agentId, timeRange]);
-
-  // Calculate the total executions
-  const totalExecutions = toolUsage.reduce(
-    (sum, tool) => sum + tool.execution_count, 
-    0
-  );
-
-  // Format for the chart
-  const chartData = toolUsage
-    .sort((a, b) => b.execution_count - a.execution_count)
-    .slice(0, 5)
-    .map(tool => ({
-      name: tool.tool_name,
-      value: tool.execution_count,
-    }));
-
-  // Custom colors
-  const customColors = [
-    'blue',
-    'cyan',
-    'indigo',
-    'violet',
-    'purple',
-  ];
 
   if (loading) {
     return <LoadingState message="Loading tool usage..." />;
@@ -117,65 +90,48 @@ export function AgentToolUsage({ agentId, timeRange }: AgentToolUsageProps) {
   }
 
   return (
-    <div>
-      <div className="mb-4">
-        <Title>Tool Usage</Title>
-        <Text>Top tools used by this agent</Text>
-      </div>
-
-      <div className="h-56 mt-4">
-        <DonutChart
-          data={chartData}
-          category="value"
-          index="name"
-          variant="pie"
-          colors={customColors}
-          showLabel={true}
-          showAnimation={true}
-          valueFormatter={(value) => `${value} calls`}
-        />
-      </div>
-
-      <Legend
-        categories={chartData.map(item => item.name)}
-        colors={customColors}
-        className="mt-4"
-      />
-
-      <div className="mt-6">
-        <Text className="font-medium">Success Rate by Tool</Text>
-        <div className="space-y-3 mt-2">
-          {toolUsage
-            .sort((a, b) => b.execution_count - a.execution_count)
-            .slice(0, 3)
-            .map((tool) => (
-              <div key={tool.tool_name}>
-                <Flex justifyContent="between" className="mb-1">
-                  <Text>{tool.tool_name}</Text>
-                  <Text>{tool.success_rate.toFixed(0)}%</Text>
-                </Flex>
-                <ProgressBar 
-                  value={tool.success_rate} 
-                  color={tool.success_rate > 90 ? 'green' : tool.success_rate > 70 ? 'yellow' : 'red'} 
-                />
-              </div>
-            ))}
+    <Card>
+      <div className="flex justify-between items-center mb-2">
+        <div>
+          <Title>Tool Usage</Title>
+          <Text>Tool usage statistics for this agent</Text>
         </div>
-      </div>
-
-      <div className="mt-6 text-center">
-        <Flex justifyContent="center" alignItems="center" className="space-x-1">
-          <CommandLineIcon className="h-5 w-5 text-blue-500" />
-          <Metric>{totalExecutions}</Metric>
-        </Flex>
-        <Text>Total Tool Executions</Text>
-      </div>
-      
-      <div className="mt-4 text-center">
-        <Link href={`/agents/${agentId}/tools`} className="text-blue-500 hover:underline text-sm">
-          View all tool executions →
+        <Link href={`/tools?agent=${agentId}`} className="text-blue-500 hover:underline flex items-center">
+          <span className="mr-1">View all tool executions</span>
+          <ArrowRightIcon className="h-4 w-4" />
         </Link>
       </div>
-    </div>
+      
+      <Table className="mt-4">
+        <TableHead>
+          <TableRow>
+            <TableHeaderCell>Tool</TableHeaderCell>
+            <TableHeaderCell>Category</TableHeaderCell>
+            <TableHeaderCell>Executions</TableHeaderCell>
+            <TableHeaderCell>Success Rate</TableHeaderCell>
+            <TableHeaderCell>Avg Duration</TableHeaderCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {toolUsage.map((tool) => (
+            <TableRow 
+              key={tool.tool_name} 
+              className="cursor-pointer hover:bg-gray-50"
+              onClick={() => window.location.href = `/tools?agent=${agentId}&tool=${tool.tool_name}`}
+            >
+              <TableCell>{tool.tool_name}</TableCell>
+              <TableCell>{tool.category}</TableCell>
+              <TableCell>{tool.execution_count}</TableCell>
+              <TableCell>
+                <Badge color={tool.success_rate > 0.90 ? 'green' : tool.success_rate > 0.70 ? 'yellow' : 'red'}>
+                  {(tool.success_rate * 100).toFixed(0)}%
+                </Badge>
+              </TableCell>
+              <TableCell>{tool.avg_duration_ms.toFixed(0)} ms</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </Card>
   );
 } 

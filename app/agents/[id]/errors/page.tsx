@@ -136,6 +136,7 @@ export default function AgentErrorsPage({ params }: AgentErrorsPageProps) {
           { label: agentName, href: `/agents/${agentId}` },
           { label: 'Errors', href: `/agents/${agentId}/errors` },
         ]}
+        includeHome={true}
       />
       
       <div className="flex justify-between items-center mb-6">

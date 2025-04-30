@@ -8,9 +8,5 @@ const AgentsExplorerContainer = dynamic(
 );
 
 export default function AgentsExplorerPage() {
-  return (
-    <div className="container mx-auto p-4">
-      <AgentsExplorerContainer />
-    </div>
-  );
+  return <AgentsExplorerContainer />;
 } 

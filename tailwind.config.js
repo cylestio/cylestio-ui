@@ -181,6 +181,15 @@ module.exports = {
         '56': '224px',
         '64': '256px',
       },
+      keyframes: {
+        fadeIn: {
+          '0%': { opacity: '0', transform: 'translateY(10px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        }
+      },
+      animation: {
+        fadeIn: 'fadeIn 0.3s ease-out forwards',
+      }
     },
   },
   safelist: [
@@ -205,6 +214,8 @@ module.exports = {
       pattern: /^(bg|text|border|ring)-(primary|secondary|success|warning|error)-(50|100|200|300|400|500|600|700|800|900)$/,
       variants: ["hover", "focus", "active"],
     },
+    // Include animation classes in the safelist
+    "animate-fadeIn",
   ],
   plugins: [],
 }

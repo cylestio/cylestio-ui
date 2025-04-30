@@ -78,6 +78,7 @@ export const TOOLS = {
   LIST: '/tools',
   DETAIL: (toolId: string) => `/tools/${toolId}`,
   EXECUTIONS: '/metrics/tools/executions',
+  EXECUTION_DETAIL: (executionId: string) => `/tools/executions/${executionId}`,
   SUCCESS_RATE: '/metrics/tools/success_rate',
 };
 

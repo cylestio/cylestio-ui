@@ -28,6 +28,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { fetchAPI, buildQueryParams } from '../lib/api';
 import { AGENTS } from '../lib/api-endpoints';
+import { RiRobot2Line } from 'react-icons/ri';
 
 // Define types based on new API schema
 type Agent = {
@@ -352,7 +353,10 @@ export function AgentsDashboard({ initialData }: AgentsDashboardProps) {
         <Card>
           <div className="h-28">
             <Text>Total Agents</Text>
-            <Metric>{meta.total_agents}</Metric>
+            <Flex alignItems="center" className="gap-2">
+              <RiRobot2Line className="h-5 w-5 text-blue-500" />
+              <Metric>{meta.total_agents}</Metric>
+            </Flex>
           </div>
         </Card>
         <Card>

@@ -15,6 +15,7 @@ import {
   Legend, 
   Flex
 } from '@tremor/react';
+import { ModelDistributionChart } from '../ModelDistributionChart';
 
 // Types based on API response
 type ToolSummary = {
@@ -91,12 +92,11 @@ export default function ToolsBreakdownCharts({
     percentage: data.count / summary.total_executions * 100
   })) : [];
   
-  // Prepare data for success/failure rates by tool type
-  const successRateData = summary ? Object.entries(summary.by_tool_type).map(([type, data]) => ({
-    type,
-    success: data.success_rate * 100,
-    failure: 100 - (data.success_rate * 100)
-  })) : [];
+  // Format data for ModelDistributionChart
+  const toolTypeChartData = toolTypeData.map(item => ({
+    name: item.type,
+    count: item.count
+  }));
   
   // Prepare data for top tools chart
   const topToolsData = summary?.top_tools.slice(0, 5).map(tool => ({
@@ -139,6 +139,15 @@ export default function ToolsBreakdownCharts({
   const percentFormatter = (value: number) => `${value.toFixed(1)}%`;
   const durationFormatter = (value: number) => formatDuration(value);
   
+  // Define custom colors for status types
+  const statusColorMap: Record<string, string> = {
+    'Success': '#22c55e', // green
+    'Error': '#ef4444',   // red
+    'Pending': '#eab308', // yellow
+    'Timeout': '#3b82f6', // blue
+    'Canceled': '#6b7280' // gray
+  };
+  
   return (
     <div className="space-y-6">
       <TabGroup>
@@ -146,7 +155,6 @@ export default function ToolsBreakdownCharts({
           <Tab>Usage Breakdown</Tab>
           <Tab>Performance</Tab>
           <Tab>Timeline</Tab>
-          <Tab>By Agent</Tab>
         </TabList>
         
         <TabPanels>
@@ -156,72 +164,112 @@ export default function ToolsBreakdownCharts({
               <Card>
                 <Title>Tool Usage by Type</Title>
                 <Text>Distribution of tool executions by category</Text>
-                <DonutChart
-                  className="mt-6 h-60"
-                  data={toolTypeData}
-                  category="count"
-                  index="type"
-                  valueFormatter={valueFormatter}
-                  colors={["indigo", "violet", "fuchsia", "cyan", "emerald", "amber"]}
-                />
-                <Legend
-                  className="mt-3"
-                  categories={toolTypeData.map(item => item.type)}
-                  colors={["indigo", "violet", "fuchsia", "cyan", "emerald", "amber"]}
-                />
-              </Card>
-              
-              <Card>
-                <Title>Top 5 Most Used Tools</Title>
-                <Text>Tools with the highest execution count</Text>
-                <BarChart
-                  className="mt-6 h-60"
-                  data={topToolsData}
-                  index="name"
-                  categories={["count"]}
-                  colors={["blue"]}
-                  valueFormatter={valueFormatter}
-                  layout="vertical"
-                  yAxisWidth={150}
-                />
-              </Card>
-              
-              <Card>
-                <Title>Success/Failure Rates by Tool Type</Title>
-                <Text>Percentage of successful and failed executions</Text>
-                <BarChart
-                  className="mt-6 h-60"
-                  data={successRateData}
-                  index="type"
-                  categories={["success", "failure"]}
-                  colors={["emerald", "rose"]}
-                  valueFormatter={percentFormatter}
-                  stack={true}
-                />
+                <div className="mt-6 flex justify-center">
+                  <ModelDistributionChart
+                    data={toolTypeChartData}
+                    valueFormatter={valueFormatter}
+                    className="w-full"
+                  />
+                </div>
               </Card>
               
               <Card>
                 <Title>Status Distribution</Title>
                 <Text>Tool executions by status</Text>
-                <DonutChart
-                  className="mt-6 h-60"
-                  data={summary ? [
-                    { status: 'Success', value: summary.by_status.success || 0 },
-                    { status: 'Error', value: summary.by_status.error || 0 },
-                    { status: 'Timeout', value: summary.by_status.timeout || 0 },
-                    { status: 'Pending', value: summary.by_status.pending || 0 },
-                    { status: 'Canceled', value: summary.by_status.canceled || 0 }
-                  ] : []}
-                  category="value"
-                  index="status"
-                  valueFormatter={valueFormatter}
-                  colors={["emerald", "rose", "amber", "blue", "gray"]}
-                />
-                <Legend
-                  className="mt-3"
-                  categories={["Success", "Error", "Timeout", "Pending", "Canceled"]}
-                  colors={["emerald", "rose", "amber", "blue", "gray"]}
-                />
+                <div className="mt-6 flex justify-center">
+                  <ModelDistributionChart
+                    data={summary ? [
+                      { name: 'Success', count: summary.by_status.success || 0 },
+                      { name: 'Error', count: summary.by_status.error || 0 },
+                      { name: 'Timeout', count: summary.by_status.timeout || 0 },
+                      { name: 'Pending', count: summary.by_status.pending || 0 },
+                      { name: 'Canceled', count: summary.by_status.canceled || 0 }
+                    ].filter(item => item.count > 0) : []}
+                    valueFormatter={valueFormatter}
+                    className="w-full"
+                    customColors={statusColorMap}
+                  />
+                </div>
+              </Card>
+            </div>
+            
+            <div className="mt-6">
+              <Card>
+                <Title>Top 5 Most Used Tools</Title>
+                <Text>Tools with the highest execution count</Text>
+                <div className="mt-4 px-1">
+                  {/* Chart heading */}
+                  <div className="flex items-center space-x-3 font-medium text-sm text-gray-700 mb-6">
+                    <div className="w-40">Tool Name</div>
+                    <div className="flex-1">Executions</div>
+                    <div className="w-24 text-right">Count</div>
+                  </div>
+
+                  {/* X-axis guides with light grid lines */}
+                  <div className="relative mb-2">
+                    <div className="absolute bottom-0 left-40 right-24 h-10 flex justify-between">
+                      {(() => {
+                        const maxCount = Math.max(...topToolsData.map(t => t.count));
+                        const steps = [0, Math.ceil(maxCount / 4), Math.ceil(maxCount / 2), Math.ceil(3 * maxCount / 4), maxCount];
+                        return steps.map((count, i) => {
+                          const position = i / (steps.length - 1) * 100;
+                          return (
+                            <div key={i} className="absolute h-full bottom-0 flex flex-col" style={{ left: `${position}%`, transform: 'translateX(-50%)' }}>
+                              <div className="flex-1 border-l border-gray-200 w-0"></div>
+                              <div className="text-xs text-gray-500 mt-1">
+                                {count.toLocaleString()}
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                  </div>
+                  
+                  {/* Bars */}
+                  <div className="space-y-4 relative">
+                    {topToolsData.map((tool, index) => {
+                      const maxCount = Math.max(...topToolsData.map(t => t.count));
+                      const percentage = (tool.count / maxCount) * 100;
+                      
+                      return (
+                        <div key={tool.name} className="group relative flex items-center space-x-3">
+                          <div className="w-40 text-sm truncate font-medium" title={tool.name}>
+                            {tool.name}
+                          </div>
+                          <div className="flex-1 h-10 bg-gray-100 rounded-lg overflow-hidden relative">
+                            {/* Grid lines (vertical) */}
+                            {[0.25, 0.5, 0.75].map((pos) => (
+                              <div 
+                                key={pos} 
+                                className="absolute top-0 h-full border-l border-gray-200" 
+                                style={{ left: `${pos * 100}%` }}
+                              ></div>
+                            ))}
+                            <div 
+                              className="h-full rounded-lg transition-all duration-500 ease-out bg-gradient-to-r from-blue-500/80 via-blue-400/60 to-blue-300/40"
+                              style={{ width: `${Math.max(1, percentage)}%` }} // Ensure even small values are visible
+                            />
+                            <div className="absolute top-0 left-0 w-full h-full opacity-0 group-hover:opacity-10 bg-white transition-opacity duration-200" />
+                          </div>
+                          <div className="w-24 text-sm text-right font-medium">
+                            {tool.count.toLocaleString()}
+                          </div>
+                          
+                          {/* Tooltip positioned above the bar */}
+                          <div className="absolute top-0 left-0 right-0 -translate-y-14 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10 flex justify-center">
+                            <div className="bg-gray-900 text-white p-2 rounded-lg shadow-lg text-xs whitespace-nowrap">
+                              <div className="font-medium">{tool.name}</div>
+                              <div className="mt-1">{tool.count.toLocaleString()} executions</div>
+                              {/* Arrow */}
+                              <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-gray-900"></div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               </Card>
             </div>
           </TabPanel>
@@ -232,35 +280,172 @@ export default function ToolsBreakdownCharts({
               <Card>
                 <Title>Average Duration by Tool Type</Title>
                 <Text>Average execution time in milliseconds</Text>
-                <BarChart
-                  className="mt-6 h-60"
-                  data={durationData}
-                  index="type"
-                  categories={["duration"]}
-                  colors={["amber"]}
-                  valueFormatter={durationFormatter}
-                />
+                <div className="mt-4 px-1">
+                  {/* Chart heading */}
+                  <div className="flex items-center space-x-3 font-medium text-sm text-gray-700 mb-6">
+                    <div className="w-40">Tool Type</div>
+                    <div className="flex-1">Duration</div>
+                    <div className="w-24 text-right">Time</div>
+                  </div>
+
+                  {/* X-axis guides with light grid lines */}
+                  <div className="relative mb-2">
+                    <div className="absolute bottom-0 left-40 right-24 h-10 flex justify-between">
+                      {(() => {
+                        const maxDuration = Math.max(...durationData.map(t => t.duration));
+                        const steps = [0, Math.ceil(maxDuration / 4), Math.ceil(maxDuration / 2), Math.ceil(3 * maxDuration / 4), maxDuration];
+                        return steps.map((duration, i) => {
+                          const position = i / (steps.length - 1) * 100;
+                          return (
+                            <div key={i} className="absolute h-full bottom-0 flex flex-col" style={{ left: `${position}%`, transform: 'translateX(-50%)' }}>
+                              <div className="flex-1 border-l border-gray-200 w-0"></div>
+                              <div className="text-xs text-gray-500 mt-1">
+                                {formatDuration(duration)}
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                  </div>
+                  
+                  {/* Bars */}
+                  <div className="space-y-4 relative">
+                    {durationData.map((tool, index) => {
+                      const maxDuration = Math.max(...durationData.map(t => t.duration));
+                      const percentage = (tool.duration / maxDuration) * 100;
+                      
+                      return (
+                        <div key={tool.type} className="group relative flex items-center space-x-3">
+                          <div className="w-40 text-sm truncate font-medium" title={tool.type}>
+                            {tool.type}
+                          </div>
+                          <div className="flex-1 h-10 bg-gray-100 rounded-lg overflow-hidden relative">
+                            {/* Grid lines (vertical) */}
+                            {[0.25, 0.5, 0.75].map((pos) => (
+                              <div 
+                                key={pos} 
+                                className="absolute top-0 h-full border-l border-gray-200" 
+                                style={{ left: `${pos * 100}%` }}
+                              ></div>
+                            ))}
+                            <div 
+                              className="h-full rounded-lg transition-all duration-500 ease-out bg-gradient-to-r from-amber-500/80 via-amber-400/60 to-amber-300/40"
+                              style={{ width: `${Math.max(1, percentage)}%` }} // Ensure even small values are visible
+                            />
+                            <div className="absolute top-0 left-0 w-full h-full opacity-0 group-hover:opacity-10 bg-white transition-opacity duration-200" />
+                          </div>
+                          <div className="w-24 text-sm text-right font-medium">
+                            {formatDuration(tool.duration)}
+                          </div>
+                          
+                          {/* Tooltip positioned above the bar */}
+                          <div className="absolute top-0 left-0 right-0 -translate-y-14 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10 flex justify-center">
+                            <div className="bg-gray-900 text-white p-2 rounded-lg shadow-lg text-xs whitespace-nowrap">
+                              <div className="font-medium">{tool.type}</div>
+                              <div className="mt-1">Average: {formatDuration(tool.duration)}</div>
+                              {/* Arrow */}
+                              <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-gray-900"></div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               </Card>
               
               <Card>
                 <Title>Slowest Tools</Title>
                 <Text>Tools with the highest average execution time</Text>
-                <BarChart
-                  className="mt-6 h-60"
-                  data={summary?.top_tools
-                    .sort((a, b) => b.avg_duration_ms - a.avg_duration_ms)
-                    .slice(0, 5)
-                    .map(tool => ({
-                      name: tool.name,
-                      duration: tool.avg_duration_ms
-                    })) || []}
-                  index="name"
-                  categories={["duration"]}
-                  colors={["orange"]}
-                  valueFormatter={durationFormatter}
-                  layout="vertical"
-                  yAxisWidth={150}
-                />
+                <div className="mt-4 px-1">
+                  {/* Chart heading */}
+                  <div className="flex items-center space-x-3 font-medium text-sm text-gray-700 mb-6">
+                    <div className="w-40">Tool Name</div>
+                    <div className="flex-1">Duration</div>
+                    <div className="w-24 text-right">Time</div>
+                  </div>
+
+                  {/* X-axis guides with light grid lines */}
+                  <div className="relative mb-2">
+                    <div className="absolute bottom-0 left-40 right-24 h-10 flex justify-between">
+                      {(() => {
+                        const slowToolsData = summary?.top_tools
+                          .sort((a, b) => b.avg_duration_ms - a.avg_duration_ms)
+                          .slice(0, 5)
+                          .map(tool => ({
+                            name: tool.name,
+                            duration: tool.avg_duration_ms
+                          })) || [];
+                          
+                        const maxDuration = Math.max(...slowToolsData.map(t => t.duration));
+                        const steps = [0, Math.ceil(maxDuration / 4), Math.ceil(maxDuration / 2), Math.ceil(3 * maxDuration / 4), maxDuration];
+                        return steps.map((duration, i) => {
+                          const position = i / (steps.length - 1) * 100;
+                          return (
+                            <div key={i} className="absolute h-full bottom-0 flex flex-col" style={{ left: `${position}%`, transform: 'translateX(-50%)' }}>
+                              <div className="flex-1 border-l border-gray-200 w-0"></div>
+                              <div className="text-xs text-gray-500 mt-1">
+                                {formatDuration(duration)}
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                  </div>
+                  
+                  {/* Bars */}
+                  <div className="space-y-4 relative">
+                    {(summary?.top_tools
+                      .sort((a, b) => b.avg_duration_ms - a.avg_duration_ms)
+                      .slice(0, 5)
+                      .map(tool => ({
+                        name: tool.name,
+                        duration: tool.avg_duration_ms
+                      })) || []).map((tool, index) => {
+                        const maxDuration = Math.max(...(summary?.top_tools || [])
+                          .map(t => t.avg_duration_ms));
+                        const percentage = (tool.duration / maxDuration) * 100;
+                        
+                        return (
+                          <div key={tool.name} className="group relative flex items-center space-x-3">
+                            <div className="w-40 text-sm truncate font-medium" title={tool.name}>
+                              {tool.name}
+                            </div>
+                            <div className="flex-1 h-10 bg-gray-100 rounded-lg overflow-hidden relative">
+                              {/* Grid lines (vertical) */}
+                              {[0.25, 0.5, 0.75].map((pos) => (
+                                <div 
+                                  key={pos} 
+                                  className="absolute top-0 h-full border-l border-gray-200" 
+                                  style={{ left: `${pos * 100}%` }}
+                                ></div>
+                              ))}
+                              <div 
+                                className="h-full rounded-lg transition-all duration-500 ease-out bg-gradient-to-r from-orange-500/80 via-orange-400/60 to-orange-300/40"
+                                style={{ width: `${Math.max(1, percentage)}%` }} // Ensure even small values are visible
+                              />
+                              <div className="absolute top-0 left-0 w-full h-full opacity-0 group-hover:opacity-10 bg-white transition-opacity duration-200" />
+                            </div>
+                            <div className="w-24 text-sm text-right font-medium">
+                              {formatDuration(tool.duration)}
+                            </div>
+                            
+                            {/* Tooltip positioned above the bar */}
+                            <div className="absolute top-0 left-0 right-0 -translate-y-14 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10 flex justify-center">
+                              <div className="bg-gray-900 text-white p-2 rounded-lg shadow-lg text-xs whitespace-nowrap">
+                                <div className="font-medium">{tool.name}</div>
+                                <div className="mt-1">Average: {formatDuration(tool.duration)}</div>
+                                {/* Arrow */}
+                                <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-gray-900"></div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
               </Card>
             </div>
           </TabPanel>
@@ -283,41 +468,6 @@ export default function ToolsBreakdownCharts({
                 showAnimation={true}
               />
             </Card>
-          </TabPanel>
-          
-          {/* By Agent Tab */}
-          <TabPanel>
-            <div className="mt-4 grid grid-cols-1 gap-6">
-              {agentBreakdown.map((agent) => (
-                <Card key={agent.agent_id} className="p-4">
-                  <Flex justifyContent="between" alignItems="center">
-                    <div>
-                      <Title>{agent.agent_name}</Title>
-                      <Text>{agent.total_executions.toLocaleString()} executions, {(agent.success_rate * 100).toFixed(1)}% success rate</Text>
-                    </div>
-                    <Text>{formatDuration(agent.avg_duration_ms)} avg. duration</Text>
-                  </Flex>
-                  
-                  <div className="mt-4">
-                    <Text className="font-medium">Top Tools</Text>
-                    <BarChart
-                      className="mt-2 h-32"
-                      data={agent.top_tools.map(tool => ({
-                        name: tool.name,
-                        count: tool.count,
-                        success_rate: tool.success_rate * 100
-                      }))}
-                      index="name"
-                      categories={["count"]}
-                      colors={["indigo"]}
-                      valueFormatter={valueFormatter}
-                      layout="vertical"
-                      yAxisWidth={120}
-                    />
-                  </div>
-                </Card>
-              ))}
-            </div>
           </TabPanel>
         </TabPanels>
       </TabGroup>

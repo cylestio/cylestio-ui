@@ -189,4 +189,111 @@ function DataComponent() {
     </div>
   )
 }
-``` 
+```
+
+## UI Components Documentation
+
+### PageHeader Component
+
+All pages should use the PageHeader component for consistent UI. The PageHeader provides a standard layout for:
+
+1. Clean breadcrumbs with proper hierarchy 
+2. Page title and description
+3. Time range filter (when applicable)
+
+Example usage:
+
+```tsx
+<PageHeader
+  title="Dashboard" 
+  description="Overview of your system metrics"
+  breadcrumbs={[
+    { label: 'Dashboard', current: true }
+  ]}
+  timeRange={timeRange}
+  onTimeRangeChange={setTimeRange}
+/>
+```
+
+#### Props:
+
+- `title`: Page title
+- `description`: (Optional) Page description
+- `breadcrumbs`: Array of breadcrumb items
+- `timeRange`: Current time range value
+- `onTimeRangeChange`: Function to handle time range changes
+- `className`: (Optional) Additional CSS classes
+- `showTimeRangeFilter`: (Optional) Whether to show the time range filter (default: true)
+- `children`: (Optional) Additional content to render after the header
+
+#### Breadcrumb Items:
+
+Each breadcrumb item should have:
+- `label`: Display text
+- `href`: Link path (optional for current item)  
+- `current`: Boolean indicating if this is the current page 
+
+## Layout Consistency Guidelines
+
+To maintain visual consistency across all screens, follow these layout standards:
+
+### Page Structure
+
+1. Every page must use the `PageContainer` component as the root element:
+   ```tsx
+   <PageContainer>
+     {/* Page content */}
+   </PageContainer>
+   ```
+
+2. All pages must use the `PageHeader` component directly inside the container:
+   ```tsx
+   <PageContainer>
+     <PageHeader
+       title="Page Title"
+       description="Page description that explains its value to users"
+       breadcrumbs={breadcrumbItems}
+       timeRange={timeRange}
+       onTimeRangeChange={handleTimeRangeChange}
+     />
+     
+     {/* Rest of page content */}
+   </PageContainer>
+   ```
+
+3. Spacing standards:
+   - All content sections should have a `mb-6` (margin-bottom) class
+   - Content sections should be direct children of PageContainer
+   - Filter bars should be placed immediately after the header with their own `mb-6` spacing
+
+### Specific Components
+
+1. **Metric Cards**: Always use a consistent Grid layout with gap-6 and mb-6:
+   ```tsx
+   <Grid numItemsMd={3} className="gap-6 mb-6">
+     {/* Metric cards */}
+   </Grid>
+   ```
+
+2. **Tabs**: Tabs should be placed below filters with mb-6 spacing:
+   ```tsx
+   <TabGroup className="mb-6">
+     {/* Tab content */}
+   </TabGroup>
+   ```
+
+3. **Filter Bars**: Should be placed below headers with the same width:
+   ```tsx
+   <div className="mb-6">
+     <FilterBar filters={filterOptions} onFilterChange={handleFilterChange} />
+   </div>
+   ```
+
+4. **Tables**: Should be placed in Cards with consistent padding:
+   ```tsx
+   <Card className="mb-6">
+     <Table>
+       {/* Table content */}
+     </Table>
+   </Card>
+   ``` 

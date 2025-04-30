@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { 
   Card, 
   Title, 
@@ -62,6 +63,7 @@ export default function ToolExecutionDetailPanel({
   onViewAgent
 }: ToolExecutionDetailPanelProps) {
   const [activeTab, setActiveTab] = useState(0);
+  const router = useRouter();
   
   // Format timestamp
   const formatTimestamp = (timestamp: string) => {
@@ -129,6 +131,14 @@ export default function ToolExecutionDetailPanel({
   };
   
   const duration = formatDuration(execution.duration_ms);
+  
+  // Handle viewing all related events
+  const handleViewAllRelatedEvents = () => {
+    if (execution.related_events?.length > 0) {
+      const eventIds = execution.related_events.map(event => event.id);
+      router.push(`/events?tool_ids=${eventIds.join(',')}`);
+    }
+  };
   
   return (
     <div className="space-y-6">
@@ -307,7 +317,19 @@ export default function ToolExecutionDetailPanel({
           {/* Related Events Tab */}
           <TabPanel>
             <Card className="mt-4">
-              <Title>Related Events</Title>
+              <Flex justifyContent="between" className="mb-4">
+                <Title>Related Events</Title>
+                {execution.related_events.length > 0 && (
+                  <Button
+                    variant="light"
+                    color="blue"
+                    onClick={handleViewAllRelatedEvents}
+                  >
+                    View All in Events Explorer
+                  </Button>
+                )}
+              </Flex>
+              
               {execution.related_events.length > 0 ? (
                 <div className="mt-4 space-y-2">
                   {execution.related_events.map((event, i) => (

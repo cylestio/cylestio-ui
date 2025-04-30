@@ -1,14 +1,15 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Title, Text, Table, TableHead, TableRow, TableHeaderCell, TableBody, TableCell, Badge, Button } from '@tremor/react';
+import { Title, Text, Table, TableHead, TableRow, TableHeaderCell, TableBody, TableCell, Badge, Button, Flex } from '@tremor/react';
 import { 
   ClockIcon, 
   CheckCircleIcon, 
   XCircleIcon, 
   ExclamationTriangleIcon,
   ArrowPathIcon,
-  ChevronRightIcon
+  ChevronRightIcon,
+  ArrowLeftIcon
 } from '@heroicons/react/24/outline';
 import Link from 'next/link';
 import LoadingState from '../../components/LoadingState';
@@ -80,7 +81,7 @@ export function AgentSessionsTable({ agentId, timeRange }: AgentSessionsTablePro
           total_items: number;
           total_pages: number;
         }>(
-          `${AGENTS.SESSIONS(agentId)}?time_range=${timeRange}&page=${pagination.page}&page_size=${pagination.page_size}`
+          `${AGENTS.SESSIONS(agentId)}?time_range=${timeRange}&page=${pagination.page}&page_size=${pagination.page_size}&sort_by=start_time&sort_dir=desc`
         );
         
         // Check if component is still mounted before updating state
@@ -201,7 +202,6 @@ export function AgentSessionsTable({ agentId, timeRange }: AgentSessionsTablePro
   if (sessions.length === 0) {
     return (
       <div className="text-center py-8">
-        <Title>Recent Sessions</Title>
         <Text className="mt-2">No sessions found for this time period</Text>
       </div>
     );
@@ -209,30 +209,47 @@ export function AgentSessionsTable({ agentId, timeRange }: AgentSessionsTablePro
 
   return (
     <div>
-      <div className="mb-4">
-        <Title>Recent Sessions</Title>
-        <Text>Sessions for this agent in the selected time period</Text>
-      </div>
-
-      <Table>
-        <TableHead>
-          <TableRow>
-            <TableHeaderCell>Session ID</TableHeaderCell>
-            <TableHeaderCell>Start Time</TableHeaderCell>
-            <TableHeaderCell>Duration</TableHeaderCell>
-            <TableHeaderCell>Events</TableHeaderCell>
-            <TableHeaderCell>LLM Requests</TableHeaderCell>
-            <TableHeaderCell>Tool Executions</TableHeaderCell>
-            <TableHeaderCell>Errors</TableHeaderCell>
-            <TableHeaderCell>Status</TableHeaderCell>
-            <TableHeaderCell></TableHeaderCell>
+      <Table className="border border-gray-200 rounded-lg overflow-hidden w-full table-fixed bg-white">
+        <TableHead className="bg-gray-50">
+          <TableRow className="border-b border-gray-200">
+            <TableHeaderCell className="font-semibold text-gray-700 w-[15%]">Start Time</TableHeaderCell>
+            <TableHeaderCell className="font-semibold text-gray-700 w-[15%]">End Time</TableHeaderCell>
+            <TableHeaderCell className="font-semibold text-gray-700 w-[15%]">Session ID</TableHeaderCell>
+            <TableHeaderCell className="font-semibold text-gray-700 w-[10%]">Duration</TableHeaderCell>
+            <TableHeaderCell className="font-semibold text-gray-700 w-[8%]">Events</TableHeaderCell>
+            <TableHeaderCell className="font-semibold text-gray-700 w-[10%]">LLM Requests</TableHeaderCell>
+            <TableHeaderCell className="font-semibold text-gray-700 w-[8%]">Tool Executions</TableHeaderCell>
+            <TableHeaderCell className="font-semibold text-gray-700 w-[7%]">Errors</TableHeaderCell>
+            <TableHeaderCell className="font-semibold text-gray-700 w-[7%]">Status</TableHeaderCell>
+            <TableHeaderCell className="font-semibold text-gray-700 w-[5%]">Actions</TableHeaderCell>
           </TableRow>
         </TableHead>
         <TableBody>
           {sessions.map((session) => (
-            <TableRow key={session.session_id}>
-              <TableCell className="font-medium">{session.session_id.slice(0, 8)}...</TableCell>
-              <TableCell>{formatTimestamp(session.start_time)}</TableCell>
+            <TableRow 
+              key={session.session_id} 
+              className="border-b border-gray-100 transition-colors hover:bg-blue-50/30 cursor-pointer"
+              onClick={() => {
+                window.location.href = `/events/session/${session.session_id}`;
+              }}
+            >
+              <TableCell>
+                <Flex justifyContent="start" alignItems="center" className="gap-1">
+                  <ClockIcon className="h-4 w-4 text-gray-500" />
+                  <Text>{formatTimestamp(session.start_time)}</Text>
+                </Flex>
+              </TableCell>
+              <TableCell>
+                {session.end_time ? (
+                  <Flex justifyContent="start" alignItems="center" className="gap-1">
+                    <ClockIcon className="h-4 w-4 text-gray-500" />
+                    <Text>{formatTimestamp(session.end_time)}</Text>
+                  </Flex>
+                ) : (
+                  <Text className="text-gray-500 italic">In progress</Text>
+                )}
+              </TableCell>
+              <TableCell className="font-medium">{session.session_id}</TableCell>
               <TableCell>{formatDuration(session.duration_seconds)}</TableCell>
               <TableCell>{session.event_count}</TableCell>
               <TableCell>{session.llm_request_count}</TableCell>
@@ -243,17 +260,15 @@ export function AgentSessionsTable({ agentId, timeRange }: AgentSessionsTablePro
               <TableCell>
                 <StatusBadge status={session.status} />
               </TableCell>
-              <TableCell>
-                <Link href={`/agents/${agentId}/sessions/${session.session_id}`}>
+              <TableCell onClick={(e) => e.stopPropagation()}>
+                <Link href={`/events/session/${session.session_id}`}>
                   <Button 
                     variant="light" 
-                    color="blue"
-                    size="xs"
+                    size="xs" 
+                    icon={ChevronRightIcon}
+                    className="text-blue-600 hover:text-blue-800"
                   >
-                    <div className="flex items-center gap-1">
-                      <ChevronRightIcon className="h-4 w-4" />
-                      <span>Details</span>
-                    </div>
+                    View
                   </Button>
                 </Link>
               </TableCell>
@@ -262,43 +277,35 @@ export function AgentSessionsTable({ agentId, timeRange }: AgentSessionsTablePro
         </TableBody>
       </Table>
 
+      {/* Pagination */}
       {pagination.total_pages > 1 && (
-        <div className="mt-4 flex items-center justify-between">
+        <Flex justifyContent="between" className="mt-6">
           <Text>
-            Showing {((pagination.page - 1) * pagination.page_size) + 1} to {Math.min(pagination.page * pagination.page_size, pagination.total_items)} of {pagination.total_items} sessions
+            Showing {sessions.length} of {pagination.total_items} sessions
           </Text>
-          
-          <div className="flex space-x-2">
+          <Flex className="gap-2">
             <Button
-              variant="secondary"
+              size="xs"
+              icon={ArrowLeftIcon}
               disabled={pagination.page === 1}
               onClick={handlePrevPage}
-              size="xs"
+              className="border border-gray-200"
             >
               Previous
             </Button>
             <Button
-              variant="secondary"
+              size="xs"
+              icon={ChevronRightIcon}
+              iconPosition="right"
               disabled={pagination.page === pagination.total_pages}
               onClick={handleNextPage}
-              size="xs"
+              className="border border-gray-200"
             >
               Next
             </Button>
-          </div>
-        </div>
+          </Flex>
+        </Flex>
       )}
-      
-      <div className="mt-4 text-right">
-        <Link href={`/agents/${agentId}/sessions`}>
-          <Button variant="light">
-            <div className="flex items-center gap-1">
-              <ArrowPathIcon className="h-4 w-4" />
-              <span>View All Sessions</span>
-            </div>
-          </Button>
-        </Link>
-      </div>
     </div>
   );
 } 

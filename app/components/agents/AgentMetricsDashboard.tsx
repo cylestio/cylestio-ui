@@ -1,8 +1,17 @@
 'use client';
 
-import { Grid, Title, Text } from '@tremor/react';
-import DrilldownMetricCard from '../../components/drilldown/DrilldownMetricCard';
-import { ClockIcon, UserGroupIcon, CommandLineIcon, CurrencyDollarIcon, ExclamationTriangleIcon, ChatBubbleBottomCenterTextIcon } from '@heroicons/react/24/outline';
+import { Grid, Title, Text, Card, Flex } from '@tremor/react';
+import { 
+  ClockIcon, 
+  UserGroupIcon, 
+  CommandLineIcon, 
+  CurrencyDollarIcon, 
+  ExclamationTriangleIcon, 
+  ChatBubbleBottomCenterTextIcon, 
+  CheckCircleIcon,
+  ShieldExclamationIcon,
+  DocumentTextIcon
+} from '@heroicons/react/24/outline';
 import { useState, useEffect } from 'react';
 import { fetchAPI } from '../../lib/api';
 import { AGENTS } from '../../lib/api-endpoints';
@@ -17,17 +26,36 @@ type Agent = {
   created_at: string;
   updated_at: string;
   configuration?: Record<string, any>;
+  request_count?: number;
+  token_usage?: number;
+  error_count?: number;
   metrics?: {
     request_count: number;
     token_usage: number;
     error_count: number;
-    avg_response_time?: number;
+    avg_response_time_ms: number;
+    tool_usage: number;
+    security_alerts_count: number;
+    policy_violations_count: number;
+    // Keep the old metrics for backward compatibility
     success_rate?: number;
     cost_estimate?: number;
+    estimated_cost?: number;
     session_count?: number;
     avg_session_duration?: number;
     top_tools?: { name: string; count: number }[];
   };
+};
+
+// Type for LLM usage data
+type LLMUsage = {
+  model: string;
+  vendor: string;
+  request_count: number;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  estimated_cost: number;
 };
 
 type DashboardMetric = {
@@ -37,19 +65,149 @@ type DashboardMetric = {
   trend: 'up' | 'down' | 'stable';
 };
 
-interface AgentMetricsDashboardProps {
+interface AgentMetricsProps {
   agent?: Agent;
   metrics?: DashboardMetric[];
   agentId: string;
   timeRange?: string;
 }
 
-export function AgentMetricsDashboard({ agent, metrics = [], agentId, timeRange }: AgentMetricsDashboardProps) {
+// Standalone metrics row component that can be used above tabs in the parent component
+export function AgentMetricsRow({ agent, metrics = [], agentId, timeRange }: AgentMetricsProps) {
   // Placeholder dashboard data in case we don't have agent or metrics
   const [loading, setLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<DashboardMetric[]>([]);
   const [agentData, setAgentData] = useState<Agent | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [llmUsageData, setLlmUsageData] = useState<LLMUsage[]>([]);
+  const [totalCost, setTotalCost] = useState(0);
+  const [tokenUsageData, setTokenUsageData] = useState<{
+    total_tokens: number;
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    by_model?: Record<string, any>;
+  } | null>(null);
+  const [agentCostData, setAgentCostData] = useState<{
+    total_cost: number;
+    total_tokens: number;
+    input_tokens: number;
+    output_tokens: number;
+    request_count: number;
+  } | null>(null);
+
+  // Fetch token usage and cost data from the cost API endpoint
+  useEffect(() => {
+    if (!agentId || !timeRange) return;
+
+    let isMounted = true;
+    const fetchAgentCostData = async () => {
+      try {
+        // Build the endpoint with time range parameter
+        const params = { time_range: timeRange, include_breakdown: 'false' };
+        const queryString = new URLSearchParams(params).toString();
+        const endpoint = `${AGENTS.COST(agentId)}${queryString ? `?${queryString}` : ''}`;
+        
+        const response = await fetchAPI<any>(endpoint);
+        
+        if (!isMounted) return;
+        
+        console.log('Agent cost API response:', response);
+        
+        if (response) {
+          setAgentCostData({
+            total_cost: response.total_cost || 0,
+            total_tokens: response.total_tokens || 0,
+            input_tokens: response.input_tokens || 0,
+            output_tokens: response.output_tokens || 0,
+            request_count: response.request_count || 0
+          });
+          
+          // Set cost directly from this API
+          setTotalCost(response.total_cost || 0);
+        }
+      } catch (error) {
+        console.error('Error fetching agent cost data:', error);
+      }
+    };
+    
+    fetchAgentCostData();
+    
+    return () => {
+      isMounted = false;
+    };
+  }, [agentId, timeRange]);
+
+  // Fetch token usage data to get the accurate total value
+  useEffect(() => {
+    if (!agentId || !timeRange) return;
+
+    let isMounted = true;
+    const fetchTokenUsage = async () => {
+      try {
+        // Build the endpoint with time range parameter
+        const params = { time_range: timeRange };
+        const queryString = new URLSearchParams(params).toString();
+        const endpoint = `${AGENTS.TOKEN_USAGE(agentId)}${queryString ? `?${queryString}` : ''}`;
+        
+        const response = await fetchAPI<{
+          total_tokens: number;
+          prompt_tokens?: number;
+          completion_tokens?: number;
+          by_model?: Record<string, any>;
+        }>(endpoint);
+        
+        if (!isMounted) return;
+        
+        console.log('Token usage data:', response);
+        setTokenUsageData(response);
+      } catch (error) {
+        console.error('Error fetching token usage data:', error);
+      }
+    };
+    
+    fetchTokenUsage();
+    
+    return () => {
+      isMounted = false;
+    };
+  }, [agentId, timeRange]);
+
+  // Fetch LLM usage data specifically to get accurate cost information
+  useEffect(() => {
+    if (!agentId || !timeRange) return;
+
+    let isMounted = true;
+    const fetchLLMUsage = async () => {
+      try {
+        const data = await fetchAPI<{ items: LLMUsage[] }>(
+          `${AGENTS.LLM_USAGE(agentId)}?time_range=${timeRange}`
+        );
+        
+        if (!isMounted) return;
+        
+        // Process data to ensure cost is calculated
+        const processedData = (data.items || []).map(item => ({
+          ...item,
+          // Calculate estimated cost if it's missing or zero
+          estimated_cost: item.estimated_cost || (item.total_tokens * 0.000002) // Fallback calculation
+        }));
+        
+        setLlmUsageData(processedData);
+        
+        // Calculate total cost from LLM usage data
+        const calculatedTotalCost = processedData.reduce((sum, item) => sum + item.estimated_cost, 0);
+        setTotalCost(calculatedTotalCost);
+      } catch (error) {
+        console.error('Error fetching LLM usage data:', error);
+      }
+    };
+    
+    fetchLLMUsage();
+    
+    return () => {
+      isMounted = false;
+    };
+  }, [agentId, timeRange]);
 
   // Fetch dashboard data if not provided
   useEffect(() => {
@@ -74,30 +232,37 @@ export function AgentMetricsDashboard({ agent, metrics = [], agentId, timeRange 
         setLoading(true);
         setError(null);
         
-        // Fetch dashboard metrics if not provided
-        const response = await fetchAPI<{ metrics: DashboardMetric[] }>(
-          `${AGENTS.DASHBOARD(agentId)}?time_range=${timeRange || '7d'}`
-        );
-
+        // Fetch agent details using the single API endpoint that includes metrics
+        const agentResponse = await fetchAPI<Agent>(AGENTS.DETAIL(agentId));
+        
         // Check if component is still mounted before updating state
         if (!isMounted) return;
         
-        setDashboardData(response.metrics || []);
+        // Set the agent data
+        setAgentData(agentResponse);
         
-        // Only fetch agent data if agent prop wasn't provided
-        if (!agent) {
-          // Avoid an additional fetch if we already have agent data
-          if (!agentData) {
-            const agentResponse = await fetchAPI<Agent>(AGENTS.DETAIL(agentId));
-            if (isMounted) {
-              setAgentData(agentResponse);
+        // If we have metrics in the agent response, convert them to dashboard metrics format
+        if (agentResponse.metrics) {
+          const metricsList: DashboardMetric[] = [];
+          
+          // Convert agent metrics to dashboard metrics format
+          for (const [key, value] of Object.entries(agentResponse.metrics)) {
+            if (typeof value === 'number') {
+              metricsList.push({
+                metric: key,
+                value: value,
+                change: 0, // We don't have change data in this API response
+                trend: 'stable'
+              });
             }
           }
+          
+          setDashboardData(metricsList);
         }
       } catch (error: any) {
-        console.error('Error fetching dashboard data:', error);
+        console.error('Error fetching agent details:', error);
         if (isMounted) {
-          setError(error.message || 'Failed to load dashboard data');
+          setError(error.message || 'Failed to load agent details');
         }
       } finally {
         if (isMounted) {
@@ -160,87 +325,83 @@ export function AgentMetricsDashboard({ agent, metrics = [], agentId, timeRange 
     return 0;
   };
 
-  // Get trend from metrics array
-  const getMetricTrend = (metricName: string): 'up' | 'down' | 'stable' => {
-    const metricFromAPI = findMetric(metricName);
-    return metricFromAPI?.trend || 'stable';
-  };
+  // Calculate success rate
+  const successRate = activeAgent.metrics?.success_rate 
+    ? `${activeAgent.metrics.success_rate}%` 
+    : (activeAgent.request_count || activeAgent.metrics?.request_count || 0) > 0 && 
+      (activeAgent.error_count || activeAgent.metrics?.error_count || 0) > 0 
+      ? `${Math.round(((
+          (activeAgent.request_count || activeAgent.metrics?.request_count || 0) - 
+          (activeAgent.error_count || activeAgent.metrics?.error_count || 0)
+        ) / (activeAgent.request_count || activeAgent.metrics?.request_count || 1)) * 100)}%` 
+      : 'N/A';
 
-  // Get delta from metrics array
-  const getMetricDelta = (metricName: string): number => {
-    const metricFromAPI = findMetric(metricName);
-    return metricFromAPI?.change || 0;
-  };
+  return (
+    <Card className="p-4">
+      <Grid numItems={2} numItemsSm={3} numItemsLg={7} className="gap-6">
+        <CompactMetric 
+          title="Requests" 
+          value={(agentCostData?.request_count || activeAgent.metrics?.request_count || 0).toLocaleString()} 
+          icon={<CommandLineIcon className="h-4 w-4 text-blue-600" />}
+        />
+        <CompactMetric 
+          title="Token Usage" 
+          value={(agentCostData?.total_tokens || tokenUsageData?.total_tokens || activeAgent.metrics?.token_usage || 0).toLocaleString()} 
+          icon={<ChatBubbleBottomCenterTextIcon className="h-4 w-4 text-amber-600" />}
+        />
+        <CompactMetric 
+          title="Errors" 
+          value={(activeAgent.metrics?.error_count || 0).toLocaleString()} 
+          icon={<ExclamationTriangleIcon className="h-4 w-4 text-rose-600" />}
+        />
+        <CompactMetric 
+          title="Avg. Response" 
+          value={`${(activeAgent.metrics?.avg_response_time_ms || 0).toLocaleString()}ms`} 
+          icon={<ClockIcon className="h-4 w-4 text-blue-600" />}
+        />
+        <CompactMetric 
+          title="Security Alerts" 
+          value={(activeAgent.metrics?.security_alerts_count || 0).toLocaleString()} 
+          icon={<ShieldExclamationIcon className="h-4 w-4 text-red-600" />}
+        />
+        <CompactMetric 
+          title="Policy Violations" 
+          value={(activeAgent.metrics?.policy_violations_count || 0).toLocaleString()} 
+          icon={<DocumentTextIcon className="h-4 w-4 text-orange-600" />}
+        />
+        <CompactMetric 
+          title="Estimated Cost" 
+          value={`$${(agentCostData?.total_cost || totalCost).toFixed(2)}`} 
+          icon={<CurrencyDollarIcon className="h-4 w-4 text-green-600" />}
+        />
+      </Grid>
+    </Card>
+  );
+}
 
+// Original dashboard component for backward compatibility
+export function AgentMetricsDashboard({ agent, metrics = [], agentId, timeRange }: AgentMetricsProps) {
   return (
     <div>
       <div className="mb-4">
         <Title>Performance Metrics</Title>
         <Text>Key metrics for this agent</Text>
       </div>
+      
+      <AgentMetricsRow agent={agent} metrics={metrics} agentId={agentId} timeRange={timeRange} />
+    </div>
+  );
+}
 
-      <Grid numItems={1} numItemsSm={2} numItemsLg={4} className="gap-4">
-        {/* Response Time */}
-        <DrilldownMetricCard
-          title="Avg. Response Time"
-          value={formatMetricValue('avg_response_time', getMetricValue('avg_response_time'))}
-          icon={<ClockIcon className="h-5 w-5" />}
-          variant="primary"
-          drilldownHref={`/agents/${agentId}/performance`}
-          drilldownFilters={{ metric: 'response_time' }}
-          drilldownLabel="View response time details"
-        />
-
-        {/* Session Count */}
-        <DrilldownMetricCard
-          title="Total Sessions"
-          value={formatMetricValue('session_count', getMetricValue('session_count'))}
-          icon={<UserGroupIcon className="h-5 w-5" />}
-          variant="primary"
-          drilldownHref={`/agents/${agentId}/sessions`}
-          drilldownLabel="View all sessions"
-        />
-
-        {/* Tool Usage */}
-        <DrilldownMetricCard
-          title="Tool Executions"
-          value={formatMetricValue('tool_execution_count', getMetricValue('tool_execution_count'))}
-          icon={<CommandLineIcon className="h-5 w-5" />}
-          variant="primary"
-          drilldownHref={`/agents/${agentId}/tools`}
-          drilldownLabel="View tool usage details"
-        />
-
-        {/* Token Usage Cost */}
-        <DrilldownMetricCard
-          title="Token Cost"
-          value={formatMetricValue('cost_estimate', getMetricValue('cost_estimate'))}
-          icon={<CurrencyDollarIcon className="h-5 w-5" />}
-          variant="primary"
-          drilldownHref={`/agents/${agentId}/tokens`}
-          drilldownLabel="View token usage details"
-        />
-
-        {/* Error Rate */}
-        <DrilldownMetricCard
-          title="Error Rate"
-          value={formatMetricValue('error_rate', getMetricValue('error_rate'))}
-          icon={<ExclamationTriangleIcon className="h-5 w-5" />}
-          variant="error"
-          drilldownHref={`/agents/${agentId}/errors`}
-          drilldownLabel="View error details"
-        />
-
-        {/* LLM Requests */}
-        <DrilldownMetricCard
-          title="LLM Requests"
-          value={formatMetricValue('llm_request_count', getMetricValue('llm_request_count'))}
-          icon={<ChatBubbleBottomCenterTextIcon className="h-5 w-5" />}
-          variant="primary"
-          drilldownHref={`/agents/${agentId}/llms`}
-          drilldownLabel="View LLM usage details"
-        />
-      </Grid>
+// Helper component for compact view
+function CompactMetric({ title, value, icon }: { title: string, value: string | number, icon: React.ReactNode }) {
+  return (
+    <div className="text-center">
+      <Flex justifyContent="center" alignItems="center" className="mb-1">
+        {icon}
+      </Flex>
+      <Text className="text-sm font-medium">{title}</Text>
+      <Title className="text-xl mt-1">{value}</Title>
     </div>
   );
 } 
