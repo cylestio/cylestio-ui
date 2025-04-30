@@ -53,11 +53,13 @@
   "dependencies": {
     "@heroicons/react": "^2.1.1",
     "@tremor/react": "^3.13.1",
+    "axios": "^1.9.0",
     "date-fns": "^3.3.1",
     "lodash": "^4.17.21",
     "next": "^13.0.0 || ^14.0.0",
     "react": "^17.0.0 || ^18.0.0",
     "react-dom": "^17.0.0 || ^18.0.0",
+    "react-icons": "^5.5.0",
     "recharts": "^2.10.3"
   },
   "peerDependencies": {

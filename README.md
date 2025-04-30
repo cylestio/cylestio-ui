@@ -10,11 +10,33 @@ Enterprise-grade dashboard components for monitoring AI agent activities and sec
 
 ## Installation
 
+This project is currently meant to be used by cloning the repository and running it locally:
+
 ```bash
-npm install @cylestio/ui-dashboard
+# Clone the repository
+git clone https://github.com/cylestio/cylestio-ui.git
+cd cylestio-ui
+
+# Install dependencies
+npm install
+
+# Start the development server
+npm run dev
 ```
 
+The application will be available at http://localhost:3000.
+
+> **Note:** While this package is published to npm as `@cylestio/ui-dashboard`, the recommended approach is to clone and run the repository directly as outlined above.
+
 ## Quick Start
+
+### Running the Dashboard Locally
+
+After installing and starting the dev server per the instructions above, you can access the dashboard at http://localhost:3000.
+
+### Using as a Component Library (Advanced)
+
+If you need to use this as a component library in another project:
 
 ```jsx
 import { Sidebar, DashboardMetrics, DashboardCharts } from '@cylestio/ui-dashboard'
@@ -107,11 +129,38 @@ function MonitoringDashboard() {
 
 To contribute to this package:
 
-1. Clone the repository
+1. Clone the repository: `git clone https://github.com/cylestio/cylestio-ui.git`
 2. Install dependencies: `npm install`
 3. Start the development server: `npm run dev`
-4. Build the package: `npm run build:package`
-5. Verify the package: `npm run verify:package`
+
+### Building the Package
+
+If you need to build the package for use in another project:
+
+```bash
+npm run build:package
+```
+
+### Known Development Issues
+
+The project currently has some ESLint and TypeScript errors that may cause build failures but don't affect the development server functionality. These issues are being addressed in upcoming releases.
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Build Failures**: The project may fail to build due to ESLint/TypeScript errors. You can still run the development server with `npm run dev`.
+
+2. **Missing Dependencies**: If you encounter errors related to missing modules, ensure you've installed all dependencies:
+   ```bash
+   npm install axios react-icons
+   ```
+
+3. **Package Installation Errors**: If you try to install `@cylestio/ui-dashboard` from npm, you may get a 404 error. This is expected - see the Installation instructions above for the correct approach.
+
+### Getting Help
+
+If you encounter issues not covered here, please [open an issue](https://github.com/cylestio/cylestio-ui/issues) on the GitHub repository.
 
 ## Publishing
 
