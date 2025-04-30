@@ -495,66 +495,109 @@ export default function LLMExplorerContainer({
     }
   };
   
-  // Parse search params on initial load
-  useEffect(() => {
-    const parseSearchParams = () => {
-      const timeRange = searchParamsObj.get('timeRange') || DEFAULT_TIME_RANGE
-      const model = searchParamsObj.getAll('model')
-      const status = searchParamsObj.getAll('status')
-      const agent = searchParamsObj.getAll('agent')
-      const tokenMin = parseInt(searchParamsObj.get('tokenMin') || '0')
-      const tokenMax = parseInt(searchParamsObj.get('tokenMax') || '10000')
-      const page = parseInt(searchParamsObj.get('page') || '1')
-      const pageSize = parseInt(searchParamsObj.get('pageSize') || String(DEFAULT_PAGE_SIZE))
-      
-      // Custom date range if provided
-      let customDateRange: DateRangePickerValue | undefined
-      const fromDate = searchParamsObj.get('fromDate')
-      const toDate = searchParamsObj.get('toDate')
-      
-      if (fromDate && toDate) {
-        customDateRange = {
+  // Parse URL search params on initial load
+  const parseSearchParams = () => {
+    // Check URL path
+    const pathname = window.location.pathname
+    // Check if we're on a specific conversation route
+    const conversationPattern = /\/llm\/conversations\/([^\/]+)/;
+    const match = pathname.match(conversationPattern);
+    
+    if (match && match[1]) {
+      // We have a trace ID in the URL path
+      setActiveTab(1); // Set to conversations tab
+      setSelectedTraceId(match[1]); // Set the selected trace ID
+      return; // Skip other parsing if we have a direct conversation URL
+    } else if (pathname.startsWith('/llm/conversations')) {
+      // Set the active tab to conversations (tab index 1)
+      setActiveTab(1)
+    }
+
+    // Check for tab parameter
+    const tabParam = searchParamsObj.get('tab')
+    if (tabParam) {
+      const tabIndex = parseInt(tabParam, 10)
+      setActiveTab(tabIndex)
+    }
+
+    // Check for trace ID parameter
+    const traceIdParam = searchParamsObj.get('traceId')
+    if (traceIdParam) {
+      setSelectedTraceId(traceIdParam)
+    }
+
+    // Check for request ID parameter
+    const requestIdParam = searchParamsObj.get('requestId')
+    if (requestIdParam) {
+      setSelectedRequestId(requestIdParam)
+      fetchRequestDetails(requestIdParam)
+    }
+
+    // Extract date range if present
+    const fromDate = searchParamsObj.get('from')
+    const toDate = searchParamsObj.get('to')
+    if (fromDate && toDate) {
+      setFilters(prev => ({
+        ...prev,
+        customDateRange: {
           from: new Date(fromDate),
           to: new Date(toDate)
-        }
-      }
-      
-      // Set filters state
-      setFilters({
-        timeRange,
-        customDateRange,
-        model,
-        status,
-        agent,
-        tokenRange: [tokenMin, tokenMax]
-      })
-      
-      // Set pagination state
-      setPagination(prev => ({
-        ...prev,
-        page,
-        page_size: pageSize
+        },
+        timeRange: 'custom'
       }))
-      
-      // Set active tab from searchParams if provided
-      const tabIndex = parseInt(searchParamsObj.get('tab') || '0')
-      setActiveTab(tabIndex)
-      
-      // Set selected request if provided
-      const requestId = searchParamsObj.get('requestId')
-      if (requestId) {
-        setSelectedRequestId(requestId)
-      }
-      
-      // Set selected trace if provided
-      const traceId = searchParamsObj.get('traceId')
-      if (traceId) {
-        setSelectedTraceId(traceId)
+    } else {
+      // Check for time range parameter
+      const timeRangeParam = searchParamsObj.get('timeRange')
+      if (timeRangeParam) {
+        setFilters(prev => ({
+          ...prev,
+          timeRange: timeRangeParam
+        }))
       }
     }
-    
+
+    // Check for model filter
+    const modelParam = searchParamsObj.get('model')
+    if (modelParam) {
+      const models = modelParam.split(',')
+      setFilters(prev => ({
+        ...prev,
+        model: models
+      }))
+    }
+
+    // Check for agent filter
+    const agentParam = searchParamsObj.get('agent')
+    if (agentParam) {
+      const agents = agentParam.split(',')
+      setFilters(prev => ({
+        ...prev,
+        agent: agents
+      }))
+    }
+
+    // Check for status filter
+    const statusParam = searchParamsObj.get('status')
+    if (statusParam) {
+      const statuses = statusParam.split(',')
+      setFilters(prev => ({
+        ...prev,
+        status: statuses
+      }))
+    }
+  }
+
+  // Run once on component mount
+  useEffect(() => {
     parseSearchParams()
-  }, [searchParamsObj])
+    
+    // If there's a traceId in the URL, set it as the selected trace ID
+    const traceIdParam = searchParamsObj.get('traceId')
+    if (traceIdParam) {
+      setSelectedTraceId(traceIdParam)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   
   // Update URL when filters change
   const updateURL = useCallback(
@@ -1112,6 +1155,14 @@ export default function LLMExplorerContainer({
   // Handle tab change
   const handleTabChange = (tabIndex: number) => {
     setActiveTab(tabIndex)
+    // Update URL based on selected tab
+    if (tabIndex === 1) {
+      // For the Conversations tab
+      router.push('/llm/conversations', { scroll: false })
+    } else {
+      // For Analytics tab
+      router.push('/llm', { scroll: false })
+    }
   }
   
   // Handle filter changes
@@ -1166,12 +1217,18 @@ export default function LLMExplorerContainer({
   
   // Handle viewing conversation flow for a trace ID
   const handleViewConversation = (traceId: string) => {
+    // First set the trace ID in local state
     setSelectedTraceId(traceId)
+    
+    // Then update the URL with the correct path-based route
+    router.push(`/llm/conversations/${traceId}`, { scroll: false })
   }
   
   // Handle back button from conversation flow view
   const handleBackFromConversation = () => {
     setSelectedTraceId(null)
+    // Return to the conversations list
+    router.push('/llm/conversations', { scroll: false })
   }
   
   // Handle response pagination
@@ -1228,14 +1285,70 @@ export default function LLMExplorerContainer({
     fetchData(true);
   };
   
+  // Generate proper breadcrumbs based on the current view
+  const getBreadcrumbs = () => {
+    const baseBreadcrumbs = [
+      { label: 'Home', href: '/' },
+    ];
+
+    if (selectedTraceId) {
+      // For a specific conversation
+      return [
+        ...baseBreadcrumbs,
+        { label: 'LLM', href: '/llm' },
+        { label: 'Conversations', href: '/llm/conversations' },
+        { label: `Conversation ${selectedTraceId.substring(0, 8)}...`, current: true }
+      ];
+    } else if (activeTab === 1) {
+      // For conversations tab
+      return [
+        ...baseBreadcrumbs,
+        { label: 'LLM', href: '/llm' },
+        { label: 'Conversations', current: true }
+      ];
+    } else {
+      // For analytics tab
+      return [
+        ...baseBreadcrumbs,
+        { label: 'LLM', current: true }
+      ];
+    }
+  };
+
+  // Watch for URL pathname changes
+  useEffect(() => {
+    // This effect runs when the component mounts or when the URL changes
+    const pathname = window.location.pathname;
+    
+    // Check if we're on a specific conversation route
+    const conversationPattern = /\/llm\/conversations\/([^\/]+)/;
+    const match = pathname.match(conversationPattern);
+    
+    if (match && match[1]) {
+      // We have a trace ID in the URL path - set the state
+      setActiveTab(1); // Set to conversations tab
+      setSelectedTraceId(match[1]); // Set the selected trace ID
+    } else if (pathname.startsWith('/llm/conversations')) {
+      // Set the active tab to conversations (tab index 1)
+      setActiveTab(1);
+      // Clear any selected trace ID when on the main conversations page
+      setSelectedTraceId(null);
+    } else if (pathname === '/llm') {
+      // Reset to analytics tab if we're back at the root LLM path
+      // But only if no specific tab is set in the URL
+      if (!searchParamsObj.get('tab')) {
+        setActiveTab(0);
+      }
+      // Clear any selected trace ID
+      setSelectedTraceId(null);
+    }
+  }, [searchParamsObj]);
+
   return (
     <PageTemplate
       title="LLM Explorer"
       description="Analyze LLM usage, track token consumption, and monitor costs"
-      breadcrumbs={[
-        { label: 'Home', href: '/' },
-        { label: 'LLM', current: true }
-      ]}
+      breadcrumbs={getBreadcrumbs()}
       timeRange={filters.timeRange}
       onTimeRangeChange={(value) => handleFilterChange({ ...filters, timeRange: value })}
       headerContent={<RefreshButton onClick={handleRefresh} />}

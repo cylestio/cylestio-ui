@@ -193,6 +193,19 @@ export function EventDetailContainer({ eventId }: { eventId: string }) {
     ).join(' ');
   };
 
+  // Function to get referrer information
+  const getReferrer = () => {
+    // Check if running in browser
+    if (typeof window !== 'undefined') {
+      const searchParams = new URLSearchParams(window.location.search);
+      const from = searchParams.get('from');
+      const traceId = searchParams.get('traceId');
+      
+      return { from, traceId };
+    }
+    return { from: null, traceId: null };
+  };
+
   // Render loading state
   if (loading) {
     return (
@@ -227,13 +240,23 @@ export function EventDetailContainer({ eventId }: { eventId: string }) {
     );
   }
 
+  // Get referrer info
+  const { from, traceId } = getReferrer();
+
   return (
     <div className="space-y-5">
-      {/* Back Link */}
-      <Link href="/events" className="inline-flex items-center text-blue-500 hover:text-blue-600 transition-colors">
-        <ArrowLeftIcon className="h-4 w-4 mr-1.5" />
-        <span>Back to Events</span>
-      </Link>
+      {/* Back Link - conditionally show different back link based on referrer */}
+      {from === 'conversation' && traceId ? (
+        <Link href={`/llm/conversations/${traceId}`} className="inline-flex items-center text-blue-500 hover:text-blue-600 transition-colors">
+          <ArrowLeftIcon className="h-4 w-4 mr-1.5" />
+          <span>Back to Conversation</span>
+        </Link>
+      ) : (
+        <Link href="/events" className="inline-flex items-center text-blue-500 hover:text-blue-600 transition-colors">
+          <ArrowLeftIcon className="h-4 w-4 mr-1.5" />
+          <span>Back to Events</span>
+        </Link>
+      )}
       
       {/* Header Section - Made elegant with background and better styling */}
       <Card className="overflow-hidden bg-gradient-to-r from-gray-50/50 via-white to-gray-50/50 border-0">

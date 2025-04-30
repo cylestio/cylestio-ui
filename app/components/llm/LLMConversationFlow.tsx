@@ -233,7 +233,7 @@ export default function LLMConversationFlow({
             {/* View Event Link for user messages - using event_id */}
             {message.event_id && (
               <Link 
-                href={`/events/${message.event_id}`}
+                href={`/events/${message.event_id}?from=conversation&traceId=${traceId}`}
                 className="ml-2 text-xs text-blue-500 hover:text-blue-700 hover:underline flex items-center gap-1"
               >
                 <MagnifyingGlassIcon className="h-3.5 w-3.5" />
@@ -293,7 +293,7 @@ export default function LLMConversationFlow({
               {/* View Event Link - update to use message.event_id */}
               {message.event_id && (
                 <Link 
-                  href={`/events/${message.event_id}`}
+                  href={`/events/${message.event_id}?from=conversation&traceId=${traceId}`}
                   className="ml-auto text-xs text-gray-500 hover:text-gray-700 hover:underline flex items-center gap-1"
                 >
                   <MagnifyingGlassIcon className="h-3.5 w-3.5" />
@@ -360,13 +360,14 @@ export default function LLMConversationFlow({
             </div>
           )}
         </div>
-        <Button
-          icon={ArrowUturnLeftIcon}
-          variant="light"
+        <Link 
+          href="/llm/conversations" 
+          className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 rounded-md border border-gray-200 shadow-sm"
           onClick={onClose}
         >
-          Back to Requests
-        </Button>
+          <ArrowUturnLeftIcon className="h-5 w-5" />
+          Back to Conversations
+        </Link>
       </div>
       
       {/* Conversation Summary Section */}
