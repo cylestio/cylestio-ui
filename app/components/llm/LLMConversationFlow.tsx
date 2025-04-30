@@ -17,10 +17,39 @@ import {
   ArrowLongLeftIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
-  ChatBubbleLeftRightIcon
+  ChatBubbleLeftRightIcon,
+  LinkIcon,
+  UserIcon,
+  DocumentDuplicateIcon,
+  DocumentTextIcon,
+  ExclamationCircleIcon,
+  ClipboardDocumentIcon,
+  MagnifyingGlassIcon
 } from '@heroicons/react/24/outline'
 import { getLLMConversationFlow } from '../../lib/llm-api'
 import type { LLMRequest, LLMRequestsPagination } from './LLMRequestsTable'
+import Link from 'next/link'
+
+// Custom tooltip component since Tremor may not export it
+const Tooltip = ({ content, children }: { content: string, children: React.ReactNode }) => {
+  const [show, setShow] = useState(false);
+  
+  return (
+    <div 
+      className="relative inline-block"
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+    >
+      {children}
+      {show && content && (
+        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 -translate-y-2 z-10 px-2 py-1 text-xs rounded bg-gray-800 text-white whitespace-nowrap mb-1">
+          {content}
+          <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-800"></div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 export interface LLMConversationFlowProps {
   traceId: string;
@@ -77,6 +106,49 @@ const formatDuration = (ms: number): string => {
   return `${(ms / 1000).toFixed(2)}s`;
 }
 
+// Helper function to group messages into conversation turns
+type ConversationTurn = {
+  user: LLMRequest;
+  assistant: LLMRequest[];
+}
+
+const groupMessagesByTurn = (messages: LLMRequest[]): ConversationTurn[] => {
+  const chronologicalMessages = [...messages].sort((a, b) => 
+    new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+  );
+  
+  const turns: ConversationTurn[] = [];
+  let currentTurn: Partial<ConversationTurn> = {};
+  
+  chronologicalMessages.forEach(message => {
+    const isUser = message.role === 'user' || (!message.role && message.input_tokens > 0);
+    
+    if (isUser) {
+      // If we have a previous turn with both user and assistant, add it to turns
+      if (currentTurn.user && currentTurn.assistant && currentTurn.assistant.length > 0) {
+        turns.push(currentTurn as ConversationTurn);
+      }
+      // Start a new turn
+      currentTurn = { user: message, assistant: [] };
+    } else {
+      // This is an assistant message
+      if (!currentTurn.assistant) {
+        currentTurn.assistant = [];
+      }
+      if (currentTurn.assistant) {
+        currentTurn.assistant.push(message);
+      }
+    }
+  });
+  
+  // Add the last turn if it has both user and assistant messages
+  if (currentTurn.user && currentTurn.assistant && currentTurn.assistant.length > 0) {
+    turns.push(currentTurn as ConversationTurn);
+  }
+  
+  return turns;
+};
+
 export default function LLMConversationFlow({
   traceId,
   onClose,
@@ -93,6 +165,19 @@ export default function LLMConversationFlow({
     has_prev: false
   });
   const [loading, setLoading] = useState(initialLoading);
+  const [copied, setCopied] = useState(false);
+
+  // Calculate conversation summary metrics
+  const totalMessages = flowItems.length;
+  const totalDuration = flowItems.reduce((total, item) => total + (item.duration_ms || 0), 0);
+  const errorCount = flowItems.filter(item => item.status === 'error').length;
+
+  // Copy trace ID to clipboard
+  const copyTraceId = () => {
+    navigator.clipboard.writeText(traceId);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   // Fetch conversation flow on load and when page changes
   useEffect(() => {
@@ -126,84 +211,153 @@ export default function LLMConversationFlow({
     setPagination(prev => ({ ...prev, page }));
   };
 
-  // Get message thread map (parent_id -> child messages)
-  const getMessageThreadMap = () => {
-    const threadMap: Record<string, LLMRequest[]> = {};
-    flowItems.forEach(item => {
-      if (item.parent_id) {
-        if (!threadMap[item.parent_id]) {
-          threadMap[item.parent_id] = [];
-        }
-        threadMap[item.parent_id].push(item);
-      }
-    });
-    return threadMap;
-  };
-
-  // Get root messages (typically user messages that start a thread)
-  const getRootMessages = () => {
-    return flowItems.filter(item => !item.parent_id);
-  };
-
-  // Render a message and its replies recursively
-  const renderMessage = (message: LLMRequest, depth: number = 0) => {
-    const threadMap = getMessageThreadMap();
-    const replies = threadMap[message.id] || [];
-    const role = message.role || (message.input_tokens > 0 ? 'user' : 'assistant');
-    const config = roleConfig[role] || roleConfig.system;
-    
+  // Render a user message with chat bubble styling
+  const renderUserMessage = (message: LLMRequest) => {
     return (
-      <div key={message.id} className={`ml-${depth * 4} mb-4`}>
-        <div className={`p-4 rounded-lg bg-${config.bgColor} border border-${config.color.replace('700', '200')}`}>
-          <div className="flex items-start gap-3">
-            <div className={`bg-${config.bgColor} rounded-full p-2`}>
-              {config.icon}
+      <div className="flex justify-end mb-3 animate-fadeIn" key={message.id}>
+        <div className="flex flex-col items-end max-w-[75%]">
+          <div className="bg-blue-100 p-4 rounded-2xl rounded-br-sm shadow-sm">
+            <div className="text-sm text-gray-800">
+              {message.content || message.prompt_summary || message.completion_summary}
             </div>
-            <div className="flex-1">
-              <div className="flex justify-between">
-                <Text className={`font-medium text-sm text-${config.color}`}>
-                  {role.charAt(0).toUpperCase() + role.slice(1)}
-                </Text>
-                <div className="flex items-center gap-2">
-                  <Badge color={statusColorMap[message.status]} size="xs">
-                    {message.status}
-                  </Badge>
-                  <Text className="text-xs text-gray-500">{formatDate(message.timestamp)}</Text>
-                </div>
-              </div>
-              <div className="mt-2 whitespace-pre-wrap text-sm text-gray-800">
-                {message.content || message.prompt_summary || message.completion_summary}
-              </div>
-              <div className="mt-2 flex justify-between">
-                <Text className="text-xs text-gray-500">
-                  {role === 'user' ? `Input Tokens: ${message.input_tokens}` : `Output Tokens: ${message.output_tokens}`}
-                </Text>
-                <Text className="text-xs text-gray-500">
-                  {message.duration_ms > 0 ? `Duration: ${formatDuration(message.duration_ms)}` : ''}
-                </Text>
-              </div>
+          </div>
+          
+          <div className="mt-1 flex items-center text-xs text-gray-500 space-x-2">
+            <div className="flex items-center gap-1">
+              <DocumentTextIcon className="h-3.5 w-3.5" />
+              <span>Input: {message.input_tokens}</span>
             </div>
+            <span>·</span>
+            <span>{formatDate(message.timestamp)}</span>
+            
+            {/* View Event Link for user messages - using event_id */}
+            {message.event_id && (
+              <Link 
+                href={`/events/${message.event_id}`}
+                className="ml-2 text-xs text-blue-500 hover:text-blue-700 hover:underline flex items-center gap-1"
+              >
+                <MagnifyingGlassIcon className="h-3.5 w-3.5" />
+                <span>View Event</span>
+              </Link>
+            )}
           </div>
         </div>
         
-        {/* Render any replies */}
-        {replies.length > 0 && (
-          <div className="ml-8 pl-4 border-l-2 border-gray-200">
-            {replies.map(reply => renderMessage(reply, depth + 1))}
+        <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white ml-2 mt-2">
+          <UserIcon className="h-5 w-5" />
+        </div>
+      </div>
+    );
+  };
+
+  // Render an assistant message with chat bubble styling
+  const renderAssistantMessage = (message: LLMRequest, isFirst: boolean = true) => {
+    return (
+      <div className="flex mb-1 animate-fadeIn" key={message.id}>
+        {isFirst && (
+          <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center text-white mr-2 mt-2">
+            <ChatBubbleLeftRightIcon className="h-5 w-5" />
           </div>
         )}
+        {!isFirst && <div className="w-8 mr-2"></div>}
+        
+        <div className="flex flex-col max-w-[75%]">
+          <div className="bg-green-50 p-4 rounded-2xl rounded-bl-sm shadow-sm">
+            <div className="text-sm text-gray-800">
+              {message.content || message.prompt_summary || message.completion_summary}
+            </div>
+            
+            <div className="mt-3 pt-2 border-t border-gray-100 flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-1 text-xs text-gray-500">
+                <DocumentTextIcon className="h-3.5 w-3.5" />
+                <span>Output: {message.output_tokens}</span>
+              </div>
+              
+              {message.duration_ms > 0 && (
+                <div className="flex items-center gap-1 text-xs text-gray-500">
+                  <ClockIcon className="h-3.5 w-3.5" />
+                  <span>Duration: {formatDuration(message.duration_ms)}</span>
+                </div>
+              )}
+              
+              <Tooltip content={message.error || `Status: ${message.status}`}>
+                <Badge 
+                  color={statusColorMap[message.status]} 
+                  size="xs"
+                  className="px-2 py-1 rounded-full"
+                >
+                  {message.status}
+                </Badge>
+              </Tooltip>
+              
+              {/* View Event Link - update to use message.event_id */}
+              {message.event_id && (
+                <Link 
+                  href={`/events/${message.event_id}`}
+                  className="ml-auto text-xs text-gray-500 hover:text-gray-700 hover:underline flex items-center gap-1"
+                >
+                  <MagnifyingGlassIcon className="h-3.5 w-3.5" />
+                  <span>View Event</span>
+                </Link>
+              )}
+            </div>
+          </div>
+          
+          <div className="mt-1 ml-1 text-xs text-gray-500 flex justify-between items-center">
+            <span>{formatDate(message.timestamp)}</span>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Render a conversation turn (user + assistant responses)
+  const renderConversationTurn = (turn: ConversationTurn, index: number) => {
+    const bgClass = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+    
+    return (
+      <div key={turn.user.id} className={`py-4 ${bgClass} rounded-lg`}>
+        {renderUserMessage(turn.user)}
+        
+        <div className="space-y-2 mt-2">
+          {turn.assistant.map((msg, i) => renderAssistantMessage(msg, i === 0))}
+        </div>
       </div>
     );
   };
 
   return (
     <Card className={`w-full ${className}`}>
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex justify-between items-center mb-4">
         <div>
           <Title>Conversation Flow</Title>
-          <Text>Trace ID: {traceId}</Text>
+          
+          {/* Trace ID with icon and copy button */}
+          <div className="flex items-center gap-2 mt-1">
+            <LinkIcon className="h-4 w-4 text-gray-500" />
+            <Text>Trace ID: </Text>
+            <div className="flex items-center">
+              <Text className="font-mono">{traceId}</Text>
+              <button 
+                onClick={copyTraceId} 
+                className="ml-2 text-gray-500 hover:text-gray-700"
+                title="Copy Trace ID"
+              >
+                <ClipboardDocumentIcon className="h-4 w-4" />
+              </button>
+              {copied && <span className="ml-1 text-xs text-green-600">Copied!</span>}
+            </div>
+          </div>
+          
+          {/* Agent name as a styled badge */}
           {flowItems.length > 0 && flowItems[0].agent_name && (
-            <Text>Agent: {flowItems[0].agent_name}</Text>
+            <div className="flex items-center gap-2 mt-1">
+              <UserIcon className="h-4 w-4 text-gray-500" />
+              <Text>Agent: </Text>
+              <Badge color="blue" size="sm" className="px-2 py-1 rounded-full">
+                {flowItems[0].agent_name}
+              </Badge>
+            </div>
           )}
         </div>
         <Button
@@ -215,12 +369,44 @@ export default function LLMConversationFlow({
         </Button>
       </div>
       
+      {/* Conversation Summary Section */}
+      {flowItems.length > 0 && (
+        <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+          <div className="flex items-center gap-6 flex-wrap">
+            <div className="flex items-center gap-2">
+              <DocumentTextIcon className="h-5 w-5 text-gray-500" />
+              <Text>{totalMessages} messages</Text>
+            </div>
+            <div className="flex items-center gap-2">
+              <ClockIcon className="h-5 w-5 text-gray-500" />
+              <Text>{formatDuration(totalDuration)} total duration</Text>
+            </div>
+            {errorCount > 0 && (
+              <div className="flex items-center gap-2">
+                <ExclamationCircleIcon className="h-5 w-5 text-red-500" />
+                <Text className="text-red-600">{errorCount} error{errorCount !== 1 ? 's' : ''}</Text>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      
+      <Divider />
+      
       {loading ? (
-        <div className="space-y-4">
+        <div className="space-y-6 py-4">
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="animate-pulse space-y-2">
-              <div className="h-5 bg-gray-100 rounded w-1/4"></div>
-              <div className="h-20 bg-gray-100 rounded"></div>
+            <div key={i} className="animate-pulse">
+              {/* User message skeleton */}
+              <div className="flex justify-end mb-4">
+                <div className="h-24 bg-blue-50 rounded-2xl w-3/4"></div>
+                <div className="w-8 h-8 rounded-full bg-gray-200 ml-2"></div>
+              </div>
+              {/* Assistant message skeleton */}
+              <div className="flex mb-4">
+                <div className="w-8 h-8 rounded-full bg-gray-200 mr-2"></div>
+                <div className="h-32 bg-green-50 rounded-2xl w-3/4"></div>
+              </div>
             </div>
           ))}
         </div>
@@ -235,67 +421,25 @@ export default function LLMConversationFlow({
           </ul>
         </div>
       ) : (
-        <div className="space-y-4">
-          {/* If the API provides parent/child relationships, use threaded view */}
-          {flowItems.some(item => item.parent_id) ? (
-            getRootMessages().map(message => renderMessage(message))
-          ) : (
-            /* Otherwise, fallback to chronological view */
-            flowItems.map((item, index) => {
-              const role = item.role || (item.input_tokens > 0 ? 'user' : 'assistant');
-              const config = roleConfig[role] || roleConfig.system;
-              
-              return (
-                <div key={item.id} className="border rounded-lg p-4 bg-gray-50">
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="flex items-center gap-2">
-                      <Badge color={statusColorMap[item.status] || 'gray'}>
-                        {item.status}
-                      </Badge>
-                      <Badge color={role === 'user' ? 'blue' : role === 'assistant' ? 'emerald' : 'gray'} size="xs">
-                        {role}
-                      </Badge>
-                      <Text className="font-semibold mt-1">{item.model}</Text>
-                    </div>
-                    <div className="text-right">
-                      <div className="flex items-center gap-1">
-                        <ClockIcon className="h-4 w-4 text-gray-500" />
-                        <Text className="text-sm text-gray-600">{formatDate(item.timestamp)}</Text>
-                      </div>
-                      <Text className="text-sm text-gray-600">Duration: {formatDuration(item.duration_ms)}</Text>
-                    </div>
-                  </div>
-                  
-                  <div className="mt-4 space-y-4">
-                    <div className={`p-4 rounded-lg bg-${config.bgColor} border border-${config.color.replace('700', '200')}`}>
-                      <div className="flex items-start">
-                        <div className={`bg-${config.bgColor} rounded-full p-2 mr-3`}>
-                          {config.icon}
-                        </div>
-                        <div className="flex-1">
-                          <Text className={`font-medium text-sm text-${config.color}`}>
-                            {role.charAt(0).toUpperCase() + role.slice(1)}
-                          </Text>
-                          <div className="mt-2 whitespace-pre-wrap text-sm text-gray-800">
-                            {item.content || (role === 'user' ? item.prompt_summary : item.completion_summary)}
-                          </div>
-                          <div className="mt-2 text-xs text-gray-500">
-                            Tokens: {role === 'user' ? item.input_tokens : item.output_tokens}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {index < flowItems.length - 1 && (
-                    <div className="flex justify-center my-4">
-                      <div className="border-l-2 border-dashed border-gray-300 h-10"></div>
-                    </div>
-                  )}
-                </div>
-              );
-            })
+        <div className="py-2">
+          {/* Group messages into conversation turns */}
+          {groupMessagesByTurn(flowItems).map((turn, index) => 
+            renderConversationTurn(turn, index)
           )}
+          
+          {/* Handle any remaining messages that didn't fit into turns */}
+          {flowItems.filter(item => 
+            !groupMessagesByTurn(flowItems).some(turn => 
+              turn.user.id === item.id || turn.assistant.some(a => a.id === item.id)
+            )
+          ).map(item => {
+            const isUser = item.role === 'user' || (!item.role && item.input_tokens > 0);
+            return (
+              <div key={item.id} className="py-2">
+                {isUser ? renderUserMessage(item) : renderAssistantMessage(item)}
+              </div>
+            );
+          })}
         </div>
       )}
       

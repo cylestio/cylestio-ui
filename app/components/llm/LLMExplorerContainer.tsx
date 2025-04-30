@@ -15,6 +15,7 @@ import {
   LLMConversationFlow
 } from './index'
 
+import ModelUsageAnalytics from '../ModelUsageAnalytics'
 import { DateRangePickerValue } from '@tremor/react'
 import PageTemplate from '../PageTemplate'
 import ContentSection from '../ContentSection'
@@ -200,6 +201,299 @@ export default function LLMExplorerContainer({
   
   // Add state for refresh key
   const [refreshKey, setRefreshKey] = useState(0);
+  
+  // Declare fetchData at component level
+  const fetchData = async (resetData = false) => {
+    // Only fetch data if we're on the dashboard tab or if forcing a refresh
+    if (activeTab !== 0 && !resetData) return;
+    
+    // Reset error states for new fetch
+    setLoading(true);
+    setMetrics({
+      totalRequests: 0,
+      totalTokens: 0,
+      estimatedCost: 0,
+    });
+    setModelData([]);
+    setTimeSeriesData([]);
+    setAgentData([]);
+    setCostData({
+      totalCost: 0,
+      previousPeriodCost: 0,
+      costByModel: [],
+      costByAgent: [],
+      dailyCosts: [],
+      costEfficiency: []
+    });
+    setRequests([]);
+    setResponses([]);
+    setPagination({
+      page: 1,
+      page_size: DEFAULT_PAGE_SIZE,
+      total: 0,
+      total_pages: 0,
+      has_next: false,
+      has_prev: false
+    });
+    setSelectedRequestId(null);
+    setSelectedTraceId(null);
+    setSelectedResponseId(null);
+
+    try {
+      // Prepare API parameters
+      const apiParams = {
+        agent_id: filters.agent.length > 0 ? filters.agent.join(',') : undefined,
+        model_name: filters.model.length > 0 ? filters.model.join(',') : undefined,
+        from_time: filters.customDateRange?.from?.toISOString(),
+        to_time: filters.customDateRange?.to?.toISOString(),
+        time_range: !filters.customDateRange ? filters.timeRange : undefined,
+        granularity: "day"
+      };
+      
+      // Execute all requests in parallel using our API functions with proper types
+      const analyticsResult = await getLLMAnalytics(apiParams);
+      const modelComparisonResult = await getLLMModelComparison(apiParams);
+      const usageTrendsResult = await getLLMUsageTrends(apiParams);
+      const agentUsageResult = await getLLMAgentUsage(apiParams);
+      const relationshipsResult = await getAgentModelRelationships(apiParams);
+
+      // Type assert each result
+      const analyticsData = analyticsResult as LLMAnalyticsResponse;
+      const modelComparisonData = modelComparisonResult as LLMAnalyticsResponse;
+      const usageTrendsData = usageTrendsResult as LLMAnalyticsResponse;
+      const agentUsageData = agentUsageResult as LLMAnalyticsResponse;
+      const relationshipsData = relationshipsResult as LLMAnalyticsResponse;
+      
+      // Process analytics data for header metrics
+      if (analyticsData && analyticsData.total) {
+        const totalTokens = analyticsData.total.token_count_total || 
+                           (analyticsData.total.token_count_input || 0) + (analyticsData.total.token_count_output || 0);
+        
+        setMetrics({
+          totalRequests: analyticsData.total.request_count || 0,
+          totalTokens: totalTokens,
+          estimatedCost: analyticsData.total.estimated_cost_usd || 0
+        });
+        
+        console.log("Total tokens calculation:", {
+          total: analyticsData.total.token_count_total,
+          input: analyticsData.total.token_count_input,
+          output: analyticsData.total.token_count_output,
+          calculated: totalTokens
+        });
+      }
+      
+      // Process model comparison data
+      if (modelComparisonData && Array.isArray(modelComparisonData.breakdown)) {
+        // Process model data
+        const processedModelData: ModelUsageData[] = modelComparisonData.breakdown.map(model => ({
+          name: model.key || 'unknown',
+          requests: model.metrics?.request_count || 0,
+          input_tokens: model.metrics?.token_count_input || 0,
+          output_tokens: model.metrics?.token_count_output || 0,
+          total_tokens: model.metrics?.token_count_total || 0,
+          success_rate: model.metrics?.success_rate || 0,
+          avg_response_time_ms: model.metrics?.response_time_avg || 0,
+          p95_response_time_ms: model.metrics?.response_time_p95 || 0,
+          estimated_cost: model.metrics?.estimated_cost_usd || 0,
+          cost_per_1k_tokens: model.metrics?.token_count_total > 0
+            ? (model.metrics?.estimated_cost_usd || 0) / (model.metrics?.token_count_total / 1000)
+            : 0
+        }));
+        
+        setModelData(processedModelData);
+        
+        // If total tokens is still 0, try calculating from model data
+        if (metrics.totalTokens === 0 && processedModelData.length > 0) {
+          const calculatedTotalTokens = processedModelData.reduce(
+            (sum, model) => sum + (model.total_tokens || 0), 0
+          );
+          
+          if (calculatedTotalTokens > 0) {
+            setMetrics(prev => ({
+              ...prev,
+              totalTokens: calculatedTotalTokens
+            }));
+            
+            console.log("Updated total tokens from model data:", calculatedTotalTokens);
+          }
+        }
+        
+        // Extract available models for filters
+        const availableModelsList = processedModelData
+          .filter(model => model.name && model.name !== 'unknown')
+          .map(model => ({
+            id: model.name,
+            name: model.name
+          }));
+        
+        if (availableModelsList.length > 0) {
+          setAvailableModels(availableModelsList);
+        }
+      }
+      
+      // Process usage trends data
+      if (usageTrendsData && Array.isArray(usageTrendsData.breakdown)) {
+        // Process time series data
+        const processedTimeSeriesData: TimeSeriesData[] = usageTrendsData.breakdown.map(point => ({
+          date: point.key || '',
+          total_requests: point.metrics?.request_count || 0,
+          input_tokens: point.metrics?.token_count_input || 0,
+          output_tokens: point.metrics?.token_count_output || 0,
+          total_tokens: point.metrics?.token_count_total || 0,
+          estimated_cost: point.metrics?.estimated_cost_usd || 0
+        }));
+        
+        setTimeSeriesData(processedTimeSeriesData);
+        
+        // Also populate cost data from usage trends
+        if (processedTimeSeriesData.length > 0) {
+          const dailyCosts = processedTimeSeriesData.map(day => ({
+            date: day.date,
+            cost: day.estimated_cost,
+            forecastCost: undefined
+          }));
+          
+          setCostData(prev => ({
+            ...prev,
+            dailyCosts
+          }));
+        }
+      }
+      
+      // Process agent usage data
+      if (agentUsageData && Array.isArray(agentUsageData.breakdown)) {
+        // Process agent data
+        const processedAgentData: AgentUsageData[] = agentUsageData.breakdown.map(agent => {
+          // Find matching agent in relationships data if available
+          const models = [];
+          
+          if (relationshipsData && Array.isArray(relationshipsData.breakdown)) {
+            // Extract model usage for this agent from relationships data
+            const agentRelationships = relationshipsData.breakdown
+              .filter(rel => rel.key.startsWith(agent.key + ":"))
+              .map(rel => {
+                const modelName = rel.key.split(":")[1] || "unknown";
+                return {
+                  name: modelName,
+                  requests: rel.metrics?.request_count || 0,
+                  tokens: rel.metrics?.token_count_total || 0
+                };
+              });
+            
+            if (agentRelationships.length > 0) {
+              models.push(...agentRelationships);
+            }
+          }
+          
+          // Construct agent data object
+          return {
+            name: agent.key || 'unknown',
+            requests: agent.metrics?.request_count || 0,
+            input_tokens: agent.metrics?.token_count_input || 0,
+            output_tokens: agent.metrics?.token_count_output || 0,
+            total_tokens: agent.metrics?.token_count_total || 0,
+            estimated_cost: agent.metrics?.estimated_cost_usd || 0,
+            models: models
+          };
+        });
+        
+        setAgentData(processedAgentData);
+        
+        // Extract available agents for filters
+        const availableAgentsList = processedAgentData
+          .filter(agent => agent.name && agent.name !== 'unknown')
+          .map(agent => ({
+            id: agent.name,
+            name: agent.name
+          }));
+        
+        if (availableAgentsList.length > 0) {
+          setAvailableAgents(availableAgentsList);
+        }
+        
+        // Process cost by agent data
+        const costByAgent = processedAgentData.map(agent => ({
+          name: agent.name,
+          cost: agent.estimated_cost,
+          tokens: agent.total_tokens
+        }));
+        
+        setCostData(prev => ({
+          ...prev,
+          costByAgent
+        }));
+      }
+      
+      // Process cost data from model comparison
+      if (modelComparisonData && Array.isArray(modelComparisonData.breakdown)) {
+        // Cost by model data
+        const costByModel = modelComparisonData.breakdown.map(model => ({
+          name: model.key || 'unknown',
+          cost: model.metrics?.estimated_cost_usd || 0,
+          tokenCost: model.metrics?.token_count_total > 0
+            ? (model.metrics?.estimated_cost_usd || 0) / (model.metrics?.token_count_total / 1000) * 1000
+            : 0,
+          tokens: model.metrics?.token_count_total || 0
+        }));
+        
+        // Cost efficiency by model (cost per 1K tokens)
+        const costEfficiency = modelComparisonData.breakdown.map(model => ({
+          name: model.key || 'unknown',
+          costPerRequest: model.metrics?.request_count > 0
+            ? (model.metrics?.estimated_cost_usd || 0) / model.metrics?.request_count
+            : 0,
+          costPerToken: model.metrics?.token_count_total > 0
+            ? (model.metrics?.estimated_cost_usd || 0) / model.metrics?.token_count_total
+            : 0,
+          costPer1kSuccessfulTokens: model.metrics?.token_count_total > 0 && model.metrics?.success_rate > 0
+            ? (model.metrics?.estimated_cost_usd || 0) / (model.metrics?.token_count_total / 1000) / (model.metrics?.success_rate / 100)
+            : 0
+        }));
+        
+        setCostData(prev => ({
+          ...prev,
+          totalCost: analyticsData?.total?.estimated_cost_usd || 0,
+          previousPeriodCost: analyticsData?.total?.previous_period_cost_usd || 0,
+          costByModel,
+          costEfficiency
+        }));
+      }
+      
+      // Fetch requests data if we're on the requests tab
+      if (activeTab === 1 || resetData) {
+        // Get requests with current filters and pagination
+        try {
+          const apiParams = {
+            agent_id: filters.agent.length > 0 ? filters.agent.join(',') : undefined,
+            model_name: filters.model.length > 0 ? filters.model.join(',') : undefined,
+            from_time: filters.customDateRange?.from?.toISOString(),
+            to_time: filters.customDateRange?.to?.toISOString(),
+            time_range: !filters.customDateRange ? filters.timeRange : undefined,
+            status: filters.status.length > 0 ? filters.status.join(',') : undefined,
+            query: filters.query,
+            has_error: filters.has_error,
+            page: pagination.page,
+            page_size: pagination.page_size
+          };
+
+          const result = await getLLMRequests(apiParams);
+          
+          if (result && result.items) {
+            setRequests(result.items);
+            setPagination(result.pagination);
+          }
+        } catch (error) {
+          console.error("Error fetching LLM requests:", error);
+        }
+      }
+      
+    } catch (error) {
+      console.error("Error fetching LLM analytics data:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
   
   // Parse search params on initial load
   useEffect(() => {
@@ -695,7 +989,7 @@ export default function LLMExplorerContainer({
             name: model.key || 'unknown',
             cost: model.metrics?.estimated_cost_usd || 0,
             tokenCost: model.metrics?.token_count_total > 0
-              ? (model.metrics?.estimated_cost_usd || 0) / (model.metrics?.token_count_total / 1000)
+              ? (model.metrics?.estimated_cost_usd || 0) / (model.metrics?.token_count_total / 1000) * 1000
               : 0,
             tokens: model.metrics?.token_count_total || 0
           }));
@@ -713,9 +1007,8 @@ export default function LLMExplorerContainer({
             costPerToken: model.metrics?.token_count_total > 0
               ? (model.metrics?.estimated_cost_usd || 0) / model.metrics?.token_count_total
               : 0,
-            costPer1kSuccessfulTokens: model.metrics?.token_count_total > 0 && model.metrics.success_rate > 0
-              ? (model.metrics?.estimated_cost_usd || 0) / 
-                ((model.metrics?.token_count_total * model.metrics.success_rate) / 1000)
+            costPer1kSuccessfulTokens: model.metrics?.token_count_total > 0 && model.metrics?.success_rate > 0
+              ? (model.metrics?.estimated_cost_usd || 0) / (model.metrics?.token_count_total / 1000) / (model.metrics?.success_rate / 100)
               : 0
           }));
           
@@ -938,29 +1231,19 @@ export default function LLMExplorerContainer({
   return (
     <PageTemplate
       title="LLM Explorer"
-      description="Analyze LLM requests, responses, and performance metrics"
+      description="Analyze LLM usage, track token consumption, and monitor costs"
       breadcrumbs={[
         { label: 'Home', href: '/' },
-        { label: 'LLM Explorer', current: true }
+        { label: 'LLM', current: true }
       ]}
       timeRange={filters.timeRange}
       onTimeRangeChange={(value) => handleFilterChange({ ...filters, timeRange: value })}
       headerContent={<RefreshButton onClick={handleRefresh} />}
     >
       <ContentSection spacing="default">
-        <LLMHeader
-          metrics={metrics}
-          activeTab={activeTab}
-          onTabChange={handleTabChange}
-          loading={loading}
-          className="w-full"
-          timeRange={filters.timeRange}
-          onTimeRangeChange={(value) => handleFilterChange({...filters, timeRange: value})}
-        />
-        
         <div className="w-full py-2 border-b">
           <Tab.Group selectedIndex={activeTab} onChange={handleTabChange}>
-            <Tab.List className="flex space-x-1">
+            <Tab.List className="flex">
               <Tab className={({ selected }) => classNames('px-4 py-2 text-sm font-medium', selected ? 'text-primary-600 border-b-2 border-primary-600' : 'text-gray-500 hover:text-gray-700')}>
                 Analytics
               </Tab>
@@ -970,17 +1253,6 @@ export default function LLMExplorerContainer({
             </Tab.List>
           </Tab.Group>
         </div>
-      </ContentSection>
-      
-      <ContentSection spacing="default">
-        <LLMFilterBar
-          filters={filters}
-          onFilterChange={handleFilterChange}
-          availableModels={availableModels}
-          availableAgents={availableAgents}
-          loading={loading}
-          showSearch={activeTab === 1} // Enable search for conversations tab
-        />
       </ContentSection>
       
       {selectedTraceId ? (
@@ -996,13 +1268,9 @@ export default function LLMExplorerContainer({
         <ContentSection spacing="default">
           {activeTab === 0 && (
             <div className="space-y-6">
-              <LLMBreakdownCharts
-                modelData={modelData}
-                timeSeriesData={timeSeriesData}
-                agentData={agentData}
-                loading={loading}
+              <ModelUsageAnalytics 
                 className="w-full"
-                activeView="general"
+                timeRange={filters.timeRange}
               />
             </div>
           )}
