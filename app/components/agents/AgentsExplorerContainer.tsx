@@ -21,10 +21,11 @@ import PageContainer from '../PageContainer';
 import PageTemplate from '../PageTemplate';
 import MetricsDisplay from '../MetricsDisplay';
 import ContentSection from '../ContentSection';
-import { ServerIcon, BoltIcon, ExclamationTriangleIcon, ClockIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
+import { ServerIcon, BoltIcon, ExclamationTriangleIcon, ClockIcon, ChevronRightIcon, ChevronLeftIcon, EyeIcon } from '@heroicons/react/24/outline';
 import { SPACING } from '../spacing';
 import RefreshButton from '../RefreshButton';
 import { RiRobot2Line } from 'react-icons/ri';
+import Link from 'next/link';
 
 // Helper function to determine if an agent is active based on its last activity
 const isAgentActive = (agent: Agent): boolean => {
@@ -516,55 +517,20 @@ function AgentsTable({
 }) {
   const router = useRouter();
   
-  // Force cursor pointer on table rows
-  useEffect(() => {
-    // Apply styles directly to table rows
-    const applyPointerCursor = () => {
-      const tableRows = document.querySelectorAll('.AgentsTable tbody tr');
-      tableRows.forEach(row => {
-        // @ts-ignore
-        row.style.cursor = 'pointer';
-        
-        // Apply to all cells within the row too
-        const cells = row.querySelectorAll('td');
-        cells.forEach(cell => {
-          // @ts-ignore
-          cell.style.cursor = 'pointer';
-        });
-      });
-    };
-    
-    // Run immediately and also set up a small delay to ensure Tremor has finished rendering
-    applyPointerCursor();
-    const timer = setTimeout(applyPointerCursor, 100);
-    
-    // Add a mutation observer to catch any dynamically added rows
-    const observer = new MutationObserver(applyPointerCursor);
-    const tableBody = document.querySelector('.AgentsTable tbody');
-    if (tableBody) {
-      observer.observe(tableBody, { childList: true, subtree: true });
-    }
-    
-    return () => {
-      clearTimeout(timer);
-      observer.disconnect();
-    };
-  }, [agents]); // Re-apply when agents change
-  
-  // Format status as badge
+  // Get status badge with appropriate color
   const getStatusBadge = (agent: Agent) => {
     if (agent.error_count > 0) {
-      return <Badge color="rose">Error</Badge>;
+      return <Badge color="rose" size="sm">Error</Badge>;
     }
     
     if (isAgentActive(agent)) {
-      return <Badge color="emerald">Active</Badge>;
+      return <Badge color="emerald" size="sm">Active</Badge>;
     }
     
-    return <Badge color="gray">Inactive</Badge>;
+    return <Badge color="gray" size="sm">Inactive</Badge>;
   };
   
-  // Format date
+  // Format date for display
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
@@ -584,93 +550,103 @@ function AgentsTable({
     }
     
     return (
-      <Flex justifyContent="end" className="mt-4">
-        <div className="flex items-center gap-2">
-          <Text className="text-sm text-gray-500">Page {page} of {total_pages}</Text>
+      <Flex justifyContent="between" className="mt-6">
+        <Text>
+          Showing {agents.length} of {pagination.total} agents
+        </Text>
+        <Flex className="gap-2">
           <Button
             size="xs"
-            variant="light"
+            icon={ChevronLeftIcon}
             disabled={page === 1}
             onClick={() => onPageChange(page - 1)}
-            className={`text-gray-600 ${page === 1 ? 'opacity-50' : ''}`}
+            className="border border-gray-200"
           >
             Previous
           </Button>
           <Button
             size="xs"
-            variant="light"
+            icon={ChevronRightIcon}
+            iconPosition="right"
             disabled={page === total_pages}
             onClick={() => onPageChange(page + 1)}
-            className={`text-gray-600 ${page === total_pages ? 'opacity-50' : ''}`}
+            className="border border-gray-200"
           >
             Next
           </Button>
-        </div>
+        </Flex>
       </Flex>
     );
   };
   
-  // Agents Table styling
+  // Agents Table styling - empty state
   if (!agents.length) {
     return (
-      <div className="text-center py-8 border-t border-gray-100">
-        <ServerIcon className="h-10 w-10 mx-auto mb-3 text-gray-300" />
-        <Text className="text-base text-gray-700 mb-2">No Agents Found</Text>
-        <Text className="text-sm text-gray-500 mb-5">
-          Please check database connectivity or create agents first.
+      <div className="text-center py-12">
+        <ServerIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+        <Title>No agents found</Title>
+        <Text className="mt-2">
+          No agents match your current filters. Try adjusting your filters or time range.
         </Text>
-        <Button 
-          variant="light"
-          onClick={() => router.push('/settings/agents/create')}
-          className="mx-auto text-primary-600"
-        >
-          Create New Agent
-        </Button>
       </div>
     );
   }
   
   return (
     <div className="AgentsTable">
-      <div className="border-t border-b border-gray-200">
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableHeaderCell>Name</TableHeaderCell>
-              <TableHeaderCell>Status</TableHeaderCell>
-              <TableHeaderCell className="text-right">Requests</TableHeaderCell>
-              <TableHeaderCell className="text-right">Errors</TableHeaderCell>
-              <TableHeaderCell>Last Updated</TableHeaderCell>
-              <TableHeaderCell className="w-10"></TableHeaderCell>
+      <Table className="border border-gray-200 rounded-lg overflow-hidden w-full table-fixed bg-white">
+        <TableHead className="bg-gray-50">
+          <TableRow className="border-b border-gray-200">
+            <TableHeaderCell className="font-semibold text-gray-700 w-[20%]">Name</TableHeaderCell>
+            <TableHeaderCell className="font-semibold text-gray-700 w-[15%]">Status</TableHeaderCell>
+            <TableHeaderCell className="font-semibold text-gray-700 w-[15%] text-right">Requests</TableHeaderCell>
+            <TableHeaderCell className="font-semibold text-gray-700 w-[15%] text-right">Errors</TableHeaderCell>
+            <TableHeaderCell className="font-semibold text-gray-700 w-[25%]">Last Updated</TableHeaderCell>
+            <TableHeaderCell className="font-semibold text-gray-700 w-[10%]">Actions</TableHeaderCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {agents.map((agent) => (
+            <TableRow 
+              key={agent.agent_id} 
+              className="border-b border-gray-100 transition-colors hover:bg-blue-50/30 cursor-pointer"
+              onClick={() => handleRowClick(agent.agent_id)}
+            >
+              <TableCell className="font-medium text-primary-600">
+                {agent.name}
+              </TableCell>
+              <TableCell>
+                {getStatusBadge(agent)}
+              </TableCell>
+              <TableCell className="text-right">
+                {(agent.request_count || 0).toLocaleString()}
+              </TableCell>
+              <TableCell className="text-right">
+                {(agent.error_count || 0).toLocaleString()}
+              </TableCell>
+              <TableCell>
+                <Flex justifyContent="start" alignItems="center" className="gap-1">
+                  <ClockIcon className="h-4 w-4 text-gray-500" />
+                  <Text>{formatDate(agent.updated_at)}</Text>
+                </Flex>
+              </TableCell>
+              <TableCell>
+                <Link href={`/agents/${agent.agent_id}`} onClick={(e) => e.stopPropagation()}>
+                  <Button 
+                    variant="light" 
+                    size="xs" 
+                    icon={EyeIcon}
+                    tooltip="View Agent Details"
+                    className="text-blue-600 hover:text-blue-800"
+                  >
+                    View
+                  </Button>
+                </Link>
+              </TableCell>
             </TableRow>
-          </TableHead>
-          <TableBody>
-            {agents.map((agent) => {
-              // Add debugging log to see what's happening with the names
-              console.log(`Agent name: "${agent.name}", After prefix removal: "${agent.name.startsWith('Agent-') ? agent.name.substring(6) : agent.name}"`);
-              
-              return (
-                <TableRow 
-                  key={agent.agent_id} 
-                  className="cursor-pointer clickable-row hover:bg-gray-50 transition-colors duration-150" 
-                  onClick={() => handleRowClick(agent.agent_id)}
-                >
-                  <TableCell className="font-medium text-primary-600">
-                    {agent.name}
-                  </TableCell>
-                  <TableCell>{getStatusBadge(agent)}</TableCell>
-                  <TableCell className="text-right">{agent.request_count.toLocaleString()}</TableCell>
-                  <TableCell className="text-right">{agent.error_count.toLocaleString()}</TableCell>
-                  <TableCell>{formatDate(agent.updated_at)}</TableCell>
-                  <TableCell className="text-gray-400">
-                    <ChevronRightIcon className="h-4 w-4" />
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </div>
+          ))}
+        </TableBody>
+      </Table>
       
       {renderPagination()}
     </div>

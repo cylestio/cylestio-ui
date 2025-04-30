@@ -200,12 +200,6 @@ export function AgentLLMUsage({ agentId, timeRange }: AgentLLMUsageProps) {
           </div>
         </Card>
       </div>
-      
-      <div className="mt-6 text-center">
-        <Link href={`/agents/${agentId}/llms`} className="text-blue-500 hover:underline text-sm">
-          View all LLM requests →
-        </Link>
-      </div>
     </div>
   );
 } 

@@ -1287,9 +1287,8 @@ export default function LLMExplorerContainer({
   
   // Generate proper breadcrumbs based on the current view
   const getBreadcrumbs = () => {
-    const baseBreadcrumbs = [
-      { label: 'Home', href: '/' },
-    ];
+    // Don't include Home in base breadcrumbs as it's added automatically
+    const baseBreadcrumbs = [];
 
     if (selectedTraceId) {
       // For a specific conversation

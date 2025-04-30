@@ -7,7 +7,6 @@ import {
   CheckCircleIcon, 
   XCircleIcon, 
   ExclamationTriangleIcon,
-  ArrowPathIcon,
   ChevronRightIcon,
   ArrowLeftIcon
 } from '@heroicons/react/24/outline';
@@ -18,16 +17,14 @@ import { fetchAPI } from '../../lib/api';
 import { AGENTS } from '../../lib/api-endpoints';
 
 // Types
-type Session = {
-  session_id: string;
+type Trace = {
+  trace_id: string;
   start_time: string;
   end_time?: string;
-  duration_seconds: number;
+  duration_ms: number;
   event_count: number;
-  llm_request_count: number;
-  tool_execution_count: number;
-  error_count: number;
   status: string;
+  initial_event_type: string;
 };
 
 type PaginationInfo = {
@@ -37,14 +34,14 @@ type PaginationInfo = {
   total_pages: number;
 };
 
-interface AgentSessionsTableProps {
+interface AgentTracesTableProps {
   agentId: string;
   timeRange: string;
 }
 
-export function AgentSessionsTable({ agentId, timeRange }: AgentSessionsTableProps) {
+export function AgentTracesTable({ agentId, timeRange }: AgentTracesTableProps) {
   // State
-  const [sessions, setSessions] = useState<Session[]>([]);
+  const [traces, setTraces] = useState<Trace[]>([]);
   const [pagination, setPagination] = useState<PaginationInfo>({
     page: 1,
     page_size: 10,
@@ -56,7 +53,7 @@ export function AgentSessionsTable({ agentId, timeRange }: AgentSessionsTablePro
   // Track if we should fetch data to avoid unnecessary API calls
   const [shouldFetch, setShouldFetch] = useState(true);
 
-  // Fetch sessions data
+  // Fetch traces data
   useEffect(() => {
     // Skip API call if we don't have an agent ID
     if (!agentId) {
@@ -69,25 +66,25 @@ export function AgentSessionsTable({ agentId, timeRange }: AgentSessionsTablePro
     if (!shouldFetch) return;
 
     let isMounted = true;
-    const fetchSessions = async () => {
+    const fetchTraces = async () => {
       try {
         setLoading(true);
         setError(null);
         
         const data = await fetchAPI<{
-          items: Session[];
+          items: Trace[];
           page: number;
           page_size: number;
           total_items: number;
           total_pages: number;
         }>(
-          `${AGENTS.SESSIONS(agentId)}?time_range=${timeRange}&page=${pagination.page}&page_size=${pagination.page_size}&sort_by=start_time&sort_dir=desc`
+          `${AGENTS.TRACES(agentId)}?time_range=${timeRange}&page=${pagination.page}&page_size=${pagination.page_size}&sort_by=start_time&sort_dir=desc`
         );
         
         // Check if component is still mounted before updating state
         if (!isMounted) return;
         
-        setSessions(data.items || []);
+        setTraces(data.items || []);
         setPagination({
           page: data.page || 1,
           page_size: data.page_size || 10,
@@ -97,9 +94,9 @@ export function AgentSessionsTable({ agentId, timeRange }: AgentSessionsTablePro
         // Reset the fetch flag
         setShouldFetch(false);
       } catch (err: any) {
-        console.error('Error fetching sessions:', err);
+        console.error('Error fetching traces:', err);
         if (isMounted) {
-          setError(err.message || 'An error occurred while fetching sessions');
+          setError(err.message || 'An error occurred while fetching traces');
         }
       } finally {
         if (isMounted) {
@@ -108,24 +105,13 @@ export function AgentSessionsTable({ agentId, timeRange }: AgentSessionsTablePro
       }
     };
 
-    fetchSessions();
+    fetchTraces();
     
     // Cleanup function to handle component unmounting
     return () => {
       isMounted = false;
     };
   }, [agentId, timeRange, pagination.page, pagination.page_size, shouldFetch]);
-
-  // Format duration
-  const formatDuration = (seconds: number): string => {
-    if (seconds < 60) {
-      return `${seconds.toFixed(1)}s`;
-    } else if (seconds < 3600) {
-      return `${(seconds / 60).toFixed(1)}m`;
-    } else {
-      return `${(seconds / 3600).toFixed(1)}h`;
-    }
-  };
 
   // Format timestamp
   const formatTimestamp = (timestamp: string): string => {
@@ -192,17 +178,17 @@ export function AgentSessionsTable({ agentId, timeRange }: AgentSessionsTablePro
   };
 
   if (loading) {
-    return <LoadingState message="Loading sessions..." />;
+    return <LoadingState message="Loading traces..." />;
   }
 
   if (error) {
     return <ErrorMessage message={error} />;
   }
 
-  if (sessions.length === 0) {
+  if (traces.length === 0) {
     return (
       <div className="text-center py-8">
-        <Text className="mt-2">No sessions found for this time period</Text>
+        <Text className="mt-2">No traces found for this time period</Text>
       </div>
     );
   }
@@ -214,54 +200,48 @@ export function AgentSessionsTable({ agentId, timeRange }: AgentSessionsTablePro
           <TableRow className="border-b border-gray-200">
             <TableHeaderCell className="font-semibold text-gray-700 w-[15%]">Start Time</TableHeaderCell>
             <TableHeaderCell className="font-semibold text-gray-700 w-[15%]">End Time</TableHeaderCell>
-            <TableHeaderCell className="font-semibold text-gray-700 w-[15%]">Session ID</TableHeaderCell>
+            <TableHeaderCell className="font-semibold text-gray-700 w-[20%]">Trace ID</TableHeaderCell>
             <TableHeaderCell className="font-semibold text-gray-700 w-[10%]">Duration</TableHeaderCell>
-            <TableHeaderCell className="font-semibold text-gray-700 w-[8%]">Events</TableHeaderCell>
-            <TableHeaderCell className="font-semibold text-gray-700 w-[10%]">LLM Requests</TableHeaderCell>
-            <TableHeaderCell className="font-semibold text-gray-700 w-[8%]">Tool Executions</TableHeaderCell>
-            <TableHeaderCell className="font-semibold text-gray-700 w-[7%]">Errors</TableHeaderCell>
-            <TableHeaderCell className="font-semibold text-gray-700 w-[7%]">Status</TableHeaderCell>
-            <TableHeaderCell className="font-semibold text-gray-700 w-[5%]">Actions</TableHeaderCell>
+            <TableHeaderCell className="font-semibold text-gray-700 w-[10%]">Events</TableHeaderCell>
+            <TableHeaderCell className="font-semibold text-gray-700 w-[15%]">Initial Event</TableHeaderCell>
+            <TableHeaderCell className="font-semibold text-gray-700 w-[8%]">Status</TableHeaderCell>
+            <TableHeaderCell className="font-semibold text-gray-700 w-[7%]">Actions</TableHeaderCell>
           </TableRow>
         </TableHead>
         <TableBody>
-          {sessions.map((session) => (
+          {traces.map((trace) => (
             <TableRow 
-              key={session.session_id} 
+              key={trace.trace_id}
               className="border-b border-gray-100 transition-colors hover:bg-blue-50/30 cursor-pointer"
               onClick={() => {
-                window.location.href = `/events/session/${session.session_id}`;
+                window.location.href = `/events/trace/${trace.trace_id}`;
               }}
             >
               <TableCell>
                 <Flex justifyContent="start" alignItems="center" className="gap-1">
                   <ClockIcon className="h-4 w-4 text-gray-500" />
-                  <Text>{formatTimestamp(session.start_time)}</Text>
+                  <Text>{formatTimestamp(trace.start_time)}</Text>
                 </Flex>
               </TableCell>
               <TableCell>
-                {session.end_time ? (
+                {trace.end_time ? (
                   <Flex justifyContent="start" alignItems="center" className="gap-1">
                     <ClockIcon className="h-4 w-4 text-gray-500" />
-                    <Text>{formatTimestamp(session.end_time)}</Text>
+                    <Text>{formatTimestamp(trace.end_time)}</Text>
                   </Flex>
                 ) : (
                   <Text className="text-gray-500 italic">In progress</Text>
                 )}
               </TableCell>
-              <TableCell className="font-medium">{session.session_id}</TableCell>
-              <TableCell>{formatDuration(session.duration_seconds)}</TableCell>
-              <TableCell>{session.event_count}</TableCell>
-              <TableCell>{session.llm_request_count}</TableCell>
-              <TableCell>{session.tool_execution_count}</TableCell>
-              <TableCell className={session.error_count > 0 ? 'text-red-500 font-medium' : ''}>
-                {session.error_count}
-              </TableCell>
+              <TableCell className="font-medium">{trace.trace_id}</TableCell>
+              <TableCell>{trace.duration_ms} ms</TableCell>
+              <TableCell>{trace.event_count}</TableCell>
+              <TableCell>{trace.initial_event_type}</TableCell>
               <TableCell>
-                <StatusBadge status={session.status} />
+                <StatusBadge status={trace.status} />
               </TableCell>
               <TableCell onClick={(e) => e.stopPropagation()}>
-                <Link href={`/events/session/${session.session_id}`}>
+                <Link href={`/events/trace/${trace.trace_id}`}>
                   <Button 
                     variant="light" 
                     size="xs" 
@@ -281,7 +261,7 @@ export function AgentSessionsTable({ agentId, timeRange }: AgentSessionsTablePro
       {pagination.total_pages > 1 && (
         <Flex justifyContent="between" className="mt-6">
           <Text>
-            Showing {sessions.length} of {pagination.total_items} sessions
+            Showing {traces.length} of {pagination.total_items} traces
           </Text>
           <Flex className="gap-2">
             <Button

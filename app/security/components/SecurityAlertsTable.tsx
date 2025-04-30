@@ -101,17 +101,6 @@ export default function SecurityAlertsTable({ filters, onPageChange }: SecurityA
     }
   };
   
-  // Get appropriate color for alert level
-  const getAlertLevelColor = (level: string) => {
-    switch (level.toLowerCase()) {
-      case 'critical': return 'rose';
-      case 'dangerous': return 'orange';
-      case 'suspicious': return 'amber';
-      case 'none': return 'gray';
-      default: return 'gray';
-    }
-  };
-  
   // Format category for display
   const formatCategory = (category: string) => {
     return category
@@ -168,7 +157,11 @@ export default function SecurityAlertsTable({ filters, onPageChange }: SecurityA
         const data = await fetchAPI<AlertsResponse>(`${SECURITY.ALERTS}?${params.toString()}`);
         
         if (data && data.alerts && Array.isArray(data.alerts)) {
-          setAlerts(data.alerts);
+          // Sort alerts by timestamp in descending order (newest first)
+          const sortedAlerts = [...data.alerts].sort((a, b) => 
+            new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+          );
+          setAlerts(sortedAlerts);
           setPagination(data.pagination);
         } else {
           console.error('Invalid alerts data format:', data);
@@ -218,13 +211,13 @@ export default function SecurityAlertsTable({ filters, onPageChange }: SecurityA
       <Table className="border border-gray-200 rounded-lg overflow-hidden w-full table-fixed">
         <TableHead className="bg-gray-50">
           <TableRow className="border-b border-gray-200">
-            <TableHeaderCell className="font-semibold text-gray-700 w-[10%]">Severity</TableHeaderCell>
-            <TableHeaderCell className="font-semibold text-gray-700 w-[15%]">Category</TableHeaderCell>
-            <TableHeaderCell className="font-semibold text-gray-700 w-[12%]">Alert Level</TableHeaderCell>
-            <TableHeaderCell className="font-semibold text-gray-700 w-[30%]">Description</TableHeaderCell>
-            <TableHeaderCell className="font-semibold text-gray-700 w-[12%]">LLM Vendor</TableHeaderCell>
             <TableHeaderCell className="font-semibold text-gray-700 w-[12%]">Time</TableHeaderCell>
-            <TableHeaderCell className="font-semibold text-gray-700 w-[9%]">Actions</TableHeaderCell>
+            <TableHeaderCell className="font-semibold text-gray-700 w-[8%]">Severity</TableHeaderCell>
+            <TableHeaderCell className="font-semibold text-gray-700 w-[12%]">Category</TableHeaderCell>
+            <TableHeaderCell className="font-semibold text-gray-700 w-[12%]">Agent ID</TableHeaderCell>
+            <TableHeaderCell className="font-semibold text-gray-700 w-[28%]">Description</TableHeaderCell>
+            <TableHeaderCell className="font-semibold text-gray-700 w-[10%]">LLM Vendor</TableHeaderCell>
+            <TableHeaderCell className="font-semibold text-gray-700 w-[8%]">Actions</TableHeaderCell>
           </TableRow>
         </TableHead>
         
@@ -236,6 +229,13 @@ export default function SecurityAlertsTable({ filters, onPageChange }: SecurityA
               onClick={() => window.location.href = `/events/${alert.event_id}?from=security`}
             >
               <TableCell>
+                <Flex justifyContent="start" alignItems="center" className="gap-1">
+                  <ClockIcon className="h-4 w-4 text-gray-500" />
+                  <Text>{formatISOToLocalDisplay(alert.timestamp)}</Text>
+                </Flex>
+              </TableCell>
+              
+              <TableCell>
                 <Badge color={getSeverityColor(alert.severity)} size="sm">
                   {alert.severity}
                 </Badge>
@@ -246,9 +246,9 @@ export default function SecurityAlertsTable({ filters, onPageChange }: SecurityA
               </TableCell>
               
               <TableCell>
-                <Badge color={getAlertLevelColor(alert.alert_level)} size="sm">
-                  {alert.alert_level}
-                </Badge>
+                <Link href={`/agents/${alert.agent_id}`} onClick={(e) => e.stopPropagation()} className="text-blue-600 hover:text-blue-800">
+                  {alert.agent_id}
+                </Link>
               </TableCell>
               
               <TableCell className="max-w-xs">
@@ -270,14 +270,7 @@ export default function SecurityAlertsTable({ filters, onPageChange }: SecurityA
               </TableCell>
               
               <TableCell>
-                <Flex justifyContent="start" alignItems="center" className="gap-1">
-                  <ClockIcon className="h-4 w-4 text-gray-500" />
-                  <Text>{formatISOToLocalDisplay(alert.timestamp)}</Text>
-                </Flex>
-              </TableCell>
-              
-              <TableCell>
-                <Link href={`/events/${alert.event_id}?from=security`}>
+                <Link href={`/events/${alert.event_id}?from=security`} onClick={(e) => e.stopPropagation()}>
                   <Button 
                     variant="light" 
                     size="xs" 
