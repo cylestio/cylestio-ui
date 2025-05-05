@@ -4,7 +4,7 @@
 
 // The base URL for the API - using direct connection to API server
 // This allows the frontend to directly connect to the API URL
-export const API_BASE_URL = 'http://127.0.0.1:8000';
+export const API_BASE_URL = process.env.CYLESTIO_SERVER_URL || 'http://127.0.0.1:8000';
 
 // Path prefix for API endpoints - adjust this to match your API structure
 // Empty string means no prefix, otherwise should end with a slash

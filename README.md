@@ -28,6 +28,62 @@ The application will be available at http://localhost:3000.
 
 > **Note:** While this package is published to npm as `@cylestio/ui-dashboard`, the recommended approach is to clone and run the repository directly as outlined above.
 
+## Configuration Options
+
+### Configuring the UI Port
+
+By default, the UI runs on port 3000. To change this, you can specify a different port when starting the development server:
+
+```bash
+# Run on port 4000 instead of the default 3000
+npm run dev -- -p 4000
+```
+
+Or set it permanently in your package.json:
+
+```json
+"scripts": {
+  "dev": "next dev -p 4000"
+}
+```
+
+### Configuring the API Server URL
+
+By default, the UI connects to an API server at `http://localhost:8000` or `http://127.0.0.1:8000`. There are several ways to configure a different API server URL:
+
+#### Using a .env.local File (Recommended)
+
+Create a `.env.local` file in the project root:
+
+```
+CYLESTIO_SERVER_URL=http://your-api-server:9000
+```
+
+This is the recommended approach as Next.js will automatically load environment variables from this file.
+
+#### Using Command Line with Next.js Environment Variables
+
+```bash
+# For Mac/Linux
+CYLESTIO_SERVER_URL=http://your-api-server:9000 npm run dev
+
+# For Windows (PowerShell)
+$env:CYLESTIO_SERVER_URL="http://your-api-server:9000"; npm run dev
+
+# For Windows (CMD)
+set CYLESTIO_SERVER_URL=http://your-api-server:9000 && npm run dev
+```
+
+> **Note:** Using regular shell exports like `export CYLESTIO_SERVER_URL=...` won't work because Next.js needs the environment variable to be available when it starts.
+
+#### Manual Configuration
+
+You can also modify the API server URL directly in `app/lib/api.ts`:
+
+```typescript
+export const API_BASE_URL = 'http://your-api-server:9000';
+```
+
 ## Quick Start
 
 ### Running the Dashboard Locally
@@ -157,6 +213,19 @@ The project currently has some ESLint and TypeScript errors that may cause build
    ```
 
 3. **Package Installation Errors**: If you try to install `@cylestio/ui-dashboard` from npm, you may get a 404 error. This is expected - see the Installation instructions above for the correct approach.
+
+4. **Port Conflicts**: If port 3000 is already in use, you'll see an error when starting the dev server. You can specify a different port as described in the [Configuration Options](#configuration-options) section:
+   ```bash
+   npm run dev -- -p 3001
+   ```
+
+5. **API Connection Issues**: If you see errors related to API connectivity:
+   - Ensure your API server is running and accessible
+   - Check that the CYLESTIO_SERVER_URL is correctly configured (default is http://localhost:8000)
+   - Verify you're setting the environment variable correctly (see [Configuring the API Server URL](#configuring-the-api-server-url))
+   - Note that `export CYLESTIO_SERVER_URL=...` won't work - use the methods described in the Configuration section
+   - Look at your browser console for specific error messages
+   - Test the API endpoint directly in your browser or with a tool like curl or Postman
 
 ### Getting Help
 
