@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.1.10] - 2024-09-06
+## [0.1.10] - 2025-05-07
 
 ### Added
 - Enhanced dashboard visualizations
@@ -19,7 +19,7 @@ All notable changes to this project will be documented in this file.
 - Dashboard rendering in dark mode
 - Component state management issues
 
-## [0.1.0] - 2024-03-12
+## [0.1.0] - 2025-05-01
 
 ### Added
 - Initial public release of the npm package
