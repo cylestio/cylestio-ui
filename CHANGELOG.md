@@ -17,7 +17,9 @@ All notable changes to this project will be documented in this file.
 - Improved documentation with clear usage examples
 - Enhanced GitHub Actions workflow with version management
 - Updated README with comprehensive user and developer guides
+- Changed license from MIT to Apache License 2.0
 
 ### Removed
 - Unused development files and documentation
-- Complex build process dependencies 
+- Complex build process dependencies
+- Legacy configuration methods 
