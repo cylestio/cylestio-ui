@@ -48,7 +48,7 @@ For complete documentation, visit:
 - [Installation Guide](docs/installation.md)
 - [API Reference](docs/api-reference.md)
 - [Customization Guide](docs/customization.md)
-- [API Integration Guide](docs/API_INTEGRATION_GUIDE.md) - **IMPORTANT: Always use real API endpoints**
+- [API Integration Guide](docs/API_INTEGRATION_GUIDE.md)
 
 ## Integration with Cylestio Monitor
 
@@ -86,6 +86,47 @@ function MonitoringDashboard() {
 }
 ```
 
+## Advanced Usage
+
+### Standalone Usage
+
+You can use the components without integrating with Cylestio Monitor:
+
+```jsx
+import { AgentsList, SecurityAlerts } from '@cylestio/ui-dashboard'
+
+function CustomDashboard({ agents, alerts }) {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <AgentsList agents={agents} />
+      <SecurityAlerts alerts={alerts} />
+    </div>
+  )
+}
+```
+
+### Theming
+
+The dashboard supports custom theming:
+
+```jsx
+import { ThemeProvider } from '@cylestio/ui-dashboard'
+
+function App() {
+  return (
+    <ThemeProvider theme={{
+      colors: {
+        primary: '#4f46e5',
+        secondary: '#7c3aed',
+        // ...other custom colors
+      }
+    }}>
+      <YourDashboard />
+    </ThemeProvider>
+  )
+}
+```
+
 ## Requirements
 
 - React 17+
@@ -99,9 +140,3 @@ Contributions are welcome! Please see our [Contributing Guide](CONTRIBUTING.md) 
 ## License
 
 [MIT](LICENSE) © Cylestio
-
-## Testing Status
-
-> **Note:** Tests are temporarily disabled during the UI revamp period.
->
-> The testing infrastructure has been simplified to ensure smooth deployment to npm while the UI undergoes significant changes. Tests will be re-introduced after the UI revamp is complete.

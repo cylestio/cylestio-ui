@@ -1,0 +1,56 @@
+# Development and build files
+node_modules
+.next
+out
+.swc
+coverage
+e2e-results
+test-results
+playwright-report
+playwright/.cache
+.nyc_output
+
+# Source control
+.git
+.github
+.gitignore
+.dependency-check-suppression.xml
+
+# Configuration
+.env*
+.eslintrc.json
+.prettierrc
+next.config.js
+postcss.config.js
+tailwind.config.js
+tsconfig.json
+tsconfig.build.json
+jest.config.ts
+playwright.config.ts
+sonar-project.properties
+
+# Test files
+tests
+**/*.test.js
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.js
+**/*.spec.ts
+**/*.spec.tsx
+**/__tests__
+
+# Documentation
+docs
+*.md
+!README.md
+!LICENSE
+
+# Scripts
+scripts
+
+# Misc
+.DS_Store
+*.log
+*.tmp
+*.temp
+Thumbs.db 
