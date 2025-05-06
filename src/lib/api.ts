@@ -2,7 +2,10 @@
  * API client for interacting with the Cylestio API
  */
 
-const API_BASE_URL = process.env.API_SERVER_URL || 'http://localhost:8000';
+import config from '../../config';
+
+// Use centralized configuration
+const API_SERVER_URL = config.api.serverUrl;
 
 export interface ApiError {
   error: string;
@@ -24,7 +27,7 @@ export async function fetchAPI<T>(
                  formattedEndpoint : 
                  `/v1${formattedEndpoint}`;
   
-  const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${apiPath}`;
+  const url = endpoint.startsWith('http') ? endpoint : `${API_SERVER_URL}${apiPath}`;
 
   try {
     const response = await fetch(url, {

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Button, Card, Text, Title, Badge, Flex, Grid } from '@tremor/react';
 import { SECURITY, SESSIONS, AGENTS, TELEMETRY } from '../../lib/api-endpoints';
+import config from '../../../config';
 
 type EndpointTest = {
   name: string;
@@ -22,7 +23,7 @@ export default function VerifyEndpointsPage() {
   ]);
   
   const [loading, setLoading] = useState<boolean>(false);
-  const [apiServerUrl, setApiServerUrl] = useState<string>(process.env.NEXT_PUBLIC_API_SERVER_URL || 'http://127.0.0.1:8000');
+  const [apiServerUrl, setApiServerUrl] = useState<string>(config.api.serverUrl);
 
   const testEndpoint = async (index: number) => {
     const endpoint = results[index];

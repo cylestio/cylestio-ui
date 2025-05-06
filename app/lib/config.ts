@@ -2,14 +2,19 @@
  * Application configuration settings
  */
 
-// Load from .env files if available
-const useMockData = process.env.USE_MOCK_DATA === 'true' ? true : false;
+import rootConfig from '../../config';
 
-export const config = {
+// Export configuration values from the central config file
+export const useMockData = false;
+export const apiServerUrl = rootConfig.api.serverUrl;
+
+// Export other configuration values
+export const appConfig = {
   /**
    * Controls whether the application should use mock data when real data is not available.
    * When false, the UI will show appropriate error messages instead of mock data.
    * Set to true only for development or demonstration purposes.
    */
-  useMockData: useMockData,
+  useMockData,
+  // Other application-specific config can go here
 }; 

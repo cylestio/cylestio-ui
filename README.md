@@ -1,41 +1,98 @@
-# @cylestio/ui-dashboard
+# Cylestio UI Dashboard
 
-[![CI/CD](https://github.com/cylestio/cylestio-ui/actions/workflows/main.yml/badge.svg)](https://github.com/cylestio/cylestio-ui/actions)
-[![npm version](https://badge.fury.io/js/%40cylestio%2Fui-dashboard.svg)](https://www.npmjs.com/package/@cylestio/ui-dashboard)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-Enterprise-grade dashboard components for monitoring AI agent activities and security metrics, designed to integrate with [Cylestio Monitor](https://github.com/cylestio/cylestio-monitor).
-
-![Dashboard Preview](public/images/dashboard-preview.png)
-
-## Installation
-
-```bash
-npm install @cylestio/ui-dashboard
-```
+Enterprise-grade dashboard for monitoring AI agent activities and security metrics.
 
 ## Quick Start
 
-```jsx
-import { Sidebar, DashboardMetrics, DashboardCharts } from '@cylestio/ui-dashboard'
-
-function Dashboard() {
-  return (
-    <div className="flex h-screen">
-      <Sidebar />
-      <main className="flex-1 p-6">
-        <DashboardMetrics data={yourMetricsData} />
-        <DashboardCharts data={yourChartsData} />
-      </main>
-    </div>
-  )
-}
+```bash
+git clone https://github.com/cylestio/cylestio-ui.git
+cd cylestio-ui
+npm install
+npm run dev
 ```
 
-## Key Features
+By default, the application will run on port 3000 and connect to the API server at http://localhost:8000.
+
+### Customizing the Configuration
+
+The application uses a central configuration file (`config.js`) in the root directory:
+
+```js
+// config.js
+const config = {
+  // API server configuration
+  api: {
+    // Base URL for API requests
+    serverUrl: 'http://localhost:8000',
+  },
+  
+  // Server configuration
+  server: {
+    // Port for the development server
+    port: 3000,
+  }
+};
+```
+
+#### Option 1: Edit the config file directly
+
+You can directly edit the `config.js` file to change any settings.
+
+#### Option 2: Use the config helper script
+
+We provide a helper script to update the configuration:
+
+```bash
+# Change the API server URL
+npm run config -- --api-url http://your-api-server.com
+
+# Change the development server port
+npm run config -- --port 3001
+
+# Apply multiple changes
+npm run config -- --api-url http://your-api-server.com --port 3001
+```
+
+#### Option 3: Use environment variables for temporary changes
+
+For one-time port changes without modifying the config file:
+
+```bash
+# Linux/Mac
+PORT=3001 npm run dev
+
+# Windows (Command Prompt)
+set PORT=3001 && npm run dev
+
+# Windows (PowerShell)
+$env:PORT=3001; npm run dev
+```
+
+## Code Structure
+
+### Configuration
+
+The application uses a centralized configuration approach:
+
+- `config.js` in the root directory contains all configurable settings
+- All components and modules import from this central config file
+- This ensures consistent settings throughout the application
+
+Example of importing the config in a component:
+
+```javascript
+// Import the config
+import config from '../../config';
+
+// Use the API URL from config
+const apiUrl = config.api.serverUrl;
+```
+
+## Features
 
 - 📊 **Pre-built Components**: Ready-to-use UI components for AI agent monitoring
-- 🔄 **Cylestio Integration**: Seamless integration with [Cylestio Monitor](https://github.com/cylestio/cylestio-monitor)
 - 🎨 **Customizable**: Fully customizable with Tailwind CSS
 - 📱 **Responsive**: Mobile-friendly UI that works on all devices
 - 🔒 **Secure**: Enterprise-grade security built-in
@@ -50,81 +107,14 @@ For complete documentation, visit:
 - [Customization Guide](docs/customization.md)
 - [API Integration Guide](docs/API_INTEGRATION_GUIDE.md)
 
-## Integration with Cylestio Monitor
+## Development
 
-```jsx
-import { useEffect, useState } from 'react'
-import { CylestioMonitor } from '@cylestio/monitor'
-import { DashboardMetrics, DashboardCharts } from '@cylestio/ui-dashboard'
+### Local Development
 
-function MonitoringDashboard() {
-  const [data, setData] = useState(null)
+Start the development server:
 
-  useEffect(() => {
-    const monitor = new CylestioMonitor({
-      apiKey: process.env.NEXT_PUBLIC_CYLESTIO_API_KEY,
-    })
-
-    const fetchData = async () => {
-      const result = await monitor.getAgentMetrics()
-      setData(result)
-    }
-
-    fetchData()
-    const interval = setInterval(fetchData, 60000)
-    return () => clearInterval(interval)
-  }, [])
-
-  if (!data) return <div>Loading...</div>
-
-  return (
-    <div className="p-4">
-      <DashboardMetrics data={data.metrics} />
-      <DashboardCharts data={data.charts} />
-    </div>
-  )
-}
-```
-
-## Advanced Usage
-
-### Standalone Usage
-
-You can use the components without integrating with Cylestio Monitor:
-
-```jsx
-import { AgentsList, SecurityAlerts } from '@cylestio/ui-dashboard'
-
-function CustomDashboard({ agents, alerts }) {
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <AgentsList agents={agents} />
-      <SecurityAlerts alerts={alerts} />
-    </div>
-  )
-}
-```
-
-### Theming
-
-The dashboard supports custom theming:
-
-```jsx
-import { ThemeProvider } from '@cylestio/ui-dashboard'
-
-function App() {
-  return (
-    <ThemeProvider theme={{
-      colors: {
-        primary: '#4f46e5',
-        secondary: '#7c3aed',
-        // ...other custom colors
-      }
-    }}>
-      <YourDashboard />
-    </ThemeProvider>
-  )
-}
+```bash
+npm run dev
 ```
 
 ## Requirements
@@ -135,8 +125,8 @@ function App() {
 
 ## Contributing
 
-Contributions are welcome! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+Contributions are welcome! Please see our [Contributing Guide](CONTRIBUTING.md) for details and the [Code of Conduct](CODE_OF_CONDUCT.md) for community guidelines.
 
 ## License
 
-[MIT](LICENSE) © Cylestio
+[Apache-2.0](LICENSE) © Cylestio

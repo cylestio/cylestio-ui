@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import config from '../../../../config';
 
-// The actual API server URL (load from environment variable)
-const API_SERVER_URL = process.env.API_SERVER_URL || 'http://localhost:8080';
+// Use centralized configuration
+const API_SERVER_URL = config.api.serverUrl;
 
 // Log that the proxy route is loaded with the configured API URL
 console.log(`API proxy initialized with API_SERVER_URL: ${API_SERVER_URL}`);

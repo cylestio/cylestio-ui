@@ -3,12 +3,16 @@
 import { useState, useEffect } from 'react';
 import { fetchAPI } from '../lib/api';
 import { Button, Card, Text, Title } from '@tremor/react';
+import config from '../../config';
 
 export default function ApiTestPage() {
   const [testResult, setTestResult] = useState<string>('No test run yet');
   const [loading, setLoading] = useState<boolean>(false);
   const [directResult, setDirectResult] = useState<string>('No direct test run yet');
   const [proxyResult, setProxyResult] = useState<string>('No proxy test run yet');
+
+  // Use centralized configuration
+  const apiServerUrl = config.api.serverUrl;
 
   const runApiTest = async () => {
     try {
@@ -32,7 +36,6 @@ export default function ApiTestPage() {
       setDirectResult('Testing direct API connection...');
       
       // Try to directly access the API server without the proxy
-      const apiServerUrl = process.env.NEXT_PUBLIC_API_SERVER_URL || 'http://127.0.0.1:8000';
       const response = await fetch(`${apiServerUrl}/docs`);
       
       if (response.ok) {
