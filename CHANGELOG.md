@@ -21,23 +21,35 @@ All notable changes to this project will be documented in this file.
 - Minor styling inconsistencies in dark mode
 - Documentation examples alignment with actual component props
 
-## [0.1.0] - 2024-03-12
+## [0.1.10] - 2024-05-22
 
 ### Added
-- Initial public release of the npm package
-- Package configuration for distribution
-- Component exports and TypeScript typings
-- GitHub Actions workflow for npm publishing
-- Comprehensive documentation
-- Unit and integration tests
-- Package verification scripts
+- Streamlined CLI package for npm distribution
+- Simplified package structure for improved compatibility
+- Clear installation documentation in README
+- GitHub workflow for manual releases with dry-run option
 
 ### Changed
-- Refactored components to support customization
+- Reduced package size by eliminating unnecessary dependencies
+- Improved CLI guidance for repository usage
+- Updated documentation to reflect streamlined approach
+- Simplified release process
+
+### Removed
+- Unnecessary build dependencies
+- Complex component exports
+- Excess dependencies
+
+## [0.1.9] - 2023-04-30
+
+### Added
+- Initial public release
+- Package configuration for distribution
+- GitHub Actions workflow for npm publishing
+
+### Changed
 - Simplified the README
 - Improved project structure for better maintainability
-- Moved detailed documentation to docs directory
 
 ### Fixed
-- Type definitions for component props
-- Public assets organization 
+- Various package issues 

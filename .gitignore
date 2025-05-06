@@ -18,6 +18,11 @@
 # production
 /build
 /dist
+/dist-cli
+*.tgz
+cylestio-ui-*.tgz
+cylestio-ui-merged.bundle
+npm-debug.*
 
 # misc
 .DS_Store
@@ -82,3 +87,5 @@ coverage/
 .DS_Store
 Thumbs.db
 task*/
+temp*/
+temp_*/

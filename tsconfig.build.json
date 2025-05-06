@@ -6,7 +6,11 @@
     "sourceMap": true,
     "noEmit": false
   },
-  "include": ["app/**/*"],
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "src/cli/**/*"
+  ],
   "exclude": [
     "node_modules",
     "**/*.test.ts",

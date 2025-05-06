@@ -1,0 +1,111 @@
+name: Release to npm
+
+on:
+  workflow_dispatch:
+    inputs:
+      dryRun:
+        description: 'Dry run (no actual publish)'
+        type: boolean
+        default: true
+      version:
+        description: 'Version to publish (if empty, uses package.json)'
+        required: false
+        default: ''
+
+env:
+  NODE_VERSION: '20.x'
+  NODE_ENV: 'production'
+
+jobs:
+  build-and-publish:
+    name: Build and Publish
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.package-version.outputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Create required directories
+        run: mkdir -p bin public
+      
+      - name: Copy CLI script
+        run: cp scripts/cli.js bin/index.js
+      
+      - name: Make CLI script executable
+        run: chmod +x bin/index.js
+      
+      - name: Set version if provided
+        if: ${{ inputs.version != '' }}
+        run: npm version ${{ inputs.version }} --no-git-tag-version
+      
+      - name: Extract package version
+        id: package-version
+        run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+      
+      - name: Update version in CLI script
+        run: |
+          sed -i "s/v0.1.10/v${{ steps.package-version.outputs.version }}/g" bin/index.js
+          sed -i "s/v0.1.10/v${{ steps.package-version.outputs.version }}/g" public/index.html
+      
+      - name: Perform dry run
+        if: ${{ inputs.dryRun }}
+        run: npm pack
+      
+      - name: Verify package contents
+        if: ${{ inputs.dryRun }}
+        run: |
+          echo "📦 Package contents:"
+          tar -tvf $(ls *.tgz) | sort -k 6
+      
+      - name: Publish to NPM
+        if: ${{ !inputs.dryRun }}
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      
+      - name: Create GitHub Release
+        if: ${{ !inputs.dryRun }}
+        uses: softprops/action-gh-release@v1
+        with:
+          files: "*.tgz"
+          name: "v${{ steps.package-version.outputs.version }}"
+          tag_name: "v${{ steps.package-version.outputs.version }}"
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Output success message
+        if: ${{ !inputs.dryRun }}
+        run: echo "🚀 Package v${{ steps.package-version.outputs.version }} published to NPM successfully!"
+      
+      - name: Output dry run message
+        if: ${{ inputs.dryRun }}
+        run: echo "📦 Dry run completed successfully for v${{ steps.package-version.outputs.version }}. Package was not published."
+          
+  notify:
+    name: Notification
+    needs: build-and-publish
+    runs-on: ubuntu-latest
+    if: ${{ !inputs.dryRun }}
+    steps:
+      - name: Send notification
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_CHANNEL: releases
+          SLACK_COLOR: good
+          SLACK_MESSAGE: '@cylestio/ui-dashboard v${{ needs.build-and-publish.outputs.version }} has been published to npm'
+          SLACK_TITLE: NPM Package Published
+          MSG_MINIMAL: true
+        continue-on-error: true 

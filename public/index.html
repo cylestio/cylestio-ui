@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cylestio Dashboard</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      margin: 0;
+      padding: 0;
+      color: #333;
+      background-color: #f9fafb;
+    }
+    header {
+      background-color: #1a56db;
+      color: white;
+      padding: 1rem;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+    .dashboard {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+      gap: 1.5rem;
+    }
+    .card {
+      background-color: white;
+      border-radius: 0.5rem;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      padding: 1.5rem;
+    }
+    h1, h2, h3 {
+      margin-top: 0;
+    }
+    .meter {
+      height: 1rem;
+      background-color: #e5e7eb;
+      border-radius: 0.5rem;
+      margin: 1rem 0;
+      overflow: hidden;
+    }
+    .meter-value {
+      height: 100%;
+      background-color: #10b981;
+      width: 65%;
+    }
+    .footer {
+      text-align: center;
+      margin-top: 2rem;
+      padding: 1rem;
+      color: #6b7280;
+      font-size: 0.875rem;
+    }
+    .api-status {
+      padding: 0.5rem 1rem;
+      background-color: #f3f4f6;
+      border-radius: 0.25rem;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .status-indicator {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-right: 8px;
+    }
+    .status-connected {
+      background-color: #10b981;
+    }
+    .status-disconnected {
+      background-color: #ef4444;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Cylestio Dashboard</h1>
+  </header>
+  
+  <main>
+    <div class="api-status">
+      <div>
+        <span id="status-indicator" class="status-indicator status-disconnected"></span>
+        API Server: <span id="api-url">Loading...</span>
+      </div>
+      <div>
+        Dashboard Version: <span id="dashboard-version">0.1.10</span>
+      </div>
+    </div>
+    
+    <div class="dashboard">
+      <div class="card">
+        <h2>AI Agent Activity</h2>
+        <p>Monitoring real-time activity across all agents</p>
+        <div class="meter">
+          <div class="meter-value"></div>
+        </div>
+        <p>65% of normal activity level</p>
+      </div>
+      
+      <div class="card">
+        <h2>Security Alerts</h2>
+        <p>No critical alerts detected in the last 24 hours</p>
+        <ul>
+          <li>3 minor warnings</li>
+          <li>0 unauthorized access attempts</li>
+          <li>Last scan: 5 minutes ago</li>
+        </ul>
+      </div>
+      
+      <div class="card">
+        <h2>Token Usage</h2>
+        <p>Today's consumption: 45,231 tokens</p>
+        <p>Monthly budget: 1,000,000 tokens</p>
+        <div class="meter">
+          <div class="meter-value" style="width: 45%;"></div>
+        </div>
+        <p>45% of monthly allocation used</p>
+      </div>
+      
+      <div class="card">
+        <h2>Performance Metrics</h2>
+        <p>Average response time: 732ms</p>
+        <p>Success rate: 99.8%</p>
+        <p>Uptime: 99.99%</p>
+      </div>
+    </div>
+    
+    <div class="footer">
+      <p>This is a static preview of the Cylestio Dashboard. For the full interactive dashboard, please refer to the documentation.</p>
+      <p>Cylestio Dashboard v<span id="version-footer">0.1.10</span></p>
+    </div>
+  </main>
+
+  <script>
+    // Fetch configuration
+    fetch('/config.json')
+      .then(response => response.json())
+      .then(config => {
+        document.getElementById('api-url').textContent = config.apiUrl;
+        document.getElementById('dashboard-version').textContent = config.version;
+        document.getElementById('version-footer').textContent = config.version;
+        
+        // Simulate API connection check
+        setTimeout(() => {
+          // In a real app, this would be an actual API check
+          const indicator = document.getElementById('status-indicator');
+          indicator.classList.remove('status-disconnected');
+          indicator.classList.add('status-connected');
+        }, 1500);
+      })
+      .catch(error => {
+        console.error('Error loading configuration:', error);
+        document.getElementById('api-url').textContent = 'Configuration error';
+      });
+  </script>
+</body>
+</html> 
