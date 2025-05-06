@@ -2,9 +2,10 @@
 
 import { useState } from 'react';
 import { Button, Card, Text, Title, TextInput } from '@tremor/react';
+import config from '../../../config';
 
 export default function DiscoverApiPage() {
-  const [apiUrl, setApiUrl] = useState('http://127.0.0.1:8000');
+  const [apiUrl, setApiUrl] = useState(config.api.serverUrl);
   const [endpointPath, setEndpointPath] = useState('/security/alerts');
   const [result, setResult] = useState<string>('No test run yet');
   const [loading, setLoading] = useState<boolean>(false);

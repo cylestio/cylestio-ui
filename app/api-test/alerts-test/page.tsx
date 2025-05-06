@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Button, Card, Text, Title, Badge } from '@tremor/react';
 import { SECURITY } from '../../lib/api-endpoints';
+import config from '../../../config';
 
 export default function AlertsTestPage() {
   const [directResult, setDirectResult] = useState<string>('No test run yet');
@@ -10,13 +11,15 @@ export default function AlertsTestPage() {
   const [loading, setLoading] = useState<boolean>(false);
   const [alerts, setAlerts] = useState<any[]>([]);
 
+  // Use centralized configuration
+  const apiServerUrl = config.api.serverUrl;
+
   const testDirectAlertsApi = async () => {
     try {
       setLoading(true);
       setDirectResult('Testing direct API connection to alerts endpoint...');
       
       // Try to directly access the alerts API endpoint with the new path
-      const apiServerUrl = process.env.NEXT_PUBLIC_API_SERVER_URL || 'http://127.0.0.1:8000';
       const response = await fetch(`${apiServerUrl}${SECURITY.ALERTS}?page=1&page_size=10`);
       
       if (response.ok) {

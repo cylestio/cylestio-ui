@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.10] - 2024-09-06
+
+### Added
+- Enhanced dashboard visualizations
+- Additional security features
+- Performance optimizations
+
+### Changed
+- Improved UI responsiveness
+- Updated dependency requirements
+- Refined component APIs
+
+### Fixed
+- Compatibility issues with latest browser versions
+- Dashboard rendering in dark mode
+- Component state management issues
+
 ## [0.1.0] - 2024-03-12
 
 ### Added

@@ -1,6 +1,6 @@
 {
   "name": "@cylestio/ui-dashboard",
-  "version": "0.1.0",
+  "version": "0.1.10",
   "description": "Enterprise-grade AI Agent Monitoring and Security Dashboard",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -9,12 +9,13 @@
     "public"
   ],
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p ${PORT:-3000}",
     "build": "next build",
     "build:package": "tsc --project tsconfig.build.json && next build",
     "verify:package": "node scripts/verify-package.js",
     "prepublishOnly": "npm run build:package",
     "start": "next start",
+    "config": "node scripts/update-config.js",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
     "test": "jest",
@@ -45,7 +46,7 @@
     "ai-observability"
   ],
   "author": "Cylestio",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "bugs": {
     "url": "https://github.com/cylestio/cylestio-ui/issues"
   },
@@ -58,6 +59,7 @@
     "next": "^13.0.0 || ^14.0.0",
     "react": "^17.0.0 || ^18.0.0",
     "react-dom": "^17.0.0 || ^18.0.0",
+    "react-icons": "^5.5.0",
     "recharts": "^2.10.3"
   },
   "peerDependencies": {

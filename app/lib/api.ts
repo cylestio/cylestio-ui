@@ -2,9 +2,10 @@
  * API service for making requests to the Cylestio API
  */
 
-// The base URL for the API - using direct connection to API server
-// This allows the frontend to directly connect to the API URL
-export const API_BASE_URL = 'http://127.0.0.1:8000';
+import config from '../../config';
+
+// Use the centralized configuration instead of hardcoded values
+const API_BASE_URL = config.api.serverUrl;
 
 // Path prefix for API endpoints - adjust this to match your API structure
 // Empty string means no prefix, otherwise should end with a slash

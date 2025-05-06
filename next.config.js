@@ -1,4 +1,6 @@
 /** @type {import('next').NextConfig} */
+const config = require('./config');
+
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
@@ -6,8 +8,11 @@ const nextConfig = {
     serverComponentsExternalPackages: ['sqlite3'],
   },
   env: {
-    API_SERVER_URL: process.env.API_SERVER_URL || 'http://localhost:8000',
-    USE_MOCK_DATA: process.env.USE_MOCK_DATA || 'false',
+    API_SERVER_URL: config.api.serverUrl,
+  },
+  // Support for custom port via environment variable or config
+  devIndicators: {
+    buildActivity: true,
   },
   // Fix 404 errors for JavaScript chunks on refresh
   output: 'standalone',
