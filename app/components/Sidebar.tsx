@@ -4,7 +4,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, redirect, RedirectType } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { RiDashboardLine, RiRobot2Line, RiTimeLine, RiToolsLine, RiBrainLine, RiMessageLine, RiShieldLine } from 'react-icons/ri'
+import { RiDashboardLine, RiRobot2Line, RiTimeLine, RiToolsLine, RiBrainLine, RiMessageLine, RiShieldLine, RiSettingsLine } from 'react-icons/ri'
 import { useDescope, useSession, useUser } from '@descope/nextjs-sdk/client'
 
 const navigation = [
@@ -14,6 +14,7 @@ const navigation = [
   { name: 'Tools', href: '/tools', icon: RiToolsLine },
   { name: 'LLM Explorer', href: '/llm', icon: RiBrainLine },
   { name: 'Security', href: '/security', icon: RiShieldLine },
+  // { name: 'Settings', href: '/settings', icon: RiSettingsLine },
 ]
 
 // Define and export props interface
