@@ -52,6 +52,7 @@
   },
   "homepage": "https://github.com/cylestio/cylestio-ui#readme",
   "dependencies": {
+    "@descope/nextjs-sdk": "^0.13.19",
     "@heroicons/react": "^2.1.1",
     "@tremor/react": "^3.13.1",
     "date-fns": "^3.3.1",
