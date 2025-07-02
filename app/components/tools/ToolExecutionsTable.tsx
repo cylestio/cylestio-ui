@@ -175,7 +175,7 @@ export default function ToolExecutionsTable({ executions }: ToolExecutionsTableP
     } else if (executionData.trace_id) {
       // If we have a trace ID but no events, go to trace page
       console.log('No associated events, redirecting to trace:', executionData.trace_id);
-      router.push(`/traces/${executionData.trace_id}`);
+      router.push(`/events/trace/${executionData.trace_id}`);
     } else {
       // Fallback to tools explorer with a notification
       console.error('No associated events or trace ID found for tool execution:', executionId);

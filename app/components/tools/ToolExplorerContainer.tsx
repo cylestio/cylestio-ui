@@ -166,19 +166,21 @@ export default function ToolExplorerContainer({ searchParams }: ToolExplorerCont
           // Transform interactions to ToolExecutionSummary format that our UI expects
           const executionSummaries = toolInteractionsResponse.interactions.map(interaction => ({
             id: interaction.id.toString(),
-            timestamp: interaction.request_timestamp,
-            trace_id: interaction.trace_id,
-            span_id: interaction.span_id,
-            agent_id: interaction.agent_id,
-            tool_name: interaction.tool_name,
+            timestamp: interaction.request_timestamp || new Date().toISOString(),
+            trace_id: interaction.trace_id || '',
+            span_id: interaction.span_id || '',
+            agent_id: interaction.agent_id || 'unknown',
+            tool_name: interaction.tool_name || 'unknown',
             tool_type: interaction.framework_name || 'unknown',
-            status: interaction.status,
+            status: interaction.status || 'unknown',
             duration_ms: interaction.duration_ms || 0,
             input_summary: Array.isArray(interaction.parameters) 
               ? `Parameters: ${interaction.parameters.join(', ')}` 
-              : JSON.stringify(interaction.parameters),
-            output_summary: interaction.result ? JSON.stringify(interaction.result).substring(0, 100) : 'No result',
-            error: interaction.error,
+              : (interaction.parameters ? JSON.stringify(interaction.parameters) : 'No parameters'),
+            output_summary: interaction.result 
+              ? (typeof interaction.result === 'string' ? interaction.result.substring(0, 100) : JSON.stringify(interaction.result).substring(0, 100))
+              : 'No result',
+            error: interaction.error || null,
             associated_event_ids: interaction.associated_event_ids?.map(id => id.toString()) || []
           }));
           
@@ -201,8 +203,9 @@ export default function ToolExplorerContainer({ searchParams }: ToolExplorerCont
           // Count by status
           const statusCounts: Record<string, number> = {};
           toolInteractionsResponse.interactions.forEach(i => {
-            if (!statusCounts[i.status]) statusCounts[i.status] = 0;
-            statusCounts[i.status]++;
+            const status = i.status || 'unknown';
+            if (!statusCounts[status]) statusCounts[status] = 0;
+            statusCounts[status]++;
           });
           
           // Count by tool name and calculate metrics
@@ -213,20 +216,23 @@ export default function ToolExplorerContainer({ searchParams }: ToolExplorerCont
           }> = {};
           
           toolInteractionsResponse.interactions.forEach(i => {
-            if (!toolCounts[i.tool_name]) {
-              toolCounts[i.tool_name] = { 
+            const toolName = i.tool_name || 'unknown';
+            const status = i.status || 'unknown';
+            
+            if (!toolCounts[toolName]) {
+              toolCounts[toolName] = { 
                 count: 0, 
                 success: 0, 
                 durations: [] 
               };
             }
             
-            toolCounts[i.tool_name].count++;
+            toolCounts[toolName].count++;
             
-            if (i.status === 'success') {
-              toolCounts[i.tool_name].success++;
-              if (i.duration_ms !== null) {
-                toolCounts[i.tool_name].durations.push(i.duration_ms);
+            if (status === 'success') {
+              toolCounts[toolName].success++;
+              if (i.duration_ms !== null && i.duration_ms !== undefined) {
+                toolCounts[toolName].durations.push(i.duration_ms);
               }
             }
           });
@@ -253,6 +259,7 @@ export default function ToolExplorerContainer({ searchParams }: ToolExplorerCont
           
           toolInteractionsResponse.interactions.forEach(i => {
             const type = i.framework_name || 'unknown';
+            const status = i.status || 'unknown';
             
             if (!typeData[type]) {
               typeData[type] = { 
@@ -264,9 +271,9 @@ export default function ToolExplorerContainer({ searchParams }: ToolExplorerCont
             
             typeData[type].count++;
             
-            if (i.status === 'success') {
+            if (status === 'success') {
               typeData[type].success++;
-              if (i.duration_ms !== null) {
+              if (i.duration_ms !== null && i.duration_ms !== undefined) {
                 typeData[type].durations.push(i.duration_ms);
               }
             }
@@ -309,8 +316,9 @@ export default function ToolExplorerContainer({ searchParams }: ToolExplorerCont
           }>();
           
           toolInteractionsResponse.interactions.forEach(i => {
-            // Get date part only for the timestamp
-            const date = i.request_timestamp.split('T')[0];
+            // Get date part only for the timestamp - add null safety
+            const timestamp = i.request_timestamp || new Date().toISOString();
+            const date = timestamp.split('T')[0];
             
             if (!timelineMap.has(date)) {
               timelineMap.set(date, {
@@ -329,8 +337,9 @@ export default function ToolExplorerContainer({ searchParams }: ToolExplorerCont
             point.by_type[type]++;
             
             // Count by status
-            if (!point.by_status[i.status]) point.by_status[i.status] = 0;
-            point.by_status[i.status]++;
+            const status = i.status || 'unknown';
+            if (!point.by_status[status]) point.by_status[status] = 0;
+            point.by_status[status]++;
           });
           
           // Convert to array and sort by date
@@ -353,9 +362,13 @@ export default function ToolExplorerContainer({ searchParams }: ToolExplorerCont
           }>();
           
           toolInteractionsResponse.interactions.forEach(i => {
-            if (!agentData.has(i.agent_id)) {
-              agentData.set(i.agent_id, {
-                agent_name: i.agent_id,
+            const agentId = i.agent_id || 'unknown';
+            const toolName = i.tool_name || 'unknown';
+            const status = i.status || 'unknown';
+            
+            if (!agentData.has(agentId)) {
+              agentData.set(agentId, {
+                agent_name: agentId,
                 total: 0,
                 success: 0,
                 durations: [],
@@ -363,24 +376,24 @@ export default function ToolExplorerContainer({ searchParams }: ToolExplorerCont
               });
             }
             
-            const data = agentData.get(i.agent_id)!;
+            const data = agentData.get(agentId)!;
             data.total++;
             
-            if (i.status === 'success') {
+            if (status === 'success') {
               data.success++;
-              if (i.duration_ms !== null) {
+              if (i.duration_ms !== null && i.duration_ms !== undefined) {
                 data.durations.push(i.duration_ms);
               }
             }
             
             // Count tools per agent
-            if (!data.tool_counts[i.tool_name]) {
-              data.tool_counts[i.tool_name] = { count: 0, success: 0 };
+            if (!data.tool_counts[toolName]) {
+              data.tool_counts[toolName] = { count: 0, success: 0 };
             }
             
-            data.tool_counts[i.tool_name].count++;
-            if (i.status === 'success') {
-              data.tool_counts[i.tool_name].success++;
+            data.tool_counts[toolName].count++;
+            if (status === 'success') {
+              data.tool_counts[toolName].success++;
             }
           });
           
