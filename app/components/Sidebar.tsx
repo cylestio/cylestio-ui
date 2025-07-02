@@ -14,7 +14,7 @@ const navigation = [
   { name: 'Tools', href: '/tools', icon: RiToolsLine },
   { name: 'LLM Explorer', href: '/llm', icon: RiBrainLine },
   { name: 'Security', href: '/security', icon: RiShieldLine },
-  // { name: 'Settings', href: '/settings', icon: RiSettingsLine },
+  { name: 'Settings', href: '/settings', icon: RiSettingsLine },
 ]
 
 // Define and export props interface
@@ -94,22 +94,6 @@ export default function Sidebar({ navigation: customNavigation, title = 'Cylesti
           })}
         </nav>
       </div>
-      {isAuthenticated && <div className="p-4 border-t border-gray-200">
-        <div className="text-sm text-gray-600">
-          <div className="flex justify-between items-center">
-            <div className="flex flex-col">
-              {!isUserTenant && <span className="text-xs text-gray-400 uppercase">{tenantName}</span>}
-              <span>{user?.name || user?.email}</span>
-            </div>
-            <button 
-              onClick={handleLogout} 
-              className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
-            >
-              Logout
-            </button>
-          </div>
-        </div>
-      </div>}
       <div className="p-4 border-t border-gray-200">
         <div className="flex items-center">
           <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
@@ -119,6 +103,22 @@ export default function Sidebar({ navigation: customNavigation, title = 'Cylesti
           <div className="mt-2 text-xs text-gray-500">Last updated: {currentTime}</div>
         )}
       </div>
+      {isAuthenticated && <div className="p-4 border-t border-gray-200">
+        <div className="text-sm text-gray-600">
+          <div className="flex justify-between items-center">
+            <div className="flex flex-col">
+              {!isUserTenant && <span className="text-xs text-gray-400 uppercase">{tenantName}</span>}
+              <span>{user?.name || user?.email}</span>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+            >
+              Logout
+            </button>
+          </div>
+        </div>
+      </div>}
     </div>
   )
 }
