@@ -1,97 +1,40 @@
 'use client';
 
-import { Card, Title, Text, TextInput, Button, Select, SelectItem } from '@tremor/react';
-import { useEffect, useState } from 'react';
-
-const mockSettings = {
-  apiKey: 'sk-1234567890abcdef',
-  maxRequestsPerMinute: '100',
-  alertThreshold: 'medium',
-  notificationEmail: 'admin@example.com',
-};
+import React from 'react';
+import PageTemplate from '../components/PageTemplate';
+import { EnhancedBreadcrumbItem } from '../components/EnhancedBreadcrumbs';
+import { AccessKeyManagement } from '@descope/nextjs-sdk';
+import { useUser } from '@descope/nextjs-sdk/client';
 
 export default function Settings() {
-  const [currentTime, setCurrentTime] = useState<string>('');
-  const [settings, setSettings] = useState(mockSettings);
+  const { user } = useUser();
 
-  useEffect(() => {
-    setCurrentTime(new Date().toLocaleString());
-  }, []);
+  const tenantId = user?.userTenants[0]?.tenantId;
 
-  const handleSave = () => {
-    // TODO: Implement settings save
-    console.log('Saving settings:', {
-      ...settings,
-      maxRequestsPerMinute: parseInt(settings.maxRequestsPerMinute),
-    });
-  };
+  const breadcrumbs: EnhancedBreadcrumbItem[] = [
+    { label: 'Settings', href: '/settings' }
+  ];
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-800">Settings</h1>
-        {currentTime && (
-          <div className="text-sm text-gray-500">
-            Last updated: {currentTime}
-          </div>
-        )}
+    <PageTemplate
+      title="Settings"
+      description="Manage your application settings and preferences"
+      breadcrumbs={breadcrumbs}
+      timeRange="24h"
+      onTimeRangeChange={() => { }}
+      showTimeRangeFilter={false}
+    >
+
+      <div className="p-6 bg-white rounded-lg border border-gray-200">
+        <h1 className="text-2xl font-bold text-gray-800">Manage Access Keys</h1>
+        <p className="text-gray-600">Manage your access keys for your application</p>
+        <div className="h-px bg-gray-200 my-4"></div>
+        {<AccessKeyManagement
+          widgetId="access-key-management-widget"
+          tenant={tenantId}
+        />}
+
       </div>
-
-      <Card>
-        <Title>API Configuration</Title>
-        <div className="mt-6 space-y-4">
-          <div>
-            <Text>API Key</Text>
-            <TextInput
-              value={settings.apiKey}
-              onChange={(e) => setSettings({ ...settings, apiKey: e.target.value })}
-              placeholder="Enter your API key"
-              type="password"
-            />
-          </div>
-
-          <div>
-            <Text>Max Requests per Minute</Text>
-            <TextInput
-              value={settings.maxRequestsPerMinute}
-              onChange={(e) => setSettings({ ...settings, maxRequestsPerMinute: e.target.value })}
-              type="text"
-              placeholder="Enter max requests per minute"
-            />
-          </div>
-        </div>
-      </Card>
-
-      <Card>
-        <Title>Alert Settings</Title>
-        <div className="mt-6 space-y-4">
-          <div>
-            <Text>Alert Threshold</Text>
-            <Select
-              value={settings.alertThreshold}
-              onValueChange={(value) => setSettings({ ...settings, alertThreshold: value })}
-            >
-              <SelectItem value="low">Low</SelectItem>
-              <SelectItem value="medium">Medium</SelectItem>
-              <SelectItem value="high">High</SelectItem>
-            </Select>
-          </div>
-
-          <div>
-            <Text>Notification Email</Text>
-            <TextInput
-              value={settings.notificationEmail}
-              onChange={(e) => setSettings({ ...settings, notificationEmail: e.target.value })}
-              type="email"
-              placeholder="Enter notification email"
-            />
-          </div>
-        </div>
-      </Card>
-
-      <div className="flex justify-end">
-        <Button onClick={handleSave}>Save Changes</Button>
-      </div>
-    </div>
+    </PageTemplate>
   );
 } 

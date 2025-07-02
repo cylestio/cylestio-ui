@@ -2,6 +2,7 @@
  * API service for making requests to the Cylestio API
  */
 
+import { getSessionToken } from '@descope/nextjs-sdk/client';
 import config from '../../config';
 
 // Use the centralized configuration instead of hardcoded values
@@ -25,26 +26,29 @@ export async function fetchAPI<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
+  const token = getSessionToken();
+
   // Add the path prefix to the endpoint if needed
-  const adjustedEndpoint = endpoint.startsWith('/') 
-    ? `${API_PATH_PREFIX}${endpoint}` 
+  const adjustedEndpoint = endpoint.startsWith('/')
+    ? `${API_PATH_PREFIX}${endpoint}`
     : `${API_PATH_PREFIX}/${endpoint}`;
-    
+
   const url = `${API_BASE_URL}${adjustedEndpoint}`;
-  
+
   // Create a request key for deduplication
   const requestKey = `${url}:${JSON.stringify(options)}`;
-  
+
   // Check if this exact request is already in flight
   if (pendingRequests.has(requestKey)) {
     console.log(`Reusing in-flight request to: ${url}`);
     return pendingRequests.get(requestKey) as Promise<T>;
   }
-  
+
   // Set default headers for JSON API
   const defaultHeaders = {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
+    'Authorization': `Bearer ${token}`,
   };
 
   // Merge default options with provided options
@@ -91,10 +95,10 @@ export async function fetchAPI<T>(
       pendingRequests.delete(requestKey);
     }
   })();
-  
+
   // Store the promise for potential reuse
   pendingRequests.set(requestKey, fetchPromise);
-  
+
   return fetchPromise;
 }
 
@@ -106,14 +110,14 @@ export function buildQueryParams(params: Record<string, any>): string {
   if (!params || Object.keys(params).length === 0) {
     return '';
   }
-  
+
   const queryParams = new URLSearchParams();
-  
+
   for (const [key, value] of Object.entries(params)) {
     if (value === undefined || value === null) {
       continue;
     }
-    
+
     if (Array.isArray(value)) {
       queryParams.append(key, value.join(','));
     } else if (value instanceof Date) {
@@ -122,7 +126,7 @@ export function buildQueryParams(params: Record<string, any>): string {
       queryParams.append(key, String(value));
     }
   }
-  
+
   const queryString = queryParams.toString();
   return queryString ? `?${queryString}` : '';
 }
